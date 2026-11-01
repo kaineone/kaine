@@ -22,14 +22,12 @@ import hashlib
 import math
 import os
 from pathlib import Path
-from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
 av = pytest.importorskip("av")
 
-from kaine.modules.audition import feed as audition_feed  # noqa: E402
 from kaine.modules.audition.feed import PlaylistAudioStream, _frame_pcm  # noqa: E402
 from kaine.modules.vision.feed import (  # noqa: E402
     PlaylistClock,
@@ -205,23 +203,54 @@ def _right_white(img: np.ndarray) -> bool:
     return float(img[:, W // 2 :].mean()) > 128.0
 
 
-def _deliver_all(manifest_path: Path, monkeypatch, *, clock: PlaylistClock | None = None) -> tuple[np.ndarray, PlaylistAudioStream]:  # noqa: ANN001
-    """Run the real playlist audio producer to the end, without its 1x pacing
-    (a stand-in monotonic clock that is always past the deadline)."""
-    ticks = iter(range(1, 10**9))
-    monkeypatch.setattr(
-        audition_feed, "time", SimpleNamespace(monotonic=lambda: float(next(ticks)) * 1e3)
-    )
+def _deliver_all(
+    manifest_path: Path,
+    monkeypatch,  # noqa: ANN001 — kept for the callers; nothing is patched
+    *,
+    clock: PlaylistClock | None = None,
+    mclock: _ManualClock | None = None,
+    on_block=None,  # noqa: ANN001 — on_block(index, mclock) after each block
+) -> tuple[np.ndarray, PlaylistAudioStream]:
+    """Run the real playlist audio producer to the end against a manual
+    shared clock that its pacing waits advance (no real time passes).
+
+    ``stream.emitted_at`` holds the clock time each block went out and
+    ``stream.positions`` the delivered position after it."""
+    manifest = load_playlist_manifest(manifest_path)
+    if clock is None:
+        mclock = _ManualClock()
+        clock = PlaylistClock(len(manifest.items), clock=mclock)
+    assert mclock is not None
     blocks: list[bytes] = []
+    emitted_at: list[float] = []
+    positions: list[tuple[int, float]] = []
+    holder: list[PlaylistAudioStream] = []
+
+    def _on_pcm(pcm: bytes) -> None:
+        blocks.append(pcm)
+        emitted_at.append(mclock.t)
+        positions.append(holder[0]._delivered)
+        if on_block is not None:
+            on_block(len(blocks) - 1, mclock)
+
     stream = PlaylistAudioStream(
-        load_playlist_manifest(manifest_path),
-        callback=blocks.append,
+        manifest,
+        callback=_on_pcm,
         sample_rate=SR,
         channels=1,
         frames_per_block=BLOCK,
         playlist_clock=clock,
     )
+    holder.append(stream)
+
+    def _advance(seconds: float) -> bool:
+        mclock.t += seconds
+        return False
+
+    stream._pace_wait = _advance
     stream._produce()
+    stream.emitted_at = emitted_at
+    stream.positions = positions
     assert all(len(b) == BLOCK * 2 for b in blocks)
     return np.frombuffer(b"".join(blocks), dtype=np.int16), stream
 
@@ -373,7 +402,7 @@ def test_audio_resumed_late_starts_at_the_clock(vfr_clip: Path, monkeypatch):
     clock.start(at=0.0)
     clock.set_duration(0, CLIP_S)
     mclock.t = 7.6
-    pcm, stream = _deliver_all(vfr_clip, monkeypatch, clock=clock)
+    pcm, stream = _deliver_all(vfr_clip, monkeypatch, clock=clock, mclock=mclock)
     # It resumes inside the 7.5-7.8 s marker and runs to the clip's end.
     assert _loud(pcm, 0.1)
     assert pcm.size == math.ceil(int(round((CLIP_S - 7.6) * SR)) / BLOCK) * BLOCK
@@ -405,6 +434,121 @@ def test_the_second_item_starts_when_the_clock_reaches_it(tmp_path: Path, monkey
         mid = (a + b) / 2.0
         assert _loud(pcm, mid) and _loud(pcm, 2 * CLIP_S + mid), mid
     assert not _loud(pcm, 2 * CLIP_S + 4.45)
+
+
+# ---------------------------------------------------------------------------
+# Pacing against the shared clock: a stall is caught up or skipped, never kept
+# ---------------------------------------------------------------------------
+
+_BLOCK_S = BLOCK / SR
+
+
+def _lags(stream: PlaylistAudioStream, item_starts: dict[int, float] | None = None) -> list[float]:
+    """Per block: the programme time it went out at minus the programme time
+    it starts at (0 = on the clock). Positions are per item; ``item_starts``
+    gives each item's start on the programme timeline."""
+    starts = item_starts or {0: 0.0}
+    return [
+        t - (starts[idx] + pos - _BLOCK_S)
+        for t, (idx, pos) in zip(stream.emitted_at, stream.positions)
+    ]
+
+
+def _stall_at(block: int, seconds: float):  # noqa: ANN202
+    def _hook(i: int, mclock: _ManualClock) -> None:
+        if i == block:
+            mclock.t += seconds  # the producer was held up this long
+
+    return _hook
+
+
+def test_a_short_stall_is_caught_up_not_kept(cfr_clip: Path, monkeypatch, caplog):  # noqa: ANN001
+    """A 0.3 s stall: the owed blocks go out back to back until the delivered
+    position is back on the clock, and no audio is skipped."""
+    caplog.set_level("DEBUG", logger="kaine.modules.audition.feed")
+    pcm, stream = _deliver_all(cfr_clip, monkeypatch, on_block=_stall_at(100, 0.3))
+    lags = _lags(stream)
+    assert max(abs(x) for x in lags[:101]) < 1e-6  # on the clock before the stall
+    assert max(lags) == pytest.approx(0.3, abs=_BLOCK_S)  # owed, never more
+    caught_up = 101 + math.ceil(0.3 / _BLOCK_S) + 1
+    assert max(abs(x) for x in lags[caught_up:]) < 1e-6  # back on the clock
+    assert stream._skips == 0 and "skipped forward" not in caplog.text
+    assert pcm.size == math.ceil(int(round(CLIP_S * SR)) / BLOCK) * BLOCK
+
+
+def test_a_long_stall_skips_forward_to_the_clock(vfr_clip: Path, monkeypatch, caplog):  # noqa: ANN001
+    """A 2 s stall is more than 0.5 s to catch up: the producer skips forward
+    to the clock, logs it once without content, and what it delivers at each
+    clock time is the sound of that time."""
+    caplog.set_level("DEBUG", logger="kaine.modules.audition.feed")
+    pcm, stream = _deliver_all(vfr_clip, monkeypatch, on_block=_stall_at(100, 2.0))
+    lags = _lags(stream)
+    assert stream._skips == 1
+    skip_logs = [r for r in caplog.records if "skipped forward" in r.getMessage()]
+    assert len(skip_logs) == 1 and skip_logs[0].levelname == "WARNING"
+    assert "vfr.mkv" not in skip_logs[0].getMessage()  # content-free: no title, no path
+    # Never more than the bound behind, and on the clock right after the skip.
+    assert max(lags) <= 0.5 + _BLOCK_S
+    assert max(abs(x) for x in lags[103:]) < 1e-6
+    # About 2 s of the item was not heard.
+    assert pcm.size / SR == pytest.approx(CLIP_S - 2.0, abs=2 * _BLOCK_S)
+    # Heard at the right programme time after the skip: loud inside the
+    # 7.5-7.8 s and 9.4-9.7 s markers, quiet between them.
+    blocks = pcm.reshape(-1, BLOCK).astype(np.float64)
+    rms = np.sqrt((blocks * blocks).mean(axis=1))
+    for t, block_rms in zip(stream.emitted_at, rms):
+        if 7.55 <= t <= 7.72 or 9.45 <= t <= 9.62:
+            assert block_rms > 2000.0, t
+        if 7.95 <= t <= 9.25:
+            assert block_rms < 50.0, t
+
+
+def test_a_stall_past_the_item_end_resumes_in_the_next_item(tmp_path: Path, monkeypatch):  # noqa: ANN001
+    _write_clip(tmp_path / "a.mkv", _cfr_times())
+    _write_clip(tmp_path / "b.mkv", _vfr_times())
+    manifest_path = _manifest(tmp_path, [("a.mkv", 25.0), ("b.mkv", 25.0)])
+    pcm, stream = _deliver_all(manifest_path, monkeypatch, on_block=_stall_at(300, 3.0))
+    assert stream._skips == 1
+    container = av.open(str(tmp_path / "a.mkv"))
+    item0 = container_duration_s(container)
+    container.close()
+    lags = _lags(stream, {0: 0.0, 1: item0})
+    after = [i for i, (idx, _pos) in enumerate(stream.positions) if idx == 1]
+    assert after and max(abs(lags[i]) for i in after) < 1e-6
+    # It resumed about 2 s into the second item, at the clock.
+    first_pos = stream.positions[after[0]][1] - _BLOCK_S
+    assert first_pos == pytest.approx(9.0 + _BLOCK_S + 3.0 - item0, abs=2 * _BLOCK_S)
+    # The second item's 4.0-4.3 s marker is heard at programme time item0 + 4.15.
+    blocks = pcm.reshape(-1, BLOCK).astype(np.float64)
+    rms = np.sqrt((blocks * blocks).mean(axis=1))
+    at = [r for t, r in zip(stream.emitted_at, rms) if abs(t - (item0 + 4.15)) < 0.1]
+    assert at and min(at) > 2000.0
+
+
+def test_a_pause_is_not_owed(cfr_clip: Path, monkeypatch):  # noqa: ANN001
+    """Time while the shared clock is paused (sleep, a freeze) is not a debt:
+    nothing is skipped or caught up when it resumes."""
+    holder: dict[str, PlaylistClock] = {}
+
+    def _pause_for_5s(i: int, mclock: _ManualClock) -> None:
+        if i == 100:
+            holder["clock"].pause("test")
+            mclock.t += 5.0
+            holder["clock"].resume("test")
+
+    mclock = _ManualClock()
+    clock = PlaylistClock(1, clock=mclock)
+    holder["clock"] = clock
+    pcm, stream = _deliver_all(
+        cfr_clip, monkeypatch, clock=clock, mclock=mclock, on_block=_pause_for_5s
+    )
+    assert stream._skips == 0
+    assert pcm.size == math.ceil(int(round(CLIP_S * SR)) / BLOCK) * BLOCK
+    # Measured on the programme clock (wall time less the 5 s pause), every
+    # block went out exactly when it was due.
+    for i, ((_idx, pos), t) in enumerate(zip(stream.positions, stream.emitted_at)):
+        paused = 5.0 if i > 100 else 0.0
+        assert abs((t - paused) - (pos - _BLOCK_S)) < 1e-6, i
 
 
 @pytest.mark.slow

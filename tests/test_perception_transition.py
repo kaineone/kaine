@@ -470,6 +470,8 @@ def test_audio_is_silent_during_the_crossfade_then_fades_in(tmp_path, monkeypatc
         clock.t = 54.0
         timers.fire_last()  # no video surface: the timer releases
         assert transition.released and pclock.transition_resumes == 1
+        # Programme time runs: the audio is paced against it, so blocks come due.
+        clock.t = 54.1
         assert _wait_for(lambda: len(heard) >= 2)
     finally:
         stream.stop()

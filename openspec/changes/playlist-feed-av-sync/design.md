@@ -10,10 +10,10 @@ The video side decoded with `cv2.VideoCapture` and had no per-frame time: it cou
 - At any clock offset the presented frame and the delivered audio come from the same media time, for constant- and variable-frame-rate files.
 - The audio delivered for an item is exactly the item's decoded audio, placed on the item's timeline.
 - Both surfaces agree on each item's length, and a re-opened source resumes at the clock's position quickly.
+- The delivered audio position tracks the clock offset: a stall is caught up or skipped, never kept as a lag.
 
 **Non-Goals:**
 - Changing the seeded or stimulus-source feeds, which are generated per frame index by design and have no media timestamps.
-- Changing the audio producer's 1x block pacing. It re-anchors after a late block instead of catching up, so a stall adds a permanent lag; that lag is visible in the ignition log as offset minus delivered position and is left for a follow-up.
 - Frame-locking the two module loops.
 
 ## Decisions
@@ -40,7 +40,13 @@ The producer counts the samples it has placed for the item, starting at the resy
 **Decision 7: exact samples.**
 Each resampled frame contributes `frame.samples × channels` int16 values: `to_ndarray()` gives `(1, samples × channels)` for packed layouts and `(channels, samples)` for planar ones, which is transposed to interleave. The byte count is checked against `samples × channels × 2`.
 
+**Decision 8: pace the audio against the shared clock.**
+The producer paced its blocks on its own monotonic deadlines and, after a late block, re-anchored the next deadline to the present instead of catching up, so every stall (a GC pause, a busy host, slow I/O) added a lag that never went away. Each block now goes out when the shared clock reaches the block's place on the item timeline (its delivered position). A block that is due, or owed up to 0.5 s, goes out at once, so after a stall the owed blocks are emitted back to back and the delivered position returns to the clock. A block owed more than 0.5 s makes the producer drop what is queued and resume at the clock's item and offset through the same seek path as a restart, logging the first skip at warning and later ones at debug, with the owed seconds, item index and offset only. A skip past an item's end resumes in the item the clock is on. The clock's pause holders keep their meaning: while the clock is paused nothing is due and nothing is owed, so a pause never causes a catch-up or a skip. A partial block of the previous item still queued at a boundary starts the next item's timeline that much earlier, so the pacing is exact across the boundary. The 0.5 s bound keeps a catch-up burst short (at most about 17 blocks of 30 ms) while still riding out ordinary stalls without losing sound.
+- *Video:* the video source has no deadline to re-anchor. Each read picks the frame from the clock offset, so a stall only makes the next read decode forward (or seek, past 2 s); its position cannot lag. The vision module's capture interval sets the sampling cadence, not the position.
+
 ## Risks / Trade-offs
+
+- **[Risk]** A catch-up delivers up to 0.5 s of sound faster than real time. → Bounded, and only after a stall; the alternative is a lag that grows for the rest of the run.
 
 - **[Risk]** PyAV and OpenCV convert YUV to BGR with slightly different defaults, so pixel values can differ by a level or two. → Runs after this change already differ from runs before it in timing; the encoders see the same scene content.
 - **[Risk]** Seeking lands on a keyframe that may be several seconds before the target, and decoding forward from it costs time. → Bounded by the keyframe interval; it replaces decoding the whole item from the first frame.

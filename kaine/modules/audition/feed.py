@@ -24,8 +24,10 @@ shared seed + cadence). The playlist audio source walks the SAME checksummed
 manifest as the playlist video source AND shares its ``PlaylistClock``: both
 surfaces derive the currently-playing item from one monotonic origin + per-item
 durations, so at any wall-clock moment picture and sound are on the same manifest
-item and cross item boundaries together (live / statistical tier; residual
-sub-second decode skew is acceptable). This is the fix for the dual-decoder
+item and cross item boundaries together (live / statistical tier). The audio
+is paced against that clock, so its delivered position stays on the clock's
+offset within one block, or within 0.5 s while catching up after a stall
+(openspec/changes/playlist-feed-av-sync). This is the fix for the dual-decoder
 desync where audio ran at 1x while video crawled at the tick rate and the two
 drifted onto different items (openspec/changes/playlist-realtime-av-sync).
 
@@ -754,7 +756,11 @@ class PlaylistAudioStream:
     timeline by the decoded timestamps (``_ItemTimeline``): a timestamp gap is
     heard as silence, audio before the position is trimmed, and each item is
     padded or trimmed to its length on the shared clock, so every item's sound
-    starts when the clock reaches it. ``av`` is required; if it is absent the
+    starts when the clock reaches it. Blocks are paced against the shared clock
+    (``_pace_to_clock``): each goes out when the clock reaches its place, a
+    stall is caught up by emitting the owed blocks at once (up to
+    ``_MAX_OWED_S``) or, further behind, skipped forward to the clock, so the
+    delivered position never keeps a lag. ``av`` is required; if it is absent the
     source raises ``PerceptionUnavailableError`` with an install hint — honest
     failure, NEVER a silent no-op or synthetic substitute.
 
@@ -791,6 +797,11 @@ class PlaylistAudioStream:
         self._produce_item_idx = -1
         self._thread: threading.Thread | None = None
         self._stopped = threading.Event()
+        # The pacing wait (stop wins); tests drive a manual clock through it.
+        self._pace_wait: Callable[[float], object] = lambda seconds: self._stopped.wait(
+            timeout=seconds
+        )
+        self._skips = 0  # skips forward to the clock (content-free count)
 
     @property
     def manifest(self) -> PlaylistManifest:
@@ -822,15 +833,21 @@ class PlaylistAudioStream:
         listener so far, measured by the producer thread. ``None`` before the
         first block is emitted. Content-free provenance."""
         with self._delivered_lock:
-            return self._delivered
+            delivered = self._delivered
+        if delivered is None:
+            return None
+        return delivered[0], max(0.0, delivered[1])
 
-    def _begin_item(self, item_idx: int, offset_s: float) -> None:
+    def _begin_item(self, item_idx: int, offset_s: float, *, carried_s: float = 0.0) -> None:
         """Start accounting for ``item_idx``. A producer that resyncs to the
         shared clock seeks to ``offset_s`` inside the item, so the delivered
-        position starts there rather than at zero."""
+        position starts there rather than at zero. ``carried_s`` of the
+        previous item still queued ahead of this item's first sample start
+        its timeline that much earlier, so pacing stays exact across the
+        boundary (the reported position never goes below zero)."""
         self._produce_item_idx = item_idx
         with self._delivered_lock:
-            self._delivered = (item_idx, max(0.0, float(offset_s)))
+            self._delivered = (item_idx, max(0.0, float(offset_s)) - max(0.0, float(carried_s)))
 
     def _update_delivered(self, pcm: bytes, item_idx: int) -> float:
         """Account for ``pcm`` being handed to the listener.
@@ -908,18 +925,14 @@ class PlaylistAudioStream:
 
         frame_bytes = self._channels * 2
         block_bytes = self._frames_per_block * frame_bytes
-        block_seconds = max(1, self._frames_per_block) / float(max(1, self._sample_rate))
+        rate = float(max(1, self._sample_rate))
         carry = bytearray()
-        next_deadline = time.monotonic()
 
         def _emit(pcm: bytes) -> None:
-            nonlocal next_deadline
-            # Park while the shared clock is paused (sleep): the clock
-            # is the one pause authority. next_deadline is NOT advanced while
-            # paused; on resume re-anchor it so pacing continues cleanly (no
-            # burst of back-to-back blocks). Stop wins over the park.
-            if self._clock.wait_if_paused(stop_check=self._stopped.is_set):
-                next_deadline = time.monotonic()
+            # Paced against the shared clock (which also owns pause): wait
+            # until the clock reaches this block's place on the item timeline.
+            # Raises _SkipForward when the block is owed too late to catch up.
+            self._pace_to_clock()
             if self._stopped.is_set():
                 return
             self._update_delivered(pcm, self._produce_item_idx)
@@ -927,12 +940,6 @@ class PlaylistAudioStream:
                 self._callback(pcm)
             except Exception:
                 log.debug("playlist audio callback raised", exc_info=True)
-            next_deadline += block_seconds
-            sleep_for = next_deadline - time.monotonic()
-            if sleep_for > 0:
-                self._stopped.wait(timeout=sleep_for)
-            else:
-                next_deadline = time.monotonic()
 
         def _push(pcm: bytes) -> bool:
             """Queue PCM and emit every full block. False once stopped."""
@@ -965,6 +972,81 @@ class PlaylistAudioStream:
             lo = skip * self._channels
             return _push(pcm[lo : lo + keep * self._channels].tobytes())
 
+        def _play_item(idx: int, item: Any, item_start: float) -> bool:
+            """Decode one item from ``item_start`` onto its timeline. False
+            once stopped; raises _SkipForward when the clock got away."""
+            media = self._resolve(item.path)
+            container = av.open(str(media))
+            try:
+                # Register this item's length on the shared clock (first
+                # writer wins). Both surfaces register the container
+                # duration, so they agree on the boundary.
+                container_s = container_duration_s(container)
+                if container_s is not None:
+                    self._clock.set_duration(idx, container_s)
+                end_s = self._clock_duration(idx) or container_s
+                timeline = _ItemTimeline(self._sample_rate, start_s=item_start, end_s=end_s)
+                if not container.streams.audio:
+                    # Heard as silence for the item's length, so the next
+                    # item's sound starts when the clock reaches it.
+                    log.warning(
+                        "playlist item has no audio track: %s; %.3f s of silence",
+                        media,
+                        timeline.remaining() / rate,
+                    )
+                    return _push_silence(timeline.remaining())
+                origin = container_origin_s(container)
+                resampler = av.audio.resampler.AudioResampler(
+                    format="s16",
+                    layout="mono" if self._channels == 1 else "stereo",
+                    rate=self._sample_rate,
+                )
+                stream = container.streams.audio[0]
+                # H1 — seek within the located item up to the clock's
+                # offset. Prefer a fast container seek; if PyAV refuses,
+                # decode from the start: the timeline trims every frame
+                # before the offset, and frames wholly before it are not
+                # even resampled (no _emit, so no pacing waits).
+                if item_start > 0:
+                    try:
+                        container.seek(
+                            int((item_start + origin) * AV_TIME_BASE),
+                            any_frame=False,
+                        )
+                    except Exception:
+                        log.warning(
+                            "playlist container seek failed; "
+                            "decode-and-dropping to offset %.3fs",
+                            item_start,
+                            exc_info=True,
+                        )
+                for frame in container.decode(stream):
+                    if self._stopped.is_set():
+                        return False
+                    t_in = _media_time(frame, origin)
+                    if timeline.wholly_before(t_in, frame):
+                        continue
+                    # Per-frame pause park (between frames, which covers
+                    # the first block of each item): no PyAV frame iteration
+                    # while asleep, so decoders truly idle. Stop wins.
+                    self._clock.wait_if_paused(stop_check=self._stopped.is_set)
+                    if self._stopped.is_set():
+                        return False
+                    if not _push_silence(timeline.place(t_in)):
+                        return False
+                    for rframe in resampler.resample(frame):
+                        if rframe is not None and not _push_frame(rframe, timeline):
+                            return False
+                # Drain the resampler's buffered tail for this item.
+                for rframe in _flush_resampler(resampler):
+                    if not _push_frame(rframe, timeline):
+                        return False
+                # Pad (or, via the cap in take(), trim) to the item's length.
+                log.info("playlist audio item %d: %s", idx, timeline.summary())
+                return _push_silence(timeline.remaining())
+            finally:
+                container.close()
+
         # Align to the shared playback origin (idempotent across both feeds) so
         # audio and video start item 0 at the same wall-clock moment.
         self._clock.start()
@@ -984,100 +1066,122 @@ class PlaylistAudioStream:
             start_idx, start_offset = 0, 0.0
         if start_idx is None:
             start_idx, start_offset = 0, 0.0
-        if start_idx >= len(self._manifest.items):
-            return  # clock already exhausted past the last item
+        items = self._manifest.items
+        idx, item_start = int(start_idx), float(start_offset)
         try:
-            for idx, item in enumerate(self._manifest.items):
-                if idx < start_idx:
-                    continue
+            while idx < len(items):
                 if self._stopped.is_set():
                     return
-                item_start = start_offset if idx == start_idx else 0.0
-                self._begin_item(idx, item_start)
-                media = self._resolve(item.path)
-                container = av.open(str(media))
+                # A partial block of the previous item is still queued; the
+                # item's timeline starts that much before its first sample.
+                carried_s = len(carry) / float(frame_bytes) / rate
+                self._begin_item(idx, item_start, carried_s=carried_s)
                 try:
-                    # Register this item's length on the shared clock (first
-                    # writer wins). Both surfaces register the container
-                    # duration, so they agree on the boundary.
-                    container_s = container_duration_s(container)
-                    if container_s is not None:
-                        self._clock.set_duration(idx, container_s)
-                    end_s = self._clock_duration(idx) or container_s
-                    timeline = _ItemTimeline(
-                        self._sample_rate, start_s=item_start, end_s=end_s
-                    )
-                    if not container.streams.audio:
-                        # Heard as silence for the item's length, so the next
-                        # item's sound starts when the clock reaches it.
-                        log.warning(
-                            "playlist item has no audio track: %s; %.3f s of silence",
-                            media,
-                            timeline.remaining() / float(self._sample_rate),
-                        )
-                        if not _push_silence(timeline.remaining()):
-                            return
-                        continue
-                    origin = container_origin_s(container)
-                    resampler = av.audio.resampler.AudioResampler(
-                        format="s16",
-                        layout="mono" if self._channels == 1 else "stereo",
-                        rate=self._sample_rate,
-                    )
-                    stream = container.streams.audio[0]
-                    # H1 — seek within the located item up to the clock's
-                    # offset. Prefer a fast container seek; if PyAV refuses,
-                    # decode from the start: the timeline trims every frame
-                    # before the offset, and frames wholly before it are not
-                    # even resampled (no _emit, so no pacing sleeps).
-                    if item_start > 0:
-                        try:
-                            container.seek(
-                                int((item_start + origin) * AV_TIME_BASE),
-                                any_frame=False,
-                            )
-                        except Exception:
-                            log.warning(
-                                "playlist container seek failed; "
-                                "decode-and-dropping to offset %.3fs",
-                                item_start,
-                                exc_info=True,
-                            )
-                    for frame in container.decode(stream):
-                        if self._stopped.is_set():
-                            return
-                        t_in = _media_time(frame, origin)
-                        if timeline.wholly_before(t_in, frame):
-                            continue
-                        # Per-frame pause park (between frames, which covers
-                        # the first block of each item): no PyAV frame iteration
-                        # while asleep, so decoders truly idle. Stop wins.
-                        self._clock.wait_if_paused(stop_check=self._stopped.is_set)
-                        if self._stopped.is_set():
-                            return
-                        if not _push_silence(timeline.place(t_in)):
-                            return
-                        for rframe in resampler.resample(frame):
-                            if rframe is not None and not _push_frame(rframe, timeline):
-                                return
-                    # Drain the resampler's buffered tail for this item.
-                    for rframe in _flush_resampler(resampler):
-                        if not _push_frame(rframe, timeline):
-                            return
-                    # Pad (or, via the cap in take(), trim) to the item's length.
-                    log.info("playlist audio item %d: %s", idx, timeline.summary())
-                    if not _push_silence(timeline.remaining()):
+                    if not _play_item(idx, items[idx], item_start):
                         return
-                finally:
-                    container.close()
+                except _SkipForward as skip:
+                    # Too far behind to catch up: drop what is queued and
+                    # resume where the clock is (the same path as a restart).
+                    carry.clear()
+                    self._note_skip(skip)
+                    idx, item_start = skip.idx, max(0.0, skip.offset)
+                    continue
+                idx, item_start = idx + 1, 0.0
             # Flush a final short block (zero-padded) so no audio is dropped.
             if carry and not self._stopped.is_set():
                 pad = block_bytes - len(carry)
                 if pad > 0:
                     carry += b"\x00" * pad
-                _emit(bytes(carry[:block_bytes]))
+                try:
+                    _emit(bytes(carry[:block_bytes]))
+                except _SkipForward:
+                    pass  # the programme ended while this block was owed
         except Exception:
             log.exception("playlist audio producer crashed")
+
+    def _pace_to_clock(self) -> None:
+        """Wait until the shared clock reaches the next block's place.
+
+        The next block starts at the delivered position. A block that is due
+        or owed up to ``_MAX_OWED_S`` goes out at once, so after a stall the
+        owed blocks are emitted back to back and the delivered position
+        returns to the clock instead of keeping the lag. A block owed more
+        than that raises ``_SkipForward`` to the clock's position. While the
+        clock is paused the producer parks on it; stop wins over every wait.
+        """
+        with self._delivered_lock:
+            delivered = self._delivered
+        if delivered is None:
+            b_idx, b_start = self._produce_item_idx, 0.0
+        else:
+            b_idx, b_start = delivered
+        while not self._stopped.is_set():
+            self._clock.wait_if_paused(stop_check=self._stopped.is_set)
+            if self._stopped.is_set():
+                return
+            c_idx, c_off = self._clock.locate()
+            if c_idx == b_idx:
+                owed = c_off - b_start
+            elif c_idx > b_idx:
+                owed = self._span(b_idx, b_start, c_idx, c_off)
+            else:
+                owed = -self._span(c_idx, c_off, b_idx, b_start)
+            if owed > _MAX_OWED_S:
+                raise _SkipForward(c_idx, c_off, owed)
+            if owed >= -_PACE_EPSILON_S:
+                return
+            self._pace_wait(min(-owed, _PACE_POLL_S))
+
+    def _span(self, from_idx: int, from_off: float, to_idx: int, to_off: float) -> float:
+        """Programme seconds from one item position to a later one; infinite
+        when a length in between is not yet known (or when ``to_idx`` is past
+        the last item, the remainder of the programme plus nothing)."""
+        total = 0.0
+        for k in range(from_idx, min(to_idx, len(self._manifest.items))):
+            d = self._clock_duration(k)
+            if d is None:
+                return math.inf
+            total += d
+        return total - from_off + to_off
+
+    def _note_skip(self, skip: _SkipForward) -> None:
+        """Log a skip forward, content-free: the first at warning, later ones
+        at debug (each is counted)."""
+        self._skips += 1
+        level = logging.WARNING if self._skips == 1 else logging.DEBUG
+        log.log(
+            level,
+            "playlist audio fell %.3f s behind the shared clock (more than %.1f s "
+            "to catch up); skipped forward to item %d at %.3f s (skip %d; later "
+            "skips are logged at debug)",
+            skip.owed,
+            _MAX_OWED_S,
+            skip.idx,
+            skip.offset,
+            self._skips,
+        )
+
+
+#: Most audio owed at once that the producer catches up by emitting the owed
+#: blocks back to back; further behind, it skips forward to the clock.
+_MAX_OWED_S = 0.5
+
+#: Longest single pacing wait, so pause, stop and clock changes are noticed.
+_PACE_POLL_S = 0.25
+
+#: A block this close to due goes out (positions are float sums of block
+#: lengths, so "exactly due" can come out a rounding error early).
+_PACE_EPSILON_S = 1e-6
+
+
+class _SkipForward(Exception):
+    """The audio is owed more than ``_MAX_OWED_S``: resume at the clock."""
+
+    def __init__(self, idx: int, offset: float, owed: float) -> None:
+        super().__init__(idx, offset, owed)
+        self.idx = int(idx)
+        self.offset = float(offset)
+        self.owed = float(owed)
 
 
 #: Audio more than this far off the item's timeline is re-placed: a later

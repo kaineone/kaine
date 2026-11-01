@@ -300,11 +300,9 @@ def _run_fake_av_stream(tmp_path, monkeypatch, containers, *, clock=None):  # no
     """Run PlaylistAudioStream._produce over fake PyAV containers (one per
     manifest item, in order), without 1x pacing."""
     import sys
-    from types import SimpleNamespace
 
     import numpy as np
 
-    from kaine.modules.audition import feed as audition_feed
     from tests._playlist_fakes import fake_av_module
 
     items = []
@@ -318,17 +316,33 @@ def _run_fake_av_stream(tmp_path, monkeypatch, containers, *, clock=None):  # no
     monkeypatch.setitem(
         sys.modules, "av", fake_av_module(lambda path: by_name[path.rsplit("/", 1)[-1]])
     )
-    ticks = iter(range(1, 10**9))
-    monkeypatch.setattr(
-        audition_feed, "time", SimpleNamespace(monotonic=lambda: float(next(ticks)) * 1e3)
-    )
+    from kaine.modules.vision.feed import PlaylistClock
+
+    # A manual shared clock that the producer's pacing waits advance.
+    if clock is None:
+        clock = PlaylistClock(len(containers), clock=_ManualTime())
     blocks: list[bytes] = []
     stream = PlaylistAudioStream(
         parsed, callback=blocks.append, sample_rate=1000, channels=1,
         frames_per_block=100, playlist_clock=clock,
     )
+    stream._pace_wait = clock._clock.advance
     stream._produce()
     return np.frombuffer(b"".join(blocks), dtype=np.int16), stream
+
+
+class _ManualTime:
+    """A monotonic clock that moves only when advanced."""
+
+    def __init__(self, t: float = 0.0) -> None:
+        self.t = t
+
+    def __call__(self) -> float:
+        return self.t
+
+    def advance(self, seconds: float) -> bool:
+        self.t += seconds
+        return False
 
 
 class _TimedContainer:
@@ -382,7 +396,7 @@ def test_playlist_audio_resumes_at_the_offset_when_the_seek_fails(tmp_path, monk
     decodes from the start and trims everything before 0.6 s."""
     from kaine.modules.vision.feed import PlaylistClock
 
-    clock = PlaylistClock(1, clock=lambda: 0.6)  # 0.6 s into the item
+    clock = PlaylistClock(1, clock=_ManualTime(0.6))  # 0.6 s into the item
     clock.start(at=0.0)
     container = _TimedContainer(
         [(0, 250, 1), (250, 250, 2), (500, 250, 3), (750, 250, 4)],

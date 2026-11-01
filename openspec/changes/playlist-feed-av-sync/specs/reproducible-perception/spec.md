@@ -118,3 +118,30 @@ silence for its length.
 - **WHEN** an item has no audio track
 - **THEN** silence is delivered for the item's length and the next item's sound
   starts when the clock reaches it
+
+### Requirement: Playlist audio is paced against the shared clock
+
+The playlist audio source SHALL emit each block when the shared clock reaches the
+block's place on the item timeline, and SHALL NOT keep a lag after a late block.
+A block owed up to 0.5 s SHALL be emitted at once, so the owed blocks catch the
+delivered position up to the clock; a block owed more than 0.5 s SHALL make the
+source resume at the clock's item and offset and log the skip without content.
+Time during which the clock is paused SHALL NOT count as owed.
+
+#### Scenario: A short stall is caught up
+
+- **WHEN** the audio producer is held up for 0.3 s
+- **THEN** the owed blocks are emitted back to back, no audio is skipped, and the
+  delivered position is back on the clock within the next 0.3 s of blocks
+
+#### Scenario: A long stall skips forward
+
+- **WHEN** the audio producer is held up for 2 s
+- **THEN** it resumes at the clock's position, logs the skip once with no title,
+  path or audio, and the sound delivered at each later moment of the clock is the
+  sound of that moment
+
+#### Scenario: A pause is not a debt
+
+- **WHEN** the shared clock is paused for 5 s while the producer is waiting
+- **THEN** no block is caught up or skipped when it resumes

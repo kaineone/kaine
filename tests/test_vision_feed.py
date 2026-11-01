@@ -597,7 +597,9 @@ def test_audio_producer_parks_while_clock_paused(tmp_path, monkeypatch):
           "fps": 30, "order": 0}],
     )
     parsed = load_playlist_manifest(manifest)
-    clock = PlaylistClock(1, clock=_FakeClock())
+    # Real time: the producer is paced against the shared clock, so the clock
+    # has to run for blocks to come due.
+    clock = PlaylistClock(1)
 
     monkeypatch.setitem(
         sys.modules, "av", fake_av_module(lambda path: ConstantAudioContainer())
