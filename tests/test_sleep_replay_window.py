@@ -22,6 +22,7 @@ from kaine.modules.episodic_memory import (
 )
 from kaine.modules.episodic_memory.replay import ReplayWindowError
 from kaine.modules.sleep import FakeTrainer, Sleep, VoiceAlignmentConfig
+from tests._companion import attach_spoken_test_volatile, joined_entries
 
 
 @pytest.fixture
@@ -29,6 +30,7 @@ async def bus():
     fakeredis = pytest.importorskip("fakeredis.aioredis")
     client = fakeredis.FakeRedis(decode_responses=True)
     bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
+    attach_spoken_test_volatile(bus)
     yield bus
     await bus.close()
 
@@ -149,7 +151,7 @@ async def test_sleep_replays_consolidated_traces_through_the_bus(bus: AsyncBus, 
 
         assert summary["alert"] is False
 
-        events = await bus.read("episodic_memory.out", last_id="0")
+        events = await joined_entries(bus, "episodic_memory.out", last_id="0")
         replay_texts = {
             ev.payload["text"] for _, ev in events if ev.type == "episodic_memory.replay"
         }

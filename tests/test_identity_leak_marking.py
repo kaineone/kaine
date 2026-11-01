@@ -18,6 +18,7 @@ from kaine.cycle.types import WorkspaceSnapshot
 from kaine.modules.language import IntentExpressionLog, Language
 from kaine.modules.language.client import ChatResponse
 from kaine.modules.sleep.voice_alignment import DPOPairBuilder
+from tests._companion import attach_spoken_test_volatile, joined_xrange
 
 
 def _ev(source, type_, payload):
@@ -53,6 +54,7 @@ async def bus():
     fakeredis = pytest.importorskip("fakeredis.aioredis")
     client = fakeredis.FakeRedis(decode_responses=True)
     bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
+    attach_spoken_test_volatile(bus)
     yield bus
     await bus.close()
 
@@ -84,7 +86,7 @@ def _lang(bus, tmp_path, replies=(), **kw):
 
 
 async def _last_internal_payload(bus):
-    entries = await bus.client.xrange("language.internal")
+    entries = await joined_xrange(bus, "language.internal")
     return json.loads(entries[-1][1]["payload"])
 
 

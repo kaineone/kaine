@@ -105,7 +105,11 @@ async def test_live_microphone_drives_audition_subsystem_end_to_end():
         )
         assert events, "live mic → Audition → bus pipeline produced no event"
         assert events[0].payload.get("source_label") == "live_mic"
-        assert events[0].payload.get("text") == "hello operator"
+        # The words never reach the persisted bus (heard-text-volatile-bus):
+        # the main-bus entry keeps only their length and word count.
+        assert "text" not in events[0].payload
+        assert events[0].payload.get("text_chars") == len("hello operator")
+        assert events[0].payload.get("text_words") == 2
 
 
 # --- video path ------------------------------------------------------
