@@ -458,6 +458,49 @@ async def test_q04_a_rest_request_publish_that_hangs_is_not_sent_and_escalates(b
     await _assert_escalated(h, "request_not_sent")
 
 
+@pytest.mark.parametrize("mode", ["hang", "raise"])
+async def test_e4_the_indicator_arm_runs_on_a_poll_whose_distress_read_failed(bus, tmp_path, monkeypatch, mode):
+    """interoception.out cannot be read on any poll: every poll fails for the
+    liveness check, yet the indicator arm still runs on each of them and the
+    boredom crossing requests its rest on time."""
+    from kaine.cycle.preservation_monitor import WelfareBusReadFailing, WelfareBusTimeout
+
+    h = Harness(bus, tmp_path)
+    h.mon._bus_timeout_s = 0.05
+    real_read = bus.read_entries
+
+    async def failing(stream, *args, **kwargs):
+        if stream == "interoception.out":
+            if mode == "hang":
+                await asyncio.sleep(3600)
+            raise ConnectionError("interoception.out unreadable")
+        return await real_read(stream, *args, **kwargs)
+
+    monkeypatch.setattr(bus, "read_entries", failing)
+    failed_polls = 0
+    try:
+        await asyncio.wait_for(h.poll(), timeout=10.0)  # seeds the stream cursors
+    except (WelfareBusTimeout, WelfareBusReadFailing):
+        failed_polls += 1
+    for _ in range(25):
+        for _ in range(15):
+            await h.affect(boredom=True)
+            h.w.value += 2.0
+            h.u.value += 2.0
+        try:
+            await asyncio.wait_for(h.poll(), timeout=10.0)
+        except (WelfareBusTimeout, WelfareBusReadFailing):
+            failed_polls += 1
+        if await h.rest_requests():
+            break
+    # Every poll from the third failed for the liveness check (every one, when the read hangs).
+    assert failed_polls >= 18
+    requests = await h.rest_requests()
+    assert len(requests) == 1
+    assert requests[0]["indicators"] == ["boredom_deprived"]
+    assert h.mon._ind_eval.span_awake_s >= 600.0
+
+
 @pytest.mark.parametrize("reason", ["failed", "too_soon"])
 async def test_a_refusal_other_than_busy_escalates(bus, tmp_path, reason):
     h = Harness(bus, tmp_path)
