@@ -126,7 +126,8 @@ def _video_trace(tmp_path: Path) -> list[Any]:
     source = PlaylistSource(
         manifest, playlist_clock=clock, decoder_factory=_fake_decoders({"a.mp4": 20, "b.mp4": 20})
     )
-    assert source.open()
+    opened = source.open()
+    assert opened
     trace: list[Any] = []
     for k in range(50):
         t[0] = 0.09 * k

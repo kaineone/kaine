@@ -111,21 +111,15 @@ class StimulusEffector:
         action = str(request.action)
         now = self._clock()
         reason = self.refusal(action, now=now)
-        if reason is None:
-            try:
-                applied = self._controller.apply(action)
-            except Exception as exc:
-                reason = str(exc) or type(exc).__name__
         if reason is not None:
-            if self._tally is not None:
-                self._tally.refused(action)
-            self._controller.note_refusal(action, reason)
-            return ActionResult(
-                success=False,
-                elapsed_ms=_now_ms() - start,
-                error=f"refused: {reason}",
-                metadata={"action": action, "refused": True},
-            )
+            return self._refuse(action, reason, start)
+        try:
+            applied = self._controller.apply(action)
+        except Exception as exc:
+            # The controller re-checks under its lock; anything it raises
+            # (a race since the check above, or a fault) refuses the command,
+            # which then changed nothing.
+            return self._refuse(action, str(exc) or type(exc).__name__, start)
         self._last_accepted_at = now
         if action in SEEK_ACTIONS:
             self._seeks.append(self._controller.awake_seconds())
@@ -135,6 +129,19 @@ class StimulusEffector:
             success=True,
             elapsed_ms=_now_ms() - start,
             metadata={"action": action, **applied},
+        )
+
+
+    def _refuse(self, action: str, reason: str, start: float) -> ActionResult:
+        """A refused command: counted, its bound noted, reported as a failure."""
+        if self._tally is not None:
+            self._tally.refused(action)
+        self._controller.note_refusal(action, reason)
+        return ActionResult(
+            success=False,
+            elapsed_ms=_now_ms() - start,
+            error=f"refused: {reason}",
+            metadata={"action": action, "refused": True},
         )
 
 

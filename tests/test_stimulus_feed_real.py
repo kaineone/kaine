@@ -81,7 +81,8 @@ def test_video_follows_next_previous_and_wraps(tmp_path):
     clock = runtime.install_programme(str(_programme(tmp_path)), start=False)
     controller = runtime.controller
     source = PlaylistSource(runtime.programme.manifest, playlist_clock=clock)
-    assert source.open()
+    opened = source.open()
+    assert opened
     try:
         ok, frame = source.read()
         assert ok and _colour(frame) == "red"
@@ -104,7 +105,8 @@ def test_video_reopens_the_same_item_at_its_start(tmp_path):
         str(write_manifest(tmp_path / "one", [("a.mkv", RED, 300.0, 3.0)])), start=False
     )
     source = PlaylistSource(runtime.programme.manifest, playlist_clock=clock)
-    assert source.open()
+    opened = source.open()
+    assert opened
     try:
         source.read()
         time.sleep(0.45)
@@ -217,7 +219,8 @@ def test_entity_pause_holds_the_programme_and_releases_itself(tmp_path):
             time.sleep(0.02)
         assert ENTITY_HOLDER not in clock.holders, "the entity pause did not release itself"
         assert runtime.tally.record()["auto_releases"] == 1
-        assert len(_collect(captured, 3)) >= 3  # playback continues where it stopped
+        collected = _collect(captured, 3)
+        assert len(collected) >= 3  # playback continues where it stopped
         assert clock.elapsed() == pytest.approx(held_at, abs=0.3)
     finally:
         stream.stop()
@@ -277,11 +280,14 @@ def test_skipping_never_ends_the_viewing_and_the_end_is_requested_once(tmp_path)
     for k in range(1, 12):
         mono.t = 0.5 * k
         runtime.controller.apply("next")
-        assert not asyncio.run(watcher.step())
+        finished = asyncio.run(watcher.step())
+        assert not finished
     assert requests == []
     mono.t = 6.0  # perceived programme time reaches the programme's 6 s length
-    assert asyncio.run(watcher.step())
-    assert asyncio.run(watcher.step())
+    finished = asyncio.run(watcher.step())
+    assert finished
+    finished = asyncio.run(watcher.step())
+    assert finished
     assert len(requests) == 1 and requests[0].stop is True
 
 
@@ -496,7 +502,8 @@ def test_no_path_reaches_the_logs(tmp_path, caplog):
         runtime = _runtime()
         clock = runtime.install_programme(str(_programme(tmp_path)), start=False)
         source = PlaylistSource(runtime.programme.manifest, playlist_clock=clock)
-        assert source.open()
+        opened = source.open()
+        assert opened
         try:
             source.read()
             for action in ("next", "previous", "previous"):
@@ -549,7 +556,8 @@ def test_programme_films_under_stimulus_control(capsys):
         assert clock.duration(i) == container_duration_s(container)
         container.close()
     source = PlaylistSource(runtime.programme.manifest, playlist_clock=clock)
-    assert source.open()
+    opened = source.open()
+    assert opened
     leads = []
     try:
         clock.start(at=0.0)
@@ -604,7 +612,8 @@ def test_a_jump_goes_through_the_decoders_seek(tmp_path):
     source = PlaylistSource(
         runtime.programme.manifest, playlist_clock=clock, decoder_factory=decoders
     )
-    assert source.open()
+    opened = source.open()
+    assert opened
     clock.start(at=0.0)
     mono.t = 0.5
     source.read()

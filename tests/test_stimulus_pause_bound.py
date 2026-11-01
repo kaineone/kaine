@@ -137,10 +137,12 @@ def test_stage_m_under_sustained_boredom_stays_within_the_bound(tmp_path, seed):
 
 def test_a_pause_waits_after_the_previous_pause_ends_whatever_came_between(tmp_path):
     mono, runtime, clock = _rig(tmp_path)
-    assert _act(runtime, "pause").success
+    act_result = _act(runtime, "pause")
+    assert act_result.success
     mono.t = 90.0
     runtime.controller.poll_once()
-    assert _act(runtime, "louder").success  # during the pause
+    act_result = _act(runtime, "louder")
+    assert act_result.success  # during the pause
     mono.t = 120.0
     runtime.controller.poll_once()  # released at P_max
     assert ENTITY_HOLDER not in clock.holders
@@ -148,7 +150,8 @@ def test_a_pause_waits_after_the_previous_pause_ends_whatever_came_between(tmp_p
     result = _act(runtime, "pause")  # 30.1 s after louder, 0.1 s after the pause ended
     assert not result.success and "after the previous pause ended" in result.error
     mono.t = 150.0
-    assert _act(runtime, "pause").success
+    act_result = _act(runtime, "pause")
+    assert act_result.success
 
 
 def test_a_pause_is_taken_only_if_a_full_one_fits_under_the_bound(tmp_path):
@@ -258,12 +261,14 @@ def test_commands_are_refused_while_asleep_or_frozen(tmp_path, holder):
     assert not result.success and "asleep or frozen" in result.error
     assert runtime.controller.gain_db == 0.0
     clock.resume(holder)
-    assert _act(runtime, "louder").success
+    act_result = _act(runtime, "louder")
+    assert act_result.success
 
 
 def test_the_interval_refusal_states_the_shortfall(tmp_path):
     mono, runtime, clock = _rig(tmp_path)
-    assert _act(runtime, "louder").success
+    act_result = _act(runtime, "louder")
+    assert act_result.success
     mono.t = 29.95
     result = _act(runtime, "quieter")
     assert not result.success

@@ -70,12 +70,15 @@ async def test_a_viewing_with_skips_and_a_refused_louder(tmp_path):
     effector = runtime.effector()
     mono.t = 10.0
     runtime.controller.poll_once()
-    assert (await effector.act(StimulusRequest(action="next"))).success
+    act_result = await effector.act(StimulusRequest(action="next"))
+    assert act_result.success
     mono.t = 20.0
-    assert not (await effector.act(StimulusRequest(action="louder"))).success  # too soon
+    act_result = await effector.act(StimulusRequest(action="louder"))
+    assert not act_result.success  # too soon
     mono.t = 45.0
     runtime.controller.poll_once()
-    assert (await effector.act(StimulusRequest(action="next"))).success
+    act_result = await effector.act(StimulusRequest(action="next"))
+    assert act_result.success
     mono.t = 50.0
     runtime.controller.poll_once()
     record = runtime.tally.record()

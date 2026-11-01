@@ -64,7 +64,8 @@ def test_pause_is_excluded_from_perceived_time():
 def test_next_moves_to_the_start_of_the_next_item():
     mono, _plain, prog = _clocks([2.0, 3.0, 1.5])
     mono.t = 100.5
-    assert prog.seek(+1) == 1
+    landed = prog.seek(+1)
+    assert landed == 1
     assert prog.locate() == (1, pytest.approx(0.0))
     mono.t = 101.0
     assert prog.locate() == (1, pytest.approx(0.5))
@@ -74,7 +75,8 @@ def test_next_on_the_last_item_wraps_to_the_first_and_does_not_end():
     mono, _plain, prog = _clocks([2.0, 3.0, 1.5])
     mono.t = 105.0  # item 2 at 0.0 of perceived 5.0
     assert prog.locate()[0] == 2
-    assert prog.seek(+1) == 0
+    landed = prog.seek(+1)
+    assert landed == 0
     assert prog.locate() == (0, pytest.approx(0.0))
     assert not _ended(prog)
 
@@ -82,7 +84,8 @@ def test_next_on_the_last_item_wraps_to_the_first_and_does_not_end():
 def test_previous_on_the_first_item_wraps_to_the_last():
     mono, _plain, prog = _clocks([2.0, 3.0, 1.5])
     mono.t = 100.2
-    assert prog.seek(-1) == 2
+    landed = prog.seek(-1)
+    assert landed == 2
     assert prog.locate() == (2, pytest.approx(0.0))
 
 
@@ -115,7 +118,8 @@ def test_a_seek_changes_the_epoch_even_onto_the_same_item():
     mono, _plain, prog = _clocks([4.0])
     mono.t = 101.0
     epoch = prog.position_epoch()
-    assert prog.seek(+1) == 0
+    landed = prog.seek(+1)
+    assert landed == 0
     assert prog.locate() == (0, pytest.approx(0.0))
     assert prog.position_epoch() != epoch
 
@@ -125,7 +129,8 @@ def test_channels_and_the_viewing_length_of_channel_zero():
     mono, _plain, prog = _clocks([4.0, 4.0, 2.0, 3.0], segments=[(0, 2), (2, 2)])
     assert prog.viewing_length == pytest.approx(8.0)
     mono.t = 101.0
-    assert prog.switch_channel(1) == 2
+    first_item = prog.switch_channel(1)
+    assert first_item == 2
     assert prog.locate() == (2, pytest.approx(0.0))
     mono.t = 103.5  # 2.5 s into channel 1: its second item
     assert prog.locate() == (3, pytest.approx(0.5))

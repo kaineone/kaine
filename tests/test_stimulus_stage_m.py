@@ -100,7 +100,8 @@ def test_a_drive_led_broadcast_yields_one_stimulus_act(drive):
 )
 def test_other_leads_yield_no_stimulus_act(lead):
     source = _source(["next"], mono=_Mono())
-    assert [i for i in source(_snapshot(lead)) if i.kind == ACT] == []
+    intents = source(_snapshot(lead))
+    assert [i for i in intents if i.kind == ACT] == []
 
 
 def test_a_boredom_event_that_does_not_lead_yields_nothing():
@@ -111,27 +112,33 @@ def test_a_boredom_event_that_does_not_lead_yields_nothing():
         selected_events=[("affect.out:1-0", _drive("boredom")), ("vision.out:1-0", _event("vision", "vision.report", {}))],
         salience_scores={"affect.out:1-0": 0.4, "vision.out:1-0": 0.8},
     )
-    assert [i for i in source(snap) if i.kind == ACT] == []
+    intents = source(snap)
+    assert [i for i in intents if i.kind == ACT] == []
 
 
 def test_the_developmental_phase_derives_no_stimulus_act():
     source = _source(["next"], mono=_Mono(), developing=True)
-    assert [i for i in source(_snapshot(_drive("boredom"))) if i.kind == ACT] == []
+    intents = source(_snapshot(_drive("boredom")))
+    assert [i for i in intents if i.kind == ACT] == []
 
 
 def test_the_command_interval_spaces_the_acts():
     mono = _Mono()
     source = _source(["next"], mono=mono, interval=30.0)
-    assert len([i for i in source(_snapshot(_drive("boredom"))) if i.kind == ACT]) == 1
+    intents = source(_snapshot(_drive("boredom")))
+    assert len([i for i in intents if i.kind == ACT]) == 1
     mono.t = 29.0
-    assert [i for i in source(_snapshot(_drive("boredom"))) if i.kind == ACT] == []
+    intents = source(_snapshot(_drive("boredom")))
+    assert [i for i in intents if i.kind == ACT] == []
     mono.t = 30.0
-    assert len([i for i in source(_snapshot(_drive("boredom"))) if i.kind == ACT]) == 1
+    intents = source(_snapshot(_drive("boredom")))
+    assert len([i for i in intents if i.kind == ACT]) == 1
 
 
 def test_no_allowed_action_yields_nothing():
     source = _source([], mono=_Mono())
-    assert [i for i in source(_snapshot(_drive("boredom"))) if i.kind == ACT] == []
+    intents = source(_snapshot(_drive("boredom")))
+    assert [i for i in intents if i.kind == ACT] == []
 
 
 def test_the_draw_is_uniform_and_reproducible_from_the_seed():
@@ -147,7 +154,8 @@ def test_the_draw_is_uniform_and_reproducible_from_the_seed():
     for n in counts.values():
         assert abs(n - 1000) < 120  # within ~4 sd of a uniform draw
     replay = stage_m_generator(5)
-    assert picks[:50] == [allowed[replay.randrange(4)] for _ in range(50)]
+    expected = [allowed[replay.randrange(4)] for _ in range(50)]
+    assert picks[:50] == expected
 
 
 def test_stage_m_never_draws_pause():
@@ -166,7 +174,8 @@ def test_stage_m_never_draws_pause():
     assert set(picks) == {"next", "louder", "resume"}
     only_pause = _source(["pause"], mono=mono, seed=2, interval=1.0)
     mono.t = 5000.0
-    assert [i for i in only_pause(_snapshot(_drive("boredom"))) if i.kind == ACT] == []
+    intents = only_pause(_snapshot(_drive("boredom")))
+    assert [i for i in intents if i.kind == ACT] == []
 
 
 def test_inner_policy_hooks_stay_reachable():

@@ -19,7 +19,10 @@ from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.modules.effectors import Effectors
 from kaine.modules.effectors.effectors import StimulusRequest
-from kaine.modules.effectors.stimulus.config import StimulusControlConfig
+from kaine.modules.effectors.stimulus.config import (
+    StimulusControlConfig,
+    StimulusControlError,
+)
 from kaine.modules.effectors.stimulus.controller import ENTITY_HOLDER
 from kaine.modules.effectors.stimulus.runtime import StimulusControlRuntime
 from kaine.security.intent_signing import compute_intent_signature
@@ -124,7 +127,8 @@ async def test_shipped_configuration_has_no_stimulus_effector(tmp_path, bus):
     rig = _Rig(tmp_path, bus, whitelisted=False, register=False)
     await rig.act("next", at=1.0)
     assert rig.audit_records() == []
-    assert await rig.actions() == []
+    published = await rig.actions()
+    assert published == []
     assert rig.clock.locate()[0] == 0
     assert rig.runtime.tally.record()["commands"]["next"] == 0
 
@@ -162,13 +166,15 @@ async def test_gain_at_its_bound_is_refused(tmp_path, bus):
     await rig.act("louder", at=10.0)
     assert rig.runtime.controller.gain_db == pytest.approx(6.0)
     assert rig.audit_records()[-1]["success"] is False
-    assert "louder" not in rig.runtime.effector().allowed_actions()
+    allowed_now = rig.runtime.effector().allowed_actions()
+    assert "louder" not in allowed_now
     for k in range(6):
         await rig.act("quieter", at=20.0 + 2 * k)
     assert rig.runtime.controller.gain_db == pytest.approx(-6.0)
     await rig.act("quieter", at=40.0)
     assert rig.runtime.controller.gain_db == pytest.approx(-6.0)
-    assert "quieter" not in rig.runtime.effector().allowed_actions()
+    allowed_now = rig.runtime.effector().allowed_actions()
+    assert "quieter" not in allowed_now
 
 
 async def test_seeks_are_capped_per_awake_hour(tmp_path, bus):
@@ -177,7 +183,8 @@ async def test_seeks_are_capped_per_awake_hour(tmp_path, bus):
     await rig.act("previous", at=3.0)
     await rig.act("next", at=5.0)
     assert [r["success"] for r in rig.audit_records()] == [True, True, False]
-    assert "next" not in rig.runtime.effector().allowed_actions()
+    allowed_now = rig.runtime.effector().allowed_actions()
+    assert "next" not in allowed_now
     # Asleep time is not awake time: an hour of sleep does not refill the budget.
     rig.clock.pause("sleep")
     await rig.act("next", at=3700.0)
@@ -209,7 +216,8 @@ async def test_an_undeclared_action_is_refused(tmp_path, bus):
 
 async def test_one_channel_declares_no_channel_action(tmp_path, bus):
     rig = _Rig(tmp_path, bus)
-    assert not any(a.startswith("channel:") for a in rig.runtime.effector().declared_actions)
+    effector_now = rig.runtime.effector()
+    assert not any(a.startswith("channel:") for a in effector_now.declared_actions)
 
 
 async def test_two_channels_declare_and_switch(tmp_path, bus):
@@ -225,7 +233,8 @@ async def test_two_channels_declare_and_switch(tmp_path, bus):
     clock.start()
     effector = runtime.effector()
     assert effector.declared_actions[-2:] == ("channel:0", "channel:1")
-    assert "channel:0" not in effector.allowed_actions()
+    allowed_now = effector.allowed_actions()
+    assert "channel:0" not in allowed_now
     result = await effector.act(StimulusRequest(action="channel:1"))
     assert result.success
     assert clock.channel == 1 and clock.locate()[0] == 3  # channel 1's first item
@@ -236,7 +245,8 @@ async def test_two_channels_declare_and_switch(tmp_path, bus):
     nxt = await effector.act(StimulusRequest(action="next"))
     assert nxt.success and clock.locate()[0] == 4
     mono.t = 9.0
-    assert (await effector.act(StimulusRequest(action="next"))).success
+    act_result = await effector.act(StimulusRequest(action="next"))
+    assert act_result.success
     assert clock.locate()[0] == 3  # wraps inside channel 1
     record = runtime.tally.record()
     runtime.controller.poll_once()
@@ -253,4 +263,35 @@ async def test_commands_are_refused_before_the_programme_starts(tmp_path):
     )
     result = await runtime.effector().act(StimulusRequest(action="next"))
     assert not result.success and "not started" in result.error
-    assert runtime.allowed_actions() == []
+    allowed_now = runtime.allowed_actions()
+    assert allowed_now == []
+
+
+@pytest.mark.parametrize(
+    "fault, reason",
+    [
+        (lambda: StimulusControlError("the programme has ended"), "the programme has ended"),
+        (lambda: RuntimeError(), "RuntimeError"),
+    ],
+)
+async def test_a_command_the_controller_cannot_apply_is_refused(tmp_path, bus, fault, reason):
+    """The refusal check passes, then the controller raises (a race, or a fault):
+    the command is refused, counted and audited, and changes nothing."""
+    rig = _Rig(tmp_path, bus, min_interval_s=30.0)
+    controller = rig.runtime.controller
+
+    def _raise(action):  # noqa: ANN001, ANN202
+        raise fault()
+
+    real_apply = controller.apply
+    controller.apply = _raise
+    await rig.act("louder", at=1.0)
+    controller.apply = real_apply
+    record = rig.audit_records()[-1]
+    assert record["success"] is False and record["error"] == f"refused: {reason}"
+    assert controller.gain_db == 0.0
+    assert rig.runtime.tally.record()["refused"]["louder"] == 1
+    # Nothing was accepted, so the interval did not start: the next command lands.
+    await rig.act("louder", at=2.0)
+    assert rig.audit_records()[-1]["success"] is True
+    assert controller.gain_db == pytest.approx(2.0)

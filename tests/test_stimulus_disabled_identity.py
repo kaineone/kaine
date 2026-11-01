@@ -39,8 +39,10 @@ async def test_the_harness_sees_the_component_when_it_is_on(tmp_path):
 def test_absent_and_off_build_no_runtime():
     from kaine.cycle.__main__ import _stimulus_control_runtime
 
-    assert _stimulus_control_runtime({}, None, 0) == (None, None)
-    assert _stimulus_control_runtime({"stimulus_control": {"enabled": False}}, None, 0) == (None, None)
+    built = _stimulus_control_runtime({}, None, 0)
+    assert built == (None, None)
+    built = _stimulus_control_runtime({"stimulus_control": {"enabled": False}}, None, 0)
+    assert built == (None, None)
     reason, runtime = _stimulus_control_runtime(
         {
             "stimulus_control": {"enabled": True},
@@ -90,7 +92,8 @@ def test_off_leaves_the_action_policy_unwrapped():
 
     ctx = BootContext()
     policy = object()
-    assert _with_stimulus_act(ctx, policy) is policy
+    wrapped_policy = _with_stimulus_act(ctx, policy)
+    assert wrapped_policy is policy
 
 
 def test_the_boot_gives_stage_m_the_effectors_ready_check(tmp_path):
@@ -130,4 +133,5 @@ def test_the_boot_gives_stage_m_the_effectors_ready_check(tmp_path):
     ctx.staging_enabled = False
     wrapped = _with_stimulus_act(ctx, object())
     assert isinstance(wrapped, StimulusActSource)
-    assert wrapped._ready == runtime.effector().ready
+    effector_now = runtime.effector()
+    assert wrapped._ready == effector_now.ready

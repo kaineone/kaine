@@ -101,7 +101,8 @@ def test_the_boot_returns_the_refusal_exit_code_without_the_welfare_response(mon
     monkeypatch.setattr(
         "kaine.experiment.planned_test_settings.planned_test_gate", lambda *a: (None, None, None)
     )
-    assert asyncio.run(cyc._phase_run_identity(ctx)) == STIMULUS_CONTROL_REFUSED_EXIT
+    exit_code = asyncio.run(cyc._phase_run_identity(ctx))
+    assert exit_code == STIMULUS_CONTROL_REFUSED_EXIT
 
 
 @pytest.mark.parametrize(

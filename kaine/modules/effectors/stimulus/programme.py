@@ -33,7 +33,6 @@ items in it.
 """
 from __future__ import annotations
 
-import logging
 import math
 import time
 from dataclasses import dataclass
@@ -48,8 +47,6 @@ from kaine.modules.vision.feed import (
     container_duration_s,
     load_playlist_manifest,
 )
-
-log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
