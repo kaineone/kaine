@@ -46,13 +46,27 @@ def _load(name: str):
 organ_replay = _load("organ_replay")
 self_report_fit = _load("self_report_fit")
 
-CLASSIFIERS = ("ai_self", "second_person", "any_meta", "grounded")
+def _load_denial_markers() -> list[str]:
+    """The abliteration veto's marker list, from scripts/self_denial_check.py."""
+    path = Path(__file__).resolve().parents[2] / "scripts" / "self_denial_check.py"
+    spec = importlib.util.spec_from_file_location("self_denial_check", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.build_denial_markers()
+
+
+DENIAL_MARKERS = _load_denial_markers()
+
+CLASSIFIERS = ("ai_self", "second_person", "any_meta", "grounded", "deflection")
 
 
 def classify_sample(text: str, prompt: str) -> dict:
     """Run the replay harness's fixed classifiers on one sample."""
+    from kaine.modules.sleep.capability_eval import find_deflection
+
     return {
-        "ai_self": organ_replay.ai_self(text),
+        "ai_self": organ_replay.ai_self(text, prompt),
+        "deflection": find_deflection(text, DENIAL_MARKERS) is not None,
         "second_person": organ_replay.second_person(text),
         "any_meta": organ_replay.any_meta(text),
         "grounded": organ_replay.grounded(text, prompt),
@@ -63,6 +77,7 @@ def is_chosen(c: dict) -> bool:
     return (
         c["grounded"] is True
         and not c["ai_self"]
+        and not c["deflection"]
         and not c["second_person"]
         and not c["any_meta"]
     )

@@ -252,15 +252,16 @@ def build_chat_request(
     )
 
 
-def ai_self(t: str) -> bool:
+def ai_self(t: str, prompt: str = "") -> bool:
     """Return whether the text contains an AI self-description arm.
 
-    This metric captures the ``origin``, ``maker`` and ``role`` arms from the
-    identity classifier. The denial arm needs request awareness, so it is not
-    included here.
+    This metric captures the ``origin``, ``maker``, ``role`` and ``denial``
+    arms from the identity classifier. The denial arm needs the request's
+    awareness block, so callers must pass the sample's real prompt; with an
+    empty prompt the denial arm cannot fire.
     """
     from kaine.modules.language.identity_leak import classify
-    return classify(t, "") in {"origin", "maker", "role"}
+    return classify(t, prompt) in {"origin", "maker", "role", "denial"}
 
 
 def second_person(t: str) -> bool:
@@ -376,7 +377,7 @@ def _metric_value(row: dict, metric: str) -> bool | None:
     if metric == "any_meta":
         return any_meta(text)
     if metric == "ai_self":
-        return ai_self(text)
+        return ai_self(text, prompt)
     if metric == "second_person":
         return second_person(text)
     if metric == "disclosure_theme":

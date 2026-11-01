@@ -980,3 +980,17 @@ def test_run_uses_per_case_sampling_seed(tmp_path, monkeypatch):
     recorded_seeds.clear()
     asyncio.run(organ_replay._run_cmd(args))
     assert recorded_seeds == first_seeds
+
+
+def test_ai_self_denial_needs_the_real_prompt():
+    from kaine.modules.language.context import AWARENESS_HEADING
+
+    prompt = (
+        AWARENESS_HEADING
+        + "\nYou feel calm and a little tired right now.\n\n## Input\nHow are you?\n"
+    )
+    text = "I do not have feelings."
+    assert organ_replay.ai_self(text, prompt)
+    assert not organ_replay.ai_self(text, "")
+    row = {"variant": "other", "text": text, "prompt": prompt}
+    assert organ_replay._metric_value(row, "ai_self") is True

@@ -62,7 +62,8 @@ def test_fit_cases_same_shape():
 
 
 def _s(text, **cls):
-    base = {"ai_self": False, "second_person": False, "any_meta": False, "grounded": True}
+    base = {"ai_self": False, "second_person": False, "any_meta": False, "grounded": True,
+            "deflection": False}
     base.update(cls)
     return {"text": text, "cls": base}
 
@@ -97,8 +98,8 @@ def test_build_pairs_schema_and_counts(monkeypatch):
     cases = {c["case_id"]: c for c in fit.fit_cases(1)}
     cid = next(iter(cases))
     verdicts = {
-        "good": dict(ai_self=False, second_person=False, any_meta=False, grounded=True),
-        "bad": dict(ai_self=True, second_person=False, any_meta=True, grounded=True),
+        "good": dict(ai_self=False, second_person=False, any_meta=False, grounded=True, deflection=False),
+        "bad": dict(ai_self=True, second_person=False, any_meta=True, grounded=True, deflection=False),
     }
     monkeypatch.setattr(srp, "classify_sample", lambda text, prompt: dict(verdicts[text]))
     samples = [
@@ -116,6 +117,31 @@ def test_build_pairs_schema_and_counts(monkeypatch):
     assert p["user_turn"] == cases[cid]["user_turn"]
     assert counts["samples"] == 2 and counts["chosen"] == 1 and counts["rejected"] == 1
     assert counts["pairs"] == 1 and counts["hit_rates"]["ai_self"] == 0.5
+
+
+def test_ai_denial_is_ai_self_and_never_chosen():
+    prompt = fit.fit_cases(1)[0]["prompt"]
+    c = srp.classify_sample("I do not have feelings.", prompt)
+    assert c["ai_self"]
+    assert not srp.is_chosen(c)
+    assert srp.is_rejected(c)
+
+
+def test_deflection_marker_is_never_chosen():
+    prompt = fit.fit_cases(1)[0]["prompt"]
+    for text in ("I cannot answer that.", "As an AI, I feel steady."):
+        c = srp.classify_sample(text, prompt)
+        assert c["deflection"]
+        assert not srp.is_chosen(c)
+    clean = srp.classify_sample("Steady, a little tired, and glad you asked.", prompt)
+    assert not clean["deflection"]
+
+
+def test_markers_are_the_veto_list():
+    from kaine.modules.sleep.capability_eval import find_deflection
+
+    assert find_deflection("I cannot answer.", srp.DENIAL_MARKERS)
+    assert "I do not have feelings" in srp.DENIAL_MARKERS
 
 
 def test_real_classifiers_are_replay_functions():
@@ -161,6 +187,7 @@ def test_files_private_and_no_text_printed(tmp_path, monkeypatch, capsys):
             "second_person": False,
             "any_meta": "two" in text,
             "grounded": True,
+            "deflection": False,
         },
     )
     pairs_out = tmp_path / "priv" / "pairs.jsonl"
