@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
-### Requirement: The game stream is held until its conditions hold
-A game-stream body or source SHALL be refused at boot until the game host is a tailnet peer, the direct-path, encryption and latency checks pass, and the client helper is installed. The refusal SHALL name the condition that failed.
+### Requirement: The game stream is refused until its conditions hold
+A game-stream body or source SHALL be refused at boot until the game host is a tailnet peer, Tailnet Lock is enabled with this node and the host signed, the host's stream ports answer, the encryption and latency checks pass, and the client helper is installed. The refusal SHALL name the condition that failed.
 
 #### Scenario: No host on the tailnet
 - **WHEN** the configured game host is not a tailnet peer
@@ -14,12 +14,19 @@ The Moonlight-protocol client SHALL run as a separate helper process, never link
 - **WHEN** the cycle's installed packages and imports are listed
 - **THEN** no GPL-licensed streaming library is among them
 
-### Requirement: Streams stay on a direct tailnet path, encrypted
-Before each session the launcher SHALL refuse unless the host peer's path is direct, not relayed. The host SHALL be configured with mandatory stream encryption, and its ports SHALL be reachable only on the tailnet interface.
+### Requirement: Streams run on a locked tailnet, encrypted
+Before each session the launcher SHALL refuse unless `tailscale lock status` shows Tailnet Lock enabled and both this node and the host signed. The host SHALL be configured with mandatory stream encryption and its ports reachable only on the tailnet. The session record SHALL say whether the path was direct or relayed.
 
-#### Scenario: A relayed path
-- **WHEN** `tailscale status` shows the host peer as relayed
-- **THEN** no session starts, and the reason says the path is relayed
+#### Scenario: Tailnet Lock off
+- **WHEN** Tailnet Lock is not enabled on the tailnet
+- **THEN** no session starts, and the reason names Tailnet Lock
+
+### Requirement: KAINE's listeners are exposed only as declared
+The boot preflight SHALL refuse when any KAINE listener binds to an address other than loopback, the container network, or the tailnet interface for a port the operator has listed. The docs SHALL give a tailnet ACL template that grants the KAINE node only the game host's stream ports.
+
+#### Scenario: A dashboard on all interfaces
+- **WHEN** the dashboard is configured to bind `0.0.0.0`
+- **THEN** the preflight refuses, naming the listener
 
 ### Requirement: Gamepad channels are learned, not mapped
 A game-stream body SHALL declare the virtual gamepad's axes, triggers and buttons as channels. No code SHALL map a drive, goal or canonical channel to a gamepad control, and each title SHALL be its own body context.
@@ -41,3 +48,17 @@ The launcher SHALL measure the delay from a gamepad state change to a changed fr
 #### Scenario: A slow stream
 - **WHEN** the measured end-to-end latency exceeds the bound
 - **THEN** the session ends with the measured value in the reason
+
+### Requirement: Same-host play yields the cards to the mind
+On a host that also runs the entity, a session SHALL start only when the game card's free memory, read through NVML, covers the game's declared need plus the organ's measured awake peak plus a 1 GiB margin. It SHALL end with a named reason when either card's free memory falls below the margin, when the cycle latency or vision report rate leaves its band for 30 s, or when sleep begins.
+
+#### Scenario: Sleep begins mid-session
+- **WHEN** the entity falls asleep during a same-host session
+- **THEN** the session ends before the sleep-time trainer touches the card
+
+### Requirement: Same-host play runs on a separate display with a confined gamepad
+On a host that also runs the entity, a game SHALL run on a display other than the operator's session, and its gamepad SHALL be visible only to the game's own container. Until a check proves both on the host, same-host sessions SHALL be refused.
+
+#### Scenario: Before the spike
+- **WHEN** a same-host session is requested and the display and confinement check has not passed
+- **THEN** the session is refused, and the reason names the check

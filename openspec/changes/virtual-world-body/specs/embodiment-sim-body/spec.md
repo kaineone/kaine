@@ -53,19 +53,47 @@ A body paired with a perceptual source SHALL accept actions and setpoints only w
 A simulated body SHALL report touch as contact force and location without valence, and SHALL carry no pain, damage, injury or body-fatigue signal. Adding any such signal SHALL require its own change with cited neuroscience at the code site and an independent second review.
 
 #### Scenario: A hard collision
-- **WHEN** the arm strikes the table at its force limit
+- **WHEN** a leg strikes an obstacle at its force limit
 - **THEN** a touch reading reports the contact, and no aversive or damage signal is produced
 
 ### Requirement: The operator can reset a stuck body
 A body that declares `reset` SHALL be resettable to its start pose by an operator action, recorded with the operator as its initiator. The entity SHALL have no reset action.
 
 #### Scenario: A fallen base
-- **WHEN** the mobile base has tipped over and the operator resets it
+- **WHEN** the hexapod has tipped over and the operator resets it
 - **THEN** the body returns to its start pose, and the record names the operator
 
 ### Requirement: The body counts as built only with its driving loop
 `embodiment_built()` SHALL be true only when a non-reference body adapter and the motor driving loop are both registered. A MuJoCo body without the driving loop SHALL leave the embodiment module held.
 
-#### Scenario: B1 before the learner
-- **WHEN** the simulated pan-tilt body exists but the driving loop does not
+#### Scenario: The simulated JetHexa before the learner
+- **WHEN** the simulated JetHexa exists but the driving loop does not
 - **THEN** `embodiment_built()` is false and the module cannot join an entity
+
+### Requirement: The default simulated body is a JetHexa model of KAINE's own
+The default MuJoCo body SHALL be a JetHexa model written for KAINE: 18 leg joints and a pan-tilt head with a camera, an IMU and joint-position sensors. No file from an unlicensed vendor repository SHALL be vendored. Its model card SHALL mark each physical parameter as provisional, measured or identified.
+
+#### Scenario: The model card
+- **WHEN** the provisional model is built from published dimensions
+- **THEN** its model card marks the masses and servo gains provisional, and names their sources
+
+### Requirement: The simulated JetHexa matches the real servo bus timing
+The JetHexa body SHALL accept position commands with a move time and report joint positions at the control rate the real 115200-baud servo bus supports for 18 joints, with the read delay modelled. Temperature and voltage states SHALL be declared absent in simulation.
+
+#### Scenario: Reading all joints
+- **WHEN** the motor loop requests all 18 joint positions
+- **THEN** the readings arrive after the modelled bus delay, at the declared rate
+
+### Requirement: Locomotion is learned from joint channels
+The JetHexa body SHALL expose joint channels only. The vendor's gait controller SHALL NOT be an entity channel, and any gait generator given to the entity SHALL require its own change with cited neuroscience at the code site.
+
+#### Scenario: The channel list
+- **WHEN** the JetHexa body's declared channels are listed
+- **THEN** they are joint commands, and no velocity or gait command is among them
+
+### Requirement: The JetHexa curriculum frees the head before the legs
+The JetHexa body SHALL declare its stages in this order: head pan; head pan and tilt; one leg's three joints at a time with the other legs held standing; all leg joints. Each stage SHALL be freed only on demonstrated competence.
+
+#### Scenario: Legs stay frozen at first
+- **WHEN** the entity is in the first stage
+- **THEN** the leg joints are held at their standing pose, and only head pan is driven by the entity

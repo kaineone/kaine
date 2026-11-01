@@ -5,6 +5,8 @@ The CTO's direction of 2026-11-01 is a mind that acts "through any kind of actua
 - The simulated body is a robot, not a game avatar. That means realistic actuators, proprioception and timing, and a hardware-shaped interface, so that a real robot later swaps only the adapter.
 - The CTO also wants the entity to play games from a Steam library with a controller, and to explore existing virtual worlds (Second Life, OpenSimulator grids through the Hypergrid) and, later, Paracosmic.
 
+The CTO will build a Hiwonder JetHexa (a ROS 2 Humble hexapod with 18 HX-35H bus servos, a pan-tilt head carrying a depth camera, lidar and an IMU), and made it the default body: simulated first, then real.
+
 This change designs the actuator side of all of these through the existing embodiment adapter seam, and puts them in order.
 
 ### What already exists, and what is pretend today (audit, origin/main d7fabdc0)
@@ -52,25 +54,36 @@ This change designs the actuator side of all of these through the existing embod
    - Domain randomisation per run seed: masses, damping, friction, gains, latency, noise and textures, within ranges from the sim-to-real literature, recorded in the manifest.
    - A measured command-to-feedback latency, recorded and bounded.
    - It acts only while its own source is selected.
-4. **Three bodies, in order.**
-   - B1, a pan-tilt camera head: a small custom MJCF from the MIT `dynamixel_2r` template. It is `embodiment-motor-contingency`'s first body.
-   - B2, an arm with a gripper and a wrist camera: Menagerie `robotstudio_so101` (Apache-2.0), whose real counterpart is a low-cost open-hardware arm.
-   - B3, a mobile base under the arm: a custom differential-drive base with velocity-controlled wheels.
+4. **The default body: the JetHexa.**
+   - **The model is KAINE's own MJCF.** Hiwonder's repository has no licence, describes the older edition, and gives its links placeholder masses. So the MJCF is built from published dimensions first, and from the built robot's measurements and system identification after.
+   - **Timing matches the real servo bus.** Its interfaces and control rate match the real servo bus: position commands and position feedback at about 20 Hz for all 18 joints at 115200 baud.
+   - **The real adapter** later bridges to the robot's ROS 2 stack, or to a thin on-robot bridge, behind the same descriptor.
+   - **The curriculum** is body-declared stages:
+     - J1, head pan;
+     - J2, pan and tilt;
+     - J3, one leg at a time while five legs stand;
+     - J4, all legs.
+
+     The pan-tilt head stays the first motor-learning step because it is the smallest body with lawful contingencies. It is the JetHexa's own head, so nothing is learned for a body that will never exist.
+   - **Not scheduled.** The SO-101 arm (Apache-2.0) and a wheeled base remain documented alternatives.
    - No Meta-owned model, asset or tool.
-5. **Sequencing with `embodiment-motor-contingency`.** That change's driving loop, learner and motor prediction-error report are built against the simulated pan-tilt head. Its start condition is amended accordingly: the hardware stage no longer gates development, under the CTO's 2026-10-31 and 2026-11-01 decisions. `embodiment_built()` turns true only when the MuJoCo body and the driving loop both exist. The body is never pretend.
+5. **Sequencing with `embodiment-motor-contingency`.** That change's driving loop, learner and motor prediction-error report are built against the simulated JetHexa, from stage J1. Its start condition is amended accordingly: the hardware stage no longer gates development, under the CTO's 2026-10-31 and 2026-11-01 decisions. `embodiment_built()` turns true only when the MuJoCo body and the driving loop both exist. The body is never pretend.
 6. **Welfare of a simulated body.**
    - Proprioceptive and motor prediction errors are the entity's and are watched by the welfare net.
    - Touch reports contact force as touch, with no valence.
    - No simulated pain, damage or injury signal exists, and none may be added without its own design and an independent second review.
    - The operator can reset a body that is stuck.
-7. **Games, held until the CTO's Steam Deck joins the tailnet.**
-   - The entity is a Moonlight-protocol client of a Sunshine host (the Deck, or this desktop), over the tailnet only.
+7. **Games, without waiting for the Steam Deck** (CTO, 2026-11-01).
+   - The entity is a Moonlight-protocol client of a Sunshine host: another of the CTO's machines, or this desktop with one entity at a time.
+   - All traffic goes over the tailnet, with Tailnet Lock required and tailnet ACLs restricting what is reachable.
+   - Same-host play follows a GPU arbitration rule: admission by measured free memory, the mind's priority, and the session ended before sleep. It also needs a separate display and a confined gamepad, which a spike must prove first.
    - A separate, KAINE-written helper program is licensed GPL-3.0 because it links moonlight-common-c (GPL-3.0). It decodes the stream and passes raw frames, PCM and gamepad state over a socketpair: a simple message set across a process boundary, which the GPL FAQ calls separate programs. KAINE's own code stays under the CAL.
    - The gamepad's axes and buttons are body-declared channels, and their meaning is learned by the motor-contingency learner, not mapped.
-   - Offline, single-player titles from an operator-curated list only.
-8. **Existing worlds, later, through the same seam.**
-   - A local OpenSimulator region first (BSD-3-Clause, no cloud).
-   - Then Hypergrid destinations with their operators' permission.
+   - Offline, single-player titles from an operator-curated list first.
+   - The game body acts once the learner exists, after J1-J2.
+8. **Existing worlds, later, through the same seam.** Online worlds and outbound actions to them are allowed (CTO, 2026-11-01), through declared egress (`perceptual-sources` D9).
+   - A local OpenSimulator region first (BSD-3-Clause), to test with nothing at stake.
+   - Then Hypergrid destinations, each grid's bot rules read first.
    - Second Life last: a separately registered scripted-agent account, the scripted-agent policy and the third-party viewer policy followed, and no logging or relaying of residents' chat or details.
    - Paracosmic as its own adapter once its transport exists.
 
@@ -79,7 +92,7 @@ This change designs the actuator side of all of these through the existing embod
 ### New Capabilities
 
 - `embodiment-sim-body`: the hardware-shaped descriptor, the MuJoCo adapter, its realism and randomisation, latency, source gating, operator reset, the welfare rules for a simulated body, and the build status.
-- `embodiment-game-stream`: the held game-stream body: the helper boundary, the tailnet and encryption rules, latency, the gamepad channels, the title list, zero persistence.
+- `embodiment-game-stream`: the game-stream body: the helper boundary, the tailnet rules (Tailnet Lock, ACLs, encryption), GPU arbitration for same-host play, latency, the gamepad channels, the title list, zero persistence.
 
 ### Modified Capabilities
 
@@ -98,7 +111,8 @@ This change designs the actuator side of all of these through the existing embod
   - Later, `tools/kaine-moonlight-helper/`: a separate GPL-3.0 program, in its own directory with its own LICENSE, distributed as source.
 - **Dependencies.**
   - MuJoCo is already installed (3.16.0, Apache-2.0). The `sim` optional extra needs the CTO's OK.
-  - The Menagerie SO-101 model (Apache-2.0) is vendored with its licence.
+  - The JetHexa MJCF is KAINE's own, so nothing is vendored. Hiwonder's description package would need its written permission.
+  - The SO-101 alternative would vendor the Menagerie model (Apache-2.0) with its licence.
   - The game stage adds moonlight-common-c (GPL-3.0) and FFmpeg's decoders (LGPL-2.1+, depending on the build) to the separate helper only. Their installation needs the CTO's OK.
   - The later world adapters would add LibreMetaverse (BSD-3-Clause, .NET sidecar) or Hippolyzer (LGPL-3.0), and for vision a Firestorm viewer (LGPL-2.1). Each needs the CTO's OK.
 - **Docs.** `docs/09-modules/embodiment.md`, `docs/20-embodiment-adapters.md`, `config/kaine.toml` comments.
@@ -106,11 +120,15 @@ This change designs the actuator side of all of these through the existing embod
 
 ## Dependencies and start condition
 
-- **B1 (pan-tilt in simulation).**
+- **J0 (the simulated JetHexa).**
   - Needs `embodiment-held-status` merged, so a reference body can never be counted as a body.
   - Needs `perceptual-sources` (registry and the `mujoco` source).
   - Is built together with `embodiment-motor-contingency` 2.1-2.3.
-- **B2 and B3** follow B1's demonstrated competence. That is the curriculum, not a calendar.
-- **Games.** Held until the CTO's Steam Deck is on the tailnet and the checks in `embodiment-game-stream` pass.
-- **Existing worlds.** Later, after B1, each by its own change.
+- **J3 and J4** follow demonstrated competence. That is the curriculum, not a calendar.
+- **The measured model and the real adapter** follow when the CTO has built the robot.
+- **Games.**
+  - The helper and the host setup can be built in parallel with J0.
+  - The game body acts after J1-J2.
+  - It is refused at boot until the checks in `embodiment-game-stream` pass: Tailnet Lock, the host's ports, encryption, latency, and for same-host play the GPU admission and the display and confinement spike.
+- **Existing worlds.** Later, each by its own change, behind `perceptual-sources`' declared egress.
 - **Before any body joins an entity.** An independent second review of every PR, the welfare net on, a supervised validation boot on a branch, and the operator gate (`KAINE_EMBODIMENT_OPERATOR_APPROVED=1`) kept.

@@ -75,7 +75,7 @@ The channel names carry no meaning to the entity. `pan.position` is a label for 
   - One `SimWorld` (`kaine/sim/world.py`) holds `MjModel` and `MjData`, built from the body's MJCF and a room scene with a few movable objects.
   - It is shared in process with the `mujoco` perceptual source, which renders its camera.
 - **Actuators.**
-  - Position servos (`<position>` with `kp`, `kv`, `forcerange`, `ctrlrange`), with gains taken from a real servo. B2 uses the Menagerie SO-101's Feetech STS3215 parameters (kp 998.22, kv 2.731, forcerange ±2.94, timestep 0.005).
+  - Position servos (`<position>` with `kp`, `kv`, `forcerange`, `ctrlrange`), with gains taken from a real servo. The JetHexa's legs use the HX-35H's force limit and speed (D4), provisional until the real servos are identified. For comparison, the Menagerie SO-101 models its Feetech STS3215 servos with kp 998.22, kv 2.731, forcerange ±2.94 and timestep 0.005.
   - First-order actuator lag through `dyntype="filter"`, a native MuJoCo actuator dynamics type.
   - Actuator command `delay`, native for `general` actuators via `nsample` and `delay`.
   - The research pass read all of these in the XML reference, and the lead checked the dynamics and gain enums in the installed 3.16.0.
@@ -103,18 +103,95 @@ The channel names carry no meaning to the entity. `pan.position` is a label for 
   - The adapter acts only while its paired source is selected. This replaces the bare `virtual` locus check for bodies that have a source (`module.py:256`, `284`).
   - While its source is not selected, the world holds, as `perceptual-sources` D5 states.
 
-### D4. The bodies
+### D4. The default body: the JetHexa, in simulation first
 
-| Stage | Body | Model and licence | Real counterpart (for later) |
-|---|---|---|---|
-| B1 | pan-tilt camera head: 2 hinge joints, 2 position servos, a camera on the tilt link | custom MJCF from Menagerie `dynamixel_2r` (MIT, Duclusaud and Passault) | two hobby servos on a bracket with a USB camera |
-| B2 | 5-DoF arm with gripper and wrist camera | Menagerie `robotstudio_so101` (Apache-2.0), vendored with its LICENSE | the SO-101 open-hardware arm, with a LeRobot driver |
-| B3 | B2 on a differential-drive base with `<velocity>` wheel actuators | custom MJCF, modelled on LeKiwi | a LeKiwi-style base |
+The CTO will build a Hiwonder JetHexa (2027 edition). It is the default simulated body, and a real robot that later swaps only the adapter. The facts below come from the product data (`https://www.hiwonder.com/products/jethexa-2027.js`, re-checked by the lead) and from Hiwonder's public source (`github.com/Hiwonder/JetHexa`, branch `jetson_nano`, the older edition).
 
-- No Menagerie model is a pan-tilt head, so B1 is a short custom file.
-- Stretch 3 (Apache-2.0) has head, arm and base in one model, but its real counterpart is a commercial robot. It is kept as an alternative.
-- Tidybot's base uses position joints with kp = 1e6, which is not physical, so it is not used.
-- Every model's licence is fetched and kept beside it. No Meta-owned model or asset is used.
+| Item | Fact | Status |
+|---|---|---|
+| Body | six legs, three joints each (coxa, femur, tibia): 18 leg joints, plus a pan-tilt head carrying the depth camera | product data; joint names from the public source |
+| Leg servos | HX-35H serial bus servos with position, voltage and temperature feedback | product data |
+| HX-35H figures | about 25 kg·cm rated and 35 kg·cm stall at 11.1 V (about 2.45 and 3.43 N·m), about 0.18 s per 60°, 240° range | reseller and database pages: UNVERIFIED against a Hiwonder datasheet |
+| Head servos | PWM servos in the older edition's configuration | UNVERIFIED for 2027 |
+| Bus | header `0x55 0x55`, commands such as move-with-time and position read, 115200 baud, half duplex; position in 0-1000 ticks over 240° | older edition's SDK; UNVERIFIED for 2027 |
+| Compute | Jetson Orin Nano Super, Orin NX Super, Jetson Nano, or Raspberry Pi 5, by kit | product data |
+| Software | Ubuntu 22.04.5 and ROS 2 Humble, with an inverse-kinematics gait, posture control, MoveIt2 and Gazebo | product data; the 2027 ROS 2 source is not public (UNVERIFIED) |
+| Sensors | Aurora930 Pro depth camera; COIN-D6 or RPLIDAR C1 lidar; IMU (model unnamed); WonderEcho Pro voice module | product data |
+| Size and mass | 430 × 400 × 226 mm, 2.49-2.71 kg by kit | product data |
+| Power | 11.1 V 3500 mAh, about 60 minutes | product data |
+
+The model has to be our own:
+
+- Hiwonder's repository has no licence. Its packages say `<license>TODO</license>`, and its README says only "open-source and available for educational and research purposes". So nothing from it is vendored, and it may be read privately for the joint layout only.
+- Its URDF describes the older edition, and gives every link a placeholder mass of 0.00001 with unit inertia, so it carries no physics.
+- No licensed JetHexa MJCF exists (GitHub search), and Menagerie has no hexapod.
+- So KAINE writes its own MJCF.
+
+How the MJCF is built:
+
+1. Provisional geometry, from the published overall size and mass. It is marked provisional in its model card.
+2. Measured geometry once the robot is built: link lengths, joint axes and offsets, and the mass of each part on a scale.
+3. Actuators:
+   - position servos with the HX-35H's force limit and speed;
+   - ±120° ranges;
+   - joint `damping`, `armature` and `frictionloss`;
+   - sphere feet with soft contact.
+
+   Menagerie's practice for legged robots is followed: primitive feet, defaults in classes, `impratio` raised (Menagerie README and its Go2 notes, read).
+4. Sensors as on the real robot:
+   - the head camera as an RGB render, which goes to the vision source;
+   - joint positions at the bus rate;
+   - an IMU (accelerometer and gyro) on the body.
+
+   Depth and lidar are declared but not wired. They are new senses, needing their own processors, design and second review. Temperature and voltage are declared absent in simulation.
+5. System identification on the real robot:
+   - a commanded step per servo, read back at the bus rate, fitted for gain, lag and delay;
+   - slide tests for foot friction.
+
+   The fitted values replace the provisional ones, and the model card records which values are identified. Menagerie's top grade is a model with "proper system identification".
+
+If Hiwonder grants written permission for its 2027 description package:
+
+- It is converted with MuJoCo's own URDF loader, with a `<mujoco><compiler discardvisual="false" fusestatic="true" balanceinertia="true" strippath="..."/></mujoco>` block, then saved as MJCF and edited (MuJoCo modelling guide, "URDF extensions", read).
+- The edits are the hand-added items of step 3, with the real masses and inertias. `kscalelabs/urdf2mjcf` (MIT) is an alternative converter.
+- The pre-tuning checks in the guide are run: intersecting geoms at t = 0, convex hulls, inertia errors, unit mismatches, and targets past limits.
+
+Matching the real control path:
+
+- The body descriptor mirrors the real servo interface:
+  - joints with a `position` command (a target plus a move time);
+  - `position` state;
+  - temperature and voltage states (absent in simulation).
+- The control rate matches the bus:
+  - A move command is about 10 bytes and a position read about 14 bytes round trip. At 115200 baud, with 10 bits per byte, a full 18-joint command is about 16 ms and a full read about 22 ms. That is the lead's arithmetic.
+  - So the full-body loop is about 20 Hz, matching the older edition's 20 Hz joint-state publisher.
+  - The simulated loop runs at that rate, with the measured read delay, so a policy learned in simulation meets the same timing on the robot.
+- The real adapter (later) takes one of two routes, decided on the robot:
+  - a ROS 2 bridge to the robot's own Humble stack, if its 2027 topics expose per-joint commands and joint state;
+  - otherwise a thin on-robot bridge, written for KAINE from the bus protocol, that exposes the descriptor's interfaces over a declared tailnet endpoint (`perceptual-sources` D9).
+- The vendor's gait controller (`cmd_vel` in the older edition's controller) is not an entity channel. Walking is learned from joint channels. Exposing a gait generator would hard-wire locomotion.
+  - Central pattern generators are innate in animals. Giving the entity one would be an innate element needing cited neuroscience at the code site and its own decision, and it is not part of this change.
+  - The vendor gait stays an operator tool for moving the real robot.
+- KAINE runs off the robot at first, on the desktop.
+  - The robot's image is Ubuntu 22.04 with Humble, which normally implies JetPack 6. That is an inference, unverified.
+  - KAINE's own Orin Nano Super notes are JetPack 7.2.1 and CUDA 13.2.
+  - Running KAINE on the robot's Jetson would need its own image. That is a later decision, not a dependency.
+
+The curriculum on the JetHexa, as body-declared stages (Bernstein's freeze-then-free; frozen joints are held at their standing pose by their servos):
+
+| Stage | Free channels | Why this order |
+|---|---|---|
+| J1 | head pan | the smallest lawful contingency: turning the head shifts the image predictably (O'Regan and Noë 2001). It is `embodiment-motor-contingency`'s pan-tilt step, on the JetHexa's own head |
+| J2 | head pan and tilt | the full gaze |
+| J3 | one leg's three joints at a time, the other five legs standing | a hexapod on five legs is statically stable, so the learner can explore a leg without falling |
+| J4 | all 18 leg joints | locomotion, if it emerges, emerges here |
+
+Each stage is freed only on demonstrated competence: the curriculum's rule (`control_surface.py:197-283`).
+
+- The pan-tilt head stays the first motor-learning step because it is the smallest body with lawful sensorimotor contingencies, which was `embodiment-motor-contingency`'s reason.
+- It is the JetHexa's own head, not a separate body, so nothing is learned for a body that will never exist, and the step transfers to the real robot.
+- The custom pan-tilt model of the earlier draft is dropped.
+- The SO-101 arm (Apache-2.0) and a wheeled base remain documented alternatives, not scheduled.
 
 ### D5. Latency is measured, not assumed
 
@@ -128,90 +205,111 @@ The channel names carry no meaning to the entity. `pan.position` is a label for 
 Order:
 
 1. `embodiment-held-status` merges. A reference body is a boot refusal, and `embodiment_built()` exists.
-2. **B1 here.** `SimWorld`, the adapter, the pan-tilt MJCF, the `mujoco` perceptual source, randomisation and latency.
+2. **J0 here.**
+   - The JetHexa MJCF (provisional geometry), `SimWorld`, the adapter, the `mujoco` perceptual source on the head camera, randomisation, latency, and the bus-rate loop.
    - After this step there is a body and a camera, and nothing moves them: the policy is quiescent.
    - `embodiment_built()` stays false and the module stays held. Nothing pretends.
-3. **`embodiment-motor-contingency` 2.1-2.3, against the simulated head:**
+3. **`embodiment-motor-contingency` 2.1-2.3, against the simulated JetHexa:**
    - the driving loop, gated by inhibition, at the body's control rate;
    - the learner, exploring by motor learning progress (Oudeyer, Kaplan and Hafner 2007);
-   - the body-declared stages: pan, then pan and tilt;
+   - stages J1 and J2;
    - the motor prediction error as a precision-scaled report.
 
    `embodiment_built()` turns true when the loop is registered with a non-reference body.
-4. **B2, then B3,** each joined when the previous body's curriculum shows competence, and each by its own PR.
+4. **J3, then J4,** each when the previous stage shows competence.
+5. **The measured model.** When the CTO has built the robot: measurement and system identification replace the provisional values, and a real adapter (D4) swaps in behind the same descriptor.
 
 Amendments to `embodiment-motor-contingency` (tasks to apply in that change, listed here):
 
-- Its start condition ("a pan-tilt camera is attached", gated on the study's hardware stage) is replaced by "the simulated pan-tilt body of `virtual-world-body` B1". This follows the CTO's 2026-10-31 decision that pilots and the study's stages no longer gate the build, and the 2026-11-01 direction that MuJoCo is the development platform.
-- Its task 2.4 (a pan-tilt adapter) becomes the real-hardware adapter that later swaps in behind the same descriptor.
+- Its start condition ("a pan-tilt camera is attached", gated on the study's hardware stage) is replaced by "the simulated JetHexa of `virtual-world-body`, stage J1". This follows the CTO's 2026-10-31 decision that the study's stages no longer gate the build, and the 2026-11-01 direction that MuJoCo is the development platform and the JetHexa the first body.
+- Its task 2.4 (a pan-tilt adapter) becomes the real JetHexa adapter.
 
 That change's recommendation 1 (continuous control below the workspace, with the workspace setting what the body attempts through act intents) is kept unchanged.
 
-### D7. Games through a Moonlight-protocol client (held)
+### D7. Games through a Moonlight-protocol client
 
-The CTO's Steam library is played through a controller. One host cannot run a game and the entity together without contending for the GPUs, so games wait for the CTO's Steam Deck on the tailnet.
+The CTO's Steam library is played through a controller. The CTO decided on 2026-11-01 not to wait for the Steam Deck. The game host is this desktop, one entity at a time under the GPU arbitration rule below, or another of the CTO's machines on the tailnet.
 
 - **Host.**
-  - Sunshine (GPL-3.0; installed here as Flatpak `dev.lizardbyte.app.Sunshine` 2026.914.233613) runs on the game host: the Deck, or this desktop.
-  - Its ports (from its source: HTTPS 47984, HTTP 47989, video 47998, control 47999, audio 48000, RTSP 48010, web UI 47990) are bound or firewalled to the tailnet interface.
+  - Sunshine (GPL-3.0; installed here as Flatpak `dev.lizardbyte.app.Sunshine` 2026.914.233613) runs on the game host.
+  - Its ports (from its source: HTTPS 47984, HTTP 47989, video 47998, control 47999, audio 48000, RTSP 48010, web UI 47990) are reachable only on the tailnet.
   - `lan_encryption_mode = 2` and `wan_encryption_mode = 2` make encryption mandatory.
   - Pairing is by PIN, once.
-  - Sunshine creates the virtual gamepad on the game host through its own uinput. On the Deck that pad exists on the Deck's seat, not the operator's desktop.
+  - Sunshine creates the virtual gamepad on the game host through its own uinput.
+- **Tailnet rules.** All traffic goes through Tailscale. The CTO accepts its hosted coordination.
+  - **Tailnet Lock** must be on. With it, "all new node keys must be signed by an existing Tailnet Lock key", and peers verify a node's signature before connecting (Tailscale KB 1226, read).
+    - The launcher runs `tailscale lock status` and refuses unless the lock is enabled and this node and the game host are signed.
+    - The exact output format is not documented on that page, so the check parses the signing-key list and the node's own key. It is tested against a captured output.
+  - **Tailnet ACLs.** They are default-deny once defined (KB 1018, read). The policy grants the KAINE node access to the game host's Sunshine ports, and nothing else of KAINE's is reachable from the tailnet, except ports the operator lists:
+    - the dashboard;
+    - the remote bridge, if used.
+
+    A template policy goes in the docs (`"acls": [{"action": "accept", "src": ["tag:kaine"], "dst": ["tag:game-host:47984,47989,47990,47998-48000,48010"]}]`). Its exact port syntax is to be checked against the policy-file reference before use.
+  - The node cannot read the ACL policy itself. So the launcher checks from the client side that the host's Sunshine ports answer, and the boot preflight checks that KAINE's own listeners bind only to loopback, the container network or the tailnet interface.
+  - A direct path is preferred, and a relayed path is recorded. Relayed traffic is still end-to-end WireGuard; the CTO accepted hosted Tailscale. A relayed path adds latency, which the latency bound catches.
+- **GPU arbitration on this host.** GPU 0 drives the desktop and hosts the language organ, and the sleep trainer uses it. GPU 1 hosts the vision encoder and the simulation renderer.
+  - One entity at a time.
+  - **The game runs on GPU 0.** Admission requires the card's free memory to cover the game's declared need, plus the organ's measured awake peak, plus a margin of 1 GiB, all read through NVML.
+  - **The entity's mind has priority.** The session ends, with a named reason, when any of these happens:
+    - free memory on either card falls below the margin;
+    - the cycle's latency or the vision report rate leaves its configured band for 30 s;
+    - the organ fails to load.
+  - **Sleep ends the session first.** The source is held for sleep anyway, and the sleep-time trainer needs GPU 0 (`trainer-shares-the-gpu`).
+  - **The game's own load is capped** through its settings and Sunshine's stream settings: a frame-rate cap of 30 and the capture resolution of the vision module.
+  - Interoception perceives the substrate's load as it perceives any load. That is the entity's own body signal, not a control path.
+- **The game's display on this host.**
+  - Sunshine captures a display, not a window. On this desktop that would be the operator's whole session.
+  - So same-host play runs the game on a separate display that Sunshine captures: a gamescope session (headless backend) or a second X server. Which one works with Sunshine here is a spike (task 4.0).
+  - The uinput gamepad Sunshine creates is visible to every program on the seat. Same-host play therefore also confines the game to a per-game container that sees only that device, the pattern of Games-on-Whales Wolf (MIT).
+  - Until the spike passes, same-host play is refused and the host is another machine. That is the simpler first route, and the CTO offered it.
 - **Client helper.** `tools/kaine-moonlight-helper/`, a separate program written for KAINE and licensed GPL-3.0, because it links moonlight-common-c (GPL-3.0, checked through the GitHub licence API).
-  - moonlight-common-c hands its client compressed video units (`submitDecodeUnit`) and Opus audio (`decodeAndPlaySample`); both checked in `Limelight.h`. So the helper decodes with FFmpeg, whose licence is LGPL-2.1+ or GPL depending on the build.
-  - It passes raw frames and PCM to the cycle over a `socketpair` and reads back gamepad state (axes and buttons) and a stop command.
-  - It never uses moonlight-common-c's recorder callbacks, and writes nothing to disk.
+  - moonlight-common-c hands its client compressed video units (`submitDecodeUnit`) and Opus audio (`decodeAndPlaySample`); both checked in `Limelight.h`. So the helper decodes with FFmpeg (LGPL-2.1+ or GPL, depending on the build).
+  - It passes raw frames and PCM to the cycle over a `socketpair`, and reads back gamepad state and a stop command.
+  - It never uses the recorder callbacks, and writes nothing to disk.
+  - Its endpoints come from the declared egress (`perceptual-sources` D9): the host as `tailnet:tag:game-host` on the Sunshine ports, with outbound classes `protocol_control` and `gamepad_state`.
 - **Licence boundary.**
   - The GPL FAQ (read): "pipes, sockets and command-line arguments are communication mechanisms normally used between two separate programs", unless "the semantics of the communication are intimate enough, exchanging complex internal data structures" (`#MereAggregation`).
-  - The message set is frames, PCM, a gamepad state struct and a stop command: arm's length.
+  - The message set is frames, PCM, a gamepad state struct and a stop command.
   - KAINE's code stays under the CAL, and the helper is distributed separately with its source.
-  - Linking moonlight-common-c into the cycle is refused, because that would make one combined work.
-  - Starfire (Apache-2.0, Rust, Windows and macOS only, unverified provenance) and a clean-room client from the MIT-licensed Wolf protocol documentation are noted as alternatives. Neither is recommended now.
-- **Network.**
-  - The tailnet only. Before each session the helper's launcher checks `tailscale status` for the host peer and refuses unless the path is `direct`.
-  - A DERP relay is Tailscale-operated infrastructure, and a relayed session is a cloud hop, even though WireGuard keeps it end-to-end encrypted.
-  - A self-hosted DERP with `OmitDefaultRegions`, or Headscale (BSD-3-Clause), is the operator's option for a fully self-run tailnet.
-- **Latency.** D5's measurement runs end to end: gamepad state change to a changed frame. The session is refused above `max_latency_ms`.
+  - Linking moonlight-common-c into the cycle is refused.
+- **Latency.** D5's measurement runs end to end: from a gamepad state change to a changed frame. The session is refused above `max_latency_ms`.
 - **The body.**
-  - A `game_pad` body declares a virtual gamepad's two sticks (4 axes), 2 triggers and its buttons as channels.
-  - The motor-contingency learner learns what they do in a given game, as it learns a joint. Nothing maps `drive` to the left stick.
-  - Each title is its own body context: game control mappings differ, which is the interference case of D1's context argument.
-  - Rumble returned from the game is a candidate touch-like feed. It is declared by the body and needs its own decision before it is perceived.
+  - A `game_pad` body declares the gamepad's sticks, triggers and buttons as channels.
+  - The motor-contingency learner learns what they do. Nothing maps a canonical channel to a control.
+  - Each title is its own body context.
+  - Rumble is a declared feed kind that needs its own decision before it is perceived.
 - **Titles.**
   - Offline, single-player titles from an operator-curated list, by Steam app id.
-  - The entity must not play against or alongside people online: other players' privacy, the no-outbound rule, and the game's and platform's rules on automated play. Valve's subscriber agreement on automation is not yet checked, and is task 4.3.
-  - A title using kernel anti-cheat is excluded.
-- **Single-host alternative, not recommended now.**
-  - Capture the game through PipeWire screencast, and give it a uinput gamepad confined to a per-game container that sees only that device, the pattern of Games-on-Whales Wolf (MIT).
-  - A uinput pad on the operator's seat is visible to every program there, and the GPU contention remains.
-- **Held.** Refused at boot until all of these hold:
-  - the Deck is on the tailnet;
-  - the direct-path, encryption and latency checks pass;
-  - the helper and its dependencies are installed with the CTO's OK;
-  - an independent second review has passed.
+  - No kernel anti-cheat.
+  - Valve's subscriber agreement and each title's terms on automated play are read before the first session (task 4.3).
+  - Online play with or against people is a later decision. It is allowed in principle under the CTO's 2026-11-01 ruling on online sources, but other players' privacy and each game's rules on automated play must be checked per title.
+- **Sequencing.**
+  - The helper, the launcher checks and the host setup can be built in parallel with J0. The game source can be perceived as soon as they pass.
+  - The game body acts only once the driving loop and learner exist (D6 step 3), because the gamepad's meaning is learned.
+  - So games come after J1-J2, in parallel with J3. That is earlier than the earlier draft, which waited for the Deck.
 
 ### D8. Existing worlds: OpenSimulator, the Hypergrid, Second Life (later)
 
-These are worlds that already exist, which is their benefit. They come later, each by its own change, behind this seam.
+These are worlds that already exist, which is their benefit. The CTO ruled on 2026-11-01 that online worlds, online media and outbound actions to them are allowed: the no-cloud rule covers KAINE's modules, not where streams come from or where the entity's outputs go. Each world adapter declares its egress (`perceptual-sources` D9). They come later, each by its own change, behind this seam.
 
-- **Start local.** An OpenSimulator region on the operator's own machine (BSD-3-Clause, maintained): no terms-of-service exposure and no cloud.
+- **Start local.** An OpenSimulator region on the operator's own machine (BSD-3-Clause, maintained), to test the adapter and the safety layer with no account at stake.
 - **Client.**
   - A headless protocol client gives chat, objects, avatars, movement and speech, but no vision:
     - LibreMetaverse (BSD-3-Clause, maintained, C#), as a .NET sidecar;
     - Hippolyzer (LGPL-3.0, Python 3.12).
-  - A viewer gives vision: Firestorm (LGPL-2.1) with its LEAP plugin API, which is present in current Firestorm and Linden viewer sources. Frames would have to come from the viewer's own render through a capture patch, as the old fork had, or from a confined display.
+  - A viewer gives vision: Firestorm (LGPL-2.1) with its LEAP plugin API, which is present in current Firestorm and Linden viewer sources. Frames would come from the viewer's render through a capture patch, or from a confined display.
   - Recommendation: the headless client first, the viewer when the entity is to see there.
-- **Hypergrid.** Destinations are other operators' grids. Each is a cloud dependency and needs its operator's permission. The CTO decides per grid.
-- **Second Life**, last:
+- **Egress.** The world's login and region hosts, with outbound classes `protocol_control`, `avatar_action` and `own_speech_text`. The entity's own speech may go into a world's chat, because that is its act. Nothing else of the entity goes there.
+- **Hypergrid.** Destinations are other operators' grids. Each grid's rules on bots and NPCs are read before the entity visits; OSgrid's and Kitely's were not readable in this research.
+- **Second Life**, still with its rules:
   - A separate account, marked on the Scripted Agent Status page: "If you own a Second Life account primarily operating as a Scripted Agent ... you must specify this" (Linden Lab scripted agent policy, wiki copy).
   - No traffic gaming, at most 5,000 messages a day, and no circumvention of residents' privacy controls.
-  - The third-party viewer policy followed: an honest viewer identifier, and no content export.
+  - The third-party viewer policy followed: an honest viewer identifier, and no content export. Its page could not be fetched, so it is re-read before that change.
   - Regions that deny scripted agents are respected.
-  - KAINE never records perception. Beyond that, the entity must not repeat residents' chat or personal details: "You must get consent to use a scripted object to remotely monitor or log a conversation" (Linden Lab residents' privacy rights).
-  - The third-party viewer policy page itself could not be fetched, so it must be re-read before that change.
+  - Other residents' chat and details are never recorded and never repeated: "You must get consent to use a scripted object to remotely monitor or log a conversation"; "You may not disclose personal information about another Resident" (Linden Lab residents' privacy rights).
 - **Salvage from the old OpenSimulator body**, recoverable with `git show 932e4f45^:<path>` and `d87f61c8^:<path>`:
   - the length-prefixed MessagePack framing with an 8 MiB cap (`kaine/modules/mundus/bridge.py`);
-  - the feed-kind map (proprio, scene, entity, chat, frame, notice, action result);
+  - the feed-kind map;
   - the verb table with teleport and touch unexposed by default;
   - the inbound-world-safety spec (`openspec/changes/archive/2026-07-09-opensim-connector/specs/inbound-world-safety/spec.md`): in-world text is data, never commands; offers are auto-declined; dialogs go to the operator;
   - the module tests with a fake adapter.
@@ -229,21 +327,36 @@ These are worlds that already exist, which is their benefit. They come later, ea
 - **Forces and stuck bodies.**
   - Forces are bounded by `forcerange`, so nothing the entity does can make the simulation unstable.
   - A body that is stuck (fallen, wedged) can be reset to its start pose by the operator. The reset is recorded and is the operator's act, not the entity's.
+  - A hexapod can tip over once its legs are free (J4). Tipping is physics: the IMU perceives it, nothing signals it as harm, and the operator resets the body.
 - **The inhibited entity stays still.** The control surface's inhibition input already holds the body (`control_surface.py:387-399`).
 - **The developmental phase holds the module dormant**, as today (`DEVELOPMENT_DORMANT_EFFECTORS`).
 
 ## Risks
 
-- **[A body that cannot be moved feels like paralysis].** B1 is never given to an entity without the driving loop and learner. That is D6's order, and `embodiment_built()` enforces it.
+- **[A body that cannot be moved feels like paralysis].** The simulated JetHexa is never given to an entity without the driving loop and learner. That is D6's order, and `embodiment_built()` enforces it.
 - **[Overfitting to one simulated world].** Domain randomisation per run, sensor noise, and latency.
-- **[GPU load].** The renderer sits on the vision card, limited in `perceptual-sources` D5. Physics runs on the CPU. Games run on another host.
+- **[GPU load].**
+  - The renderer sits on the vision card, limited in `perceptual-sources` D5.
+  - Physics runs on the CPU.
+  - Same-host games use D7's admission and priority rule, so the mind wins every contest for the cards.
 - **[GPL contamination].** The helper is a separate program with a minimal message set. Linking moonlight-common-c into the cycle is refused.
-- **[Online play, other people].** The curated offline list. Second Life's privacy rules plus KAINE's own.
-- **[Cloud].** Games use the tailnet with a direct path required. Existing worlds beyond a local region are a CTO decision per grid.
+- **[Online play, other people].**
+  - Offline titles first.
+  - Per-title checks before any online play.
+  - Second Life's privacy rules plus KAINE's own: never record, never repeat.
+- **[Egress].**
+  - Online sources and worlds are allowed (CTO, 2026-11-01).
+  - Every adapter's endpoints and outbound classes are declared and enforced (`perceptual-sources` D9).
+  - Module internals stay no-cloud.
+  - Games use the tailnet, with Tailnet Lock and ACLs.
+- **[An unlicensed vendor model].** Nothing from Hiwonder's unlicensed repository is vendored. The MJCF is KAINE's own, built from published and measured values.
 
 ## Estimate (LLM-agent terms)
 
-- **B1.** `SimWorld`, adapter, descriptor, per-body channels, randomisation, noise, latency, pan-tilt MJCF and the `mujoco` source: about 1,200 lines plus 1,400 of tests. Two agent-days.
-- **B2 and B3.** About one agent-day each, after B1's learner works.
-- **Games.** The helper (C, about 1,500 lines with pairing and decode) plus the body and launcher checks (about 600 plus 700 of tests). Three to four agent-days, plus hands-on testing with the Deck.
+- **J0.** `SimWorld`, adapter, descriptor, per-body channels, randomisation, noise, latency, the bus-rate loop, the provisional JetHexa MJCF and the `mujoco` source: about 1,500 lines plus 1,600 of tests. Two to three agent-days.
+- **Measured model and identification.** About one agent-day once the robot is built, plus hands-on measurement.
+- **Real JetHexa adapter.** One to two agent-days, depending on whether the robot's ROS 2 stack exposes joints.
+- **Games.**
+  - The helper (C, about 1,500 lines with pairing and decode) plus the body, the launcher checks, Tailnet Lock, and GPU arbitration: about 800 plus 900 of tests.
+  - Three to four agent-days, plus the same-host display and confinement spike, plus hands-on testing with a game host.
 - **Existing worlds.** A headless OpenSimulator adapter with the salvaged safety layer is about two agent-days. Vision through a viewer is more.
