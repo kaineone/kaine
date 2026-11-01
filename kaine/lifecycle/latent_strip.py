@@ -20,6 +20,13 @@ never a value.
 The strip is copy on write: a state with no latent field is the very same
 object afterwards, so learned weights (lists of numbers under keys such as
 ``layers``) come back exactly as they went in.
+
+One narrow exemption: the episodic memory module's state keeps the
+``identity_bound`` subkey of any ``latent_derived`` mapping in it (the entity's
+own encrypted memory of a content code, ``kaine.modules.episodic_memory.
+identity_bound``), so a preservation carries it with the store. Every other
+key of that mapping, and every other latent field, is stripped as usual; no
+other module has the exemption.
 """
 
 from __future__ import annotations
@@ -28,7 +35,7 @@ import logging
 from collections.abc import Mapping
 from typing import Any
 
-from kaine.privacy_filter import without_latent_fields
+from kaine.privacy_filter import LATENT_DERIVED_KEY, LATENT_FIELDS, without_latent_fields
 
 log = logging.getLogger(__name__)
 
@@ -36,6 +43,38 @@ log = logging.getLogger(__name__)
 LATENT_STRIPPED_KEY = "latent_stripped"
 # Capture metadata key naming the modules whose state could not be scanned.
 LATENT_SCAN_FAILED_KEY = "latent_scan_failed"
+#: The module whose state keeps identity-bound content, and the one subkey kept.
+IDENTITY_BOUND_MODULE = "episodic_memory"
+IDENTITY_BOUND_KEY = "identity_bound"
+
+
+def _without_latent_keeping_identity_bound(value: Any) -> Any:
+    """``without_latent_fields``, except that a ``latent_derived`` mapping keeps
+    its ``identity_bound`` subkey (copy on write)."""
+    if isinstance(value, Mapping):
+        changed = False
+        out: dict[Any, Any] = {}
+        for k, v in value.items():
+            if k == LATENT_DERIVED_KEY and isinstance(v, Mapping) and IDENTITY_BOUND_KEY in v:
+                if set(v) == {IDENTITY_BOUND_KEY}:
+                    out[k] = v
+                else:
+                    out[k] = {IDENTITY_BOUND_KEY: v[IDENTITY_BOUND_KEY]}
+                    changed = True
+                continue
+            if k in LATENT_FIELDS:
+                changed = True
+                continue
+            nv = _without_latent_keeping_identity_bound(v)
+            changed = changed or nv is not v
+            out[k] = nv
+        return out if changed else value
+    if isinstance(value, (list, tuple)):
+        items = [_without_latent_keeping_identity_bound(item) for item in value]
+        if all(a is b for a, b in zip(items, value)):
+            return value
+        return items if isinstance(value, list) else tuple(items)
+    return value
 
 
 def strip_module_states(
@@ -49,7 +88,10 @@ def strip_module_states(
     unscanned: list[str] = []
     for name, state in modules.items():
         try:
-            clean = without_latent_fields(state)
+            if name == IDENTITY_BOUND_MODULE:
+                clean = _without_latent_keeping_identity_bound(state)
+            else:
+                clean = without_latent_fields(state)
         except Exception as exc:
             # Never refuse the capture; keep the state and say so.
             log.error(
