@@ -21,9 +21,9 @@ All four call the registry helpers, so a stream added in one consumer and not in
 
 The registry treats each canonical module as one `<module>.out` stream. The lists differ as follows.
 
-- `curated_module_streams()` and `raw_archive_module_streams()` both add `action_selection_feedback.out` and `positive_control.out`.
+- `curated_module_streams()` and `raw_archive_module_streams()` both add `action_selection_feedback.out`, `positive_control.out` and `sleep_readout.out`.
 - The curated list leaves out `vocal.out` (raw audio) and `language.out` (the language organ's text) so that the research log stays content-free. The raw archive keeps every produced stream.
-- `diagnostics_streams()` leaves out the low-signal operational streams `action_selection.out`, `embodiment.out`, `perceptual_locus.out`, `welfare.out`, `preservation.out` and `individuation.out`, and appends `workspace.broadcast`. It includes `cycle.out`, which carries the cycle's `cycle.tick`, `cycle.rates` and `cycle.time_scale` events.
+- `diagnostics_streams()` leaves out the low-signal operational streams `action_selection.out`, `embodiment.out`, `perceptual_locus.out`, `welfare.out`, `preservation.out` and `individuation.out`, and appends `workspace.broadcast` and `sleep_readout.out`. It includes `cycle.out`, which carries the cycle's `cycle.tick`, `cycle.rates` and `cycle.time_scale` events.
 
 The language module (`kaine/modules/language/module.py`) publishes on `language.external` and `language.internal` and mirrors every utterance to `language.out`, which the raw archive and the dashboard diagnostics tail follow.
 
