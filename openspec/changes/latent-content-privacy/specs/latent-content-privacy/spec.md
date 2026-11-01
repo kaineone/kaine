@@ -123,14 +123,21 @@ When any declared companion producer is enabled, whatever its field set, the boo
 - **THEN** the boot refuses and names the stream and 100000
 
 ### Requirement: Module states hold no latent value other than learned parameters
-A module's serialized state SHALL hold no key in `LATENT_FIELDS` and no per-dimension statistic of latents. A learned parameter, updated by a learning rule and read back by the module on restore, MAY be held.
+A module's serialized state SHALL hold no key in `LATENT_FIELDS` and no per-dimension statistic of latents, except the episodic identity-bound field of the next requirement. A learned parameter, updated by a learning rule and read back by the module on restore, MAY be held.
 
 #### Scenario: Forward-model weights are kept
 - **WHEN** the vision module serializes its forward model
 - **THEN** the weights are in the snapshot and no `latent_stripped` entry is recorded
 
+### Requirement: The episodic identity-bound field is the only exception to the module-state rule
+In the episodic memory module's state, and in no other module's, exactly the fields `memory_state.short_term[i].payload.latent_derived.identity_bound` and `memory_state.persisted.<collection>[i].payload.latent_derived.identity_bound` MAY be kept by the module-state captures, rebuilt from their keys `code`, `code_id` and `generation` (episodic-memory spec). A malformed field, anything else inside it, and the same key at any other path SHALL be stripped and recorded.
+
+#### Scenario: A well-formed trace field
+- **WHEN** a preservation captures an episodic memory state whose short-term trace holds a well-formed identity-bound field
+- **THEN** the bundle keeps it and records no `latent_stripped` entry
+
 ### Requirement: Every module-state capture strips latent fields and never refuses a preservation for it
-One helper SHALL be applied to the module states of every capture: the fork snapshot (`ForkManager.snapshot`), the preservation capture and the rolling resume checkpoint. It SHALL remove any `LATENT_FIELDS` key found in a module state, record the module names under the capture's metadata key `latent_stripped`, log an error, and still save the capture. A module whose `serialize()` raises SHALL be recorded by the exception type and a message of at most 200 characters.
+One helper SHALL be applied to the module states of every capture: the fork snapshot (`ForkManager.snapshot`), the preservation capture, the rolling resume checkpoint, and the snapshots `ForkManager.fork` and `ForkManager.merge` write. It SHALL remove any `LATENT_FIELDS` key found in a module state, except the episodic identity-bound field of the previous requirement, record the module names under the capture's metadata key `latent_stripped`, log an error, and still save the capture.
 
 #### Scenario: A module serializes a tagged value
 - **WHEN** a module's `serialize()` returns a state holding `latent_derived`
@@ -143,6 +150,17 @@ One helper SHALL be applied to the module states of every capture: the fork snap
 #### Scenario: A preservation is never refused
 - **WHEN** a preservation captures a module state holding `latent_derived`
 - **THEN** the bundle is written without it and the preservation completes
+
+#### Scenario: A malformed identity-bound field in a preservation
+- **WHEN** an episodic memory state's trace holds `latent_derived.identity_bound` with a latent field nested inside it, and another `latent_derived.identity_bound` outside `memory_state`
+- **THEN** the bundle keeps only the trace's field rebuilt from `code`, `code_id` and `generation`, strips the other, and names `episodic_memory` under `latent_stripped`
+
+### Requirement: A failing module capture is recorded by type and a bounded message
+A module whose `serialize()` or preservation export raises SHALL be recorded, in the snapshot record, the preservation error and the log, by the exception type and a message of at most 200 characters. The bound limits size; it is not a privacy guarantee.
+
+#### Scenario: A failing preservation export
+- **WHEN** a module's preservation export raises with a 5000-character message
+- **THEN** the preservation error names the exception type and holds at most 200 characters of the message, and does not chain the original exception
 
 #### Scenario: A failing serialize
 - **WHEN** a module's `serialize()` raises an exception whose message is 5000 characters long
