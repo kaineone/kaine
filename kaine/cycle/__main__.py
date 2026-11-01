@@ -1911,6 +1911,19 @@ async def _phase_gates(ctx: BootContext) -> int | None:
     return None
 
 
+def _attach_volatile(bus: Any, kaine_config: dict[str, Any]) -> bool:
+    """Attach the never-persisted instance to the cycle's bus when one is
+    configured (``KAINE_REDIS_VOLATILE_URL``); True when attached. Raises
+    ``PrivacyConfigError`` on a malformed ``[privacy]`` table."""
+    from kaine.boot.companions import volatile_from_config
+
+    volatile = volatile_from_config(kaine_config, client_name=CYCLE_CLIENT_NAME)
+    if volatile is None:
+        return False
+    bus.attach_volatile(volatile)
+    return True
+
+
 async def _phase_bus(ctx: BootContext) -> int | None:
     """Open and audit the bus, and start the welfare producer before any module exists."""
 
@@ -1919,17 +1932,14 @@ async def _phase_bus(ctx: BootContext) -> int | None:
     await ctx.bus.audit()
     # The never-persisted instance for companion streams, when configured; the
     # boot refuses below when an enabled module needs it and it is missing.
-    from kaine.boot.companions import volatile_from_config
     from kaine.bus.volatile import PrivacyConfigError
 
     try:
-        volatile = volatile_from_config(ctx.kaine_config, client_name=CYCLE_CLIENT_NAME)
+        _attach_volatile(ctx.bus, ctx.kaine_config)
     except PrivacyConfigError as exc:
         sys.stderr.write(f"kaine.cycle: configuration error: {exc}\n")
         await ctx.bus.close()
         return COMPANION_REFUSED_EXIT
-    if volatile is not None:
-        ctx.bus.attach_volatile(volatile)
 
     # Preservation config is needed by the cycle safety-net and by the welfare
     # gray-zone producer, which runs whenever the welfare response is enabled,
@@ -2110,6 +2120,19 @@ async def _phase_registry(ctx: BootContext) -> int | None:
         return COMPANION_REFUSED_EXIT
     # Declared age bounds are enforced by a periodic exact trim as well as on
     # every write; nothing starts when no producer declares one.
+    # Companion content never outlives a run: streams an earlier run left (a
+    # crash, a killed process) are flushed before any module writes.
+    flush = getattr(ctx.bus, "flush_companion_streams", None)
+    if callable(flush):
+        try:
+            await flush()
+        except Exception as exc:
+            message = f"refusing to start: stale companion streams could not be flushed ({type(exc).__name__})"
+            log.error("%s", message)
+            sys.stderr.write(f"kaine.cycle: {message}\n")
+            await _stop_welfare_producer(ctx.welfare_producer)
+            await ctx.bus.close()
+            return COMPANION_REFUSED_EXIT
     start_sweeper = getattr(ctx.bus, "start_companion_sweeper", None)
     if callable(start_sweeper):
         start_sweeper()
