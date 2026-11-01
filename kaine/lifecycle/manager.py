@@ -11,7 +11,15 @@ import os
 import shutil
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Iterable, Protocol, runtime_checkable
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Iterable,
+    Mapping,
+    Protocol,
+    runtime_checkable,
+)
 
 if TYPE_CHECKING:
     from kaine.lifecycle.preservation import PreservationResult
@@ -40,6 +48,7 @@ from kaine.lifecycle.snapshot import (
     snapshot_dir,
 )
 from kaine.lifecycle.strategies import (
+    MODULE_WEIGHT_GROUPS,
     MergeStrategy,
     UnionMergeStrategy,
     default_strategies,
@@ -64,6 +73,82 @@ class UnmergedAdaptersError(RuntimeError):
 
 class WorldModelChoiceRequiredError(ValueError):
     """Both merge parents carry a world model and the caller did not name which continues."""
+
+
+class ModuleWeightsChoiceRequiredError(ValueError):
+    """The parents' learned weights differ for some modules and the caller did not
+    name, for each of them, which parent's weights continue."""
+
+    def __init__(self, modules: Iterable[str]) -> None:
+        self.modules: tuple[str, ...] = tuple(sorted(modules))
+        names = ", ".join(self.modules)
+        super().__init__(
+            f"the parents' learned weights differ for {names}; merge cannot "
+            "combine two sets of learned weights — pass module_weights_from='a' "
+            "or 'b', or a mapping naming 'a' or 'b' for each of these modules, "
+            "to choose which parent's weights continue"
+        )
+
+
+class ModuleMergeStrategyError(RuntimeError):
+    """The merge strategy for a module that carries learned weights failed.
+
+    Merge refuses instead of taking either parent's state in its place.
+    """
+
+    def __init__(self, module: str, cause: BaseException) -> None:
+        self.module = module
+        super().__init__(
+            f"the merge strategy for {module} failed "
+            f"({type(cause).__name__}: {cause}); {module} carries learned "
+            "weights, so merge refuses rather than take either parent's "
+            "state in its place, and no merged snapshot was written"
+        )
+
+
+def _normalise_weights_choice(
+    value: str | Mapping[str, str] | None,
+) -> str | dict[str, str] | None:
+    """Validate ``module_weights_from``: None, 'a', 'b', or {module: 'a'|'b'}."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        if value not in ("a", "b"):
+            raise ValueError("module_weights_from must be 'a', 'b', a mapping, or None")
+        return value
+    if not isinstance(value, Mapping):
+        raise ValueError("module_weights_from must be 'a', 'b', a mapping, or None")
+    out: dict[str, str] = {}
+    for raw_name, parent in value.items():
+        if not isinstance(raw_name, str):
+            raise ValueError(f"module_weights_from names a non-string module: {raw_name!r}")
+        name = legacy_aliases.map_module_key(raw_name)
+        if name not in MODULE_WEIGHT_GROUPS:
+            raise ValueError(
+                f"module_weights_from names {raw_name!r}, which carries no "
+                f"weight group (modules with one: {', '.join(sorted(MODULE_WEIGHT_GROUPS))})"
+            )
+        if parent not in ("a", "b"):
+            raise ValueError(
+                f"module_weights_from[{raw_name!r}] must be 'a' or 'b', got {parent!r}"
+            )
+        out[name] = parent
+    return out
+
+
+def _weight_group(state: Any, keys: tuple[str, ...]) -> dict[str, Any] | None:
+    """The group's keys present in ``state``, or None when it holds none of them."""
+    if not isinstance(state, dict):
+        return None
+    group = {k: state[k] for k in keys if k in state}
+    return group or None
+
+
+def _without_group(state: Any, keys: tuple[str, ...]) -> Any:
+    """A deep copy of ``state`` without the group's keys (None stays None)."""
+    if not isinstance(state, dict):
+        return copy.deepcopy(state)
+    return {k: copy.deepcopy(v) for k, v in state.items() if k not in keys}
 
 
 # `AdapterMerger` (Protocol) and `FakeAdapterMerger` live in the leaf module
@@ -359,9 +444,22 @@ class ForkManager:
         metadata: dict[str, Any] | None = None,
         allow_unmerged_adapters: bool = False,
         world_model_from: str | None = None,
+        module_weights_from: str | Mapping[str, str] | None = None,
     ) -> ForkSnapshot:
+        """Merge two snapshots into a new one; never modifies either parent.
+
+        Each module in ``MODULE_WEIGHT_GROUPS`` has its weight group taken whole
+        from one parent: the group is copied without a choice when it is equal
+        in both parents or held by one only; otherwise ``module_weights_from``
+        must name the parent ('a', 'b', or a mapping naming each such module),
+        or merge raises ``ModuleWeightsChoiceRequiredError``. The rest of the
+        module's state merges by its strategy, which never sees a weight key; a
+        strategy that fails for such a module raises
+        ``ModuleMergeStrategyError``. Nothing is written when merge raises.
+        """
         if world_model_from is not None and world_model_from not in ("a", "b"):
             raise ValueError("world_model_from must be 'a', 'b', or None")
+        weights_choice = _normalise_weights_choice(module_weights_from)
         snap_a = load_snapshot(self._root, snapshot_a_id)
         snap_b = load_snapshot(self._root, snapshot_b_id)
         a_identity = identity_of_snapshot(snap_a)
@@ -391,17 +489,69 @@ class ForkManager:
         if strategies:
             all_strategies.update(strategies)
 
-        merged_modules: dict[str, dict[str, Any]] = {}
         all_names = set(snap_a.modules) | set(snap_b.modules)
+
+        # Which parent each module's weight group comes from, decided before any
+        # strategy runs or anything is written.
+        weight_sources: dict[str, tuple[str, dict[str, Any]]] = {}
+        weight_record: dict[str, dict[str, str]] = {}
+        needs_choice: list[str] = []
+        for name in sorted(all_names):
+            keys = MODULE_WEIGHT_GROUPS.get(name)
+            if keys is None:
+                continue
+            group_a = _weight_group(snap_a.modules.get(name), keys)
+            group_b = _weight_group(snap_b.modules.get(name), keys)
+            if group_a is None and group_b is None:
+                continue
+            if group_b is None:
+                parent, reason = "a", "one-sided"
+            elif group_a is None:
+                parent, reason = "b", "one-sided"
+            elif group_a == group_b:
+                parent, reason = "a", "equal"
+            else:
+                chosen = (
+                    weights_choice.get(name)
+                    if isinstance(weights_choice, dict)
+                    else weights_choice
+                )
+                if chosen is None:
+                    needs_choice.append(name)
+                    continue
+                parent, reason = chosen, "chosen"
+            weight_sources[name] = (parent, group_a if parent == "a" else group_b)
+            weight_record[name] = {"from": parent, "reason": reason}
+        if needs_choice:
+            raise ModuleWeightsChoiceRequiredError(needs_choice)
+
+        merged_modules: dict[str, dict[str, Any]] = {}
         for name in sorted(all_names):
             strat = all_strategies.get(name, self._default_strategy)
             state_a = snap_a.modules.get(name)
             state_b = snap_b.modules.get(name)
+            keys = MODULE_WEIGHT_GROUPS.get(name)
+            if keys is None:
+                try:
+                    merged_modules[name] = strat.merge(state_a, state_b)
+                except Exception as exc:
+                    log.warning("merge strategy for %s failed: %s", name, exc)
+                    merged_modules[name] = state_a if state_a is not None else (state_b or {})
+                continue
+            # A weight-bearing module: the strategy merges the rest of its state
+            # and never sees a weight key; a failure refuses the whole merge.
             try:
-                merged_modules[name] = strat.merge(state_a, state_b)
+                rest = dict(
+                    strat.merge(_without_group(state_a, keys), _without_group(state_b, keys))
+                )
             except Exception as exc:
-                log.warning("merge strategy for %s failed: %s", name, exc)
-                merged_modules[name] = state_a if state_a is not None else (state_b or {})
+                raise ModuleMergeStrategyError(name, exc) from exc
+            for key in keys:
+                rest.pop(key, None)
+            source = weight_sources.get(name)
+            if source is not None:
+                rest.update(copy.deepcopy(source[1]))
+            merged_modules[name] = rest
 
         merged_adapters, adapter_meta = self._adapter_merger.merge(
             list(snap_a.adapters), list(snap_b.adapters)
@@ -455,6 +605,7 @@ class ForkManager:
             "merged_from": [snap_a.id, snap_b.id],
             **adapter_meta,
             **(metadata or {}),
+            "module_weights_from": weight_record,
         }
         if a_identity is not None:
             combined_meta["identity"] = a_identity.to_dict()

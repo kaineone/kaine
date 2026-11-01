@@ -425,4 +425,15 @@ class Sequence(BaseModule):
                 )
 
         if "pred_head" in state and self._pred_head is not None:
-            self._pred_head.load_state_dict(state["pred_head"])
+            # A head whose structure differs from the running one (two parents'
+            # rows concatenated by a merge, or another feature layout) is
+            # refused before any weight is copied; the head starts fresh and
+            # the rest of the restored state is kept.
+            try:
+                self._pred_head.load_state_dict(state["pred_head"])
+            except Exception as exc:
+                log.warning(
+                    "sequence: discarding prediction-head weights — %s; the head "
+                    "re-learns from scratch",
+                    exc,
+                )

@@ -1008,17 +1008,26 @@ class Vision(BaseModule):
             )
         if "forward_model" in state and self._forward_model is not None:
             fm_state = state["forward_model"]
-            # Dim-cascade guard (topos-temporal-video-encoder §3, task 4.2): a
-            # checkpoint sized to a different encoder latent_dim (e.g. an old
-            # 384-dim DINOv2 snapshot loaded under the 768-dim InternVideo-Next
-            # encoder) must NOT be forced into the running model. Discard it with
-            # a warning; the online forward model re-learns from scratch (it is an
-            # online adapter — safe) rather than raising a shape error.
-            if not self._forward_model.matches_state_shape(fm_state):
+            # Structure guard: a checkpoint sized to a different encoder
+            # latent_dim (e.g. an old 384-dim DINOv2 snapshot loaded under the
+            # 768-dim InternVideo-Next encoder, topos-temporal-video-encoder §3)
+            # or holding more layers than the network (two parents' layer lists
+            # concatenated by a merge) must NOT be forced into the running model,
+            # not even in part. Discard it with a warning; the online forward
+            # model re-learns from scratch rather than raising a shape error.
+            explain = getattr(self._forward_model, "state_shape_mismatch", None)
+            if callable(explain):
+                mismatch = explain(fm_state)
+            elif self._forward_model.matches_state_shape(fm_state):
+                mismatch = None
+            else:
+                mismatch = "its tensor shapes do not match the running model"
+            if mismatch is not None:
                 log.warning(
-                    "vision: discarding forward-model checkpoint — its tensor "
-                    "shapes do not match the running encoder latent_dim %d; the "
-                    "online forward model will re-learn from scratch",
+                    "vision: discarding forward-model checkpoint — %s (running "
+                    "encoder latent_dim %d); the online forward model will "
+                    "re-learn from scratch",
+                    mismatch,
                     self._forward_model.latent_dim,
                 )
             else:

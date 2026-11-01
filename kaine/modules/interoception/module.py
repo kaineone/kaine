@@ -1127,10 +1127,18 @@ class Interoception(BaseModule):
                     "interoception: snapshot has no reservoir seed; the reservoir is new"
                 )
             if "forward_model" in state:
+                # A readout whose structure differs from the running model (a
+                # different feature dimension, or two parents' rows concatenated
+                # by a merge) is refused before any weight is copied; the
+                # readout starts fresh and the rest of the state is kept.
                 try:
                     self._forward_model.load_state_dict(state["forward_model"])
-                except Exception:
-                    log.warning("failed to restore forward model weights", exc_info=True)
+                except Exception as exc:
+                    log.warning(
+                        "interoception: discarding forward-model readout weights — "
+                        "%s; the readout re-learns from scratch",
+                        exc,
+                    )
 
         if "fatigue" in state:
             try:

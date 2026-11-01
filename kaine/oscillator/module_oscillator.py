@@ -281,6 +281,16 @@ class ModuleOscillator:
 
     def deserialize(self, state: dict[str, Any]) -> None:
         torch = self._torch
+        # Per-unit arrays of another population size (two parents' arrays
+        # concatenated by a merge, or another configuration) are refused before
+        # anything is restored.
+        for key in ("mem", "weights"):
+            values = state.get(key)
+            if values is not None and len(values) != self._population_size:
+                raise ValueError(
+                    f"oscillator state {key!r} holds {len(values)} units for a "
+                    f"population of {self._population_size}"
+                )
         self._beta = float(state.get("beta", self._beta))
         self._threshold = float(state.get("threshold", self._threshold))
         self._base_drive = float(state.get("base_drive", self._base_drive))

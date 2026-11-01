@@ -426,6 +426,48 @@ def _merge_profiles(
     }
 
 
+# The keys of a module's serialized state that hold learned parameters, with
+# the seeds, layouts and encoder ids those parameters were trained against.
+# ForkManager.merge takes each group whole from one parent (equal, one-sided, or
+# the operator's ``module_weights_from`` choice) and never hands its keys to the
+# module's strategy, so a weight list is never concatenated or split from the
+# reservoir it was trained on. Data, not module methods, so a merge in a process
+# with no live modules (the dashboard) declares the same groups.
+#
+# vision        forward_model: LatentForwardModel layers; encoder_model_id:
+#               the encoder whose latents those layers predict.
+# audition      forward_model: the utterance AuditoryForwardModel layers;
+#               forward_model_features: the feature layout they were trained
+#               on; acoustic_forward_models: per-encoder acoustic models.
+# interoception forward_model: the readout over the CfC reservoir that
+#               reservoir_seed rebuilds; feature_layout: the metric layout the
+#               readout predicts; expected_error: the running statistics of
+#               that readout's errors; self_rhythm: the self-rhythm
+#               oscillator's plastic time constant with the population arrays
+#               and RNG state it evolved with.
+# sequence      pred_head: the prediction head over the reservoir that
+#               reservoir_seed rebuilds; featurizer_layout: the input layout
+#               both were trained on.
+# planning      learned: the learned transition prior (pB) and the belief
+#               carried with it.
+#
+# The inventory is pinned by tests/test_fork_merge_module_weights.py, which also
+# fails when a stock module serializes a weight-like list outside its group.
+MODULE_WEIGHT_GROUPS: dict[str, tuple[str, ...]] = {
+    "vision": ("forward_model", "encoder_model_id"),
+    "audition": ("forward_model", "forward_model_features", "acoustic_forward_models"),
+    "interoception": (
+        "forward_model",
+        "reservoir_seed",
+        "feature_layout",
+        "expected_error",
+        "self_rhythm",
+    ),
+    "sequence": ("pred_head", "reservoir_seed", "featurizer_layout"),
+    "planning": ("learned",),
+}
+
+
 def default_strategies() -> dict[str, MergeStrategy]:
     """Map of module-name → strategy for KAINE's stock modules."""
     return {

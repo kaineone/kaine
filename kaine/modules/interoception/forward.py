@@ -736,6 +736,18 @@ class SubstrateForwardModel:
             ]
         weight = torch.tensor(weight_rows, dtype=torch.float32)
         bias = torch.tensor(state["bias"], dtype=torch.float32)
+        # Check both shapes before copying either, so a refused state leaves
+        # the readout as it was.
+        if tuple(weight.shape) != tuple(self._readout.weight.shape):
+            raise ValueError(
+                f"expected weight shape {tuple(self._readout.weight.shape)}, "
+                f"got {tuple(weight.shape)}"
+            )
+        if tuple(bias.shape) != tuple(self._readout.bias.shape):
+            raise ValueError(
+                f"expected bias shape {tuple(self._readout.bias.shape)}, "
+                f"got {tuple(bias.shape)}"
+            )
         with torch.no_grad():
             self._readout.weight.copy_(weight)
             self._readout.bias.copy_(bias)
