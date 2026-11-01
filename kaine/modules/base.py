@@ -36,6 +36,12 @@ class BaseModule(ABC):
     # (see kaine.workspace.strategies.build_drive_sources). Empty means none.
     relieves_drives: ClassVar[frozenset[str]] = frozenset()
 
+    # True for a module that publishes or holds latent-derived values (the latent
+    # rule, kaine.privacy_filter). The boot then refuses to start it unless the
+    # latent rule is present, state encryption is in effect and
+    # [preservation].require_encryption is true (kaine.security.latent_producer).
+    produces_latent_derived: ClassVar[bool] = False
+
     def __init__(self, bus: AsyncBus) -> None:
         self._enforce_name()
         self._bus = bus

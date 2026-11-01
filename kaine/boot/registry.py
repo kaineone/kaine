@@ -301,7 +301,34 @@ def build_registry(
     _wire_affect_drive_relevance(registry)
     _log_device_assignments(registry, kaine_config)
     _wire_oscillators(registry, kaine_config)
+    _check_latent_producers(registry, kaine_config)
     return registry
+
+
+def _check_latent_producers(registry: ModuleRegistry, kaine_config: dict[str, Any]) -> None:
+    """Refuse the boot when an enabled module produces latent-derived values and
+    the latent rule, state encryption or ``require_encryption`` is missing."""
+    from kaine.security.latent_producer import (
+        LatentProducerRefused,
+        check_latent_producer,
+        require_encryption_setting,
+    )
+
+    producers = sorted(
+        module.name
+        for module in registry.all_modules()
+        if getattr(type(module), "produces_latent_derived", False) is True
+    )
+    if not producers:
+        return
+    try:
+        check_latent_producer(
+            "module " + ", ".join(producers),
+            require_encryption=require_encryption_setting(kaine_config),
+        )
+    except LatentProducerRefused as exc:
+        log.error("%s", exc)
+        raise ConfigurationError(str(exc)) from exc
 
 
 def construct_module(
