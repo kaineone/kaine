@@ -248,6 +248,13 @@ def typical_event_bytes(stream: str) -> int:
 #: three perceptual latents the main ``vision.out`` entry measured 40 KB with.
 TYPICAL_COMPANION_BYTES: dict[str, int] = {
     "vision.out.companion": 40_000,
+    # Words: a transcription is under 1 KB; an utterance with its rendering a
+    # few KB (estimates).
+    "audition.out.companion": 1_000,
+    "embodiment.out.companion": 1_000,
+    "language.external.companion": 4_000,
+    "language.internal.companion": 4_000,
+    "language.out.companion": 4_000,
 }
 
 #: Estimate for a companion stream without a listed size.

@@ -15,6 +15,7 @@ from kaine.bus.schema import OPERATOR_SOURCES, Event
 from kaine.bus.streams import AUDITION_STREAM, SLEEP_STREAM
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
+from kaine.faithful.external_input import spoken_counts
 from kaine.modules.base import BaseModule
 from kaine.modules.intensity import graded_intensity
 from kaine.modules.sequence.anomaly import AnomalyDetector, RollingZScoreAnomaly
@@ -140,8 +141,9 @@ class Sequence(BaseModule):
         if source_label not in OPERATOR_SOURCES:
             return False
         if event.type == "audition.transcription":
-            text = event.payload.get("text")
-            return isinstance(text, str) and text.strip() != ""
+            # The words are not on the main bus; their word count is.
+            _chars, words = spoken_counts(event.payload)
+            return words > 0
         return True
 
     async def initialize(self) -> None:

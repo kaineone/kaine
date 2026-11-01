@@ -66,6 +66,16 @@ log = logging.getLogger(__name__)
 
 class Audition(BaseModule):
     name: ClassVar[str] = "audition"
+
+    @classmethod
+    def companion_declarations(cls, section: dict[str, Any]):
+        """Heard words travel only on the never-persisted bus; audition produces
+        them only with transcription on."""
+        if not bool(section.get("transcription_enabled", False)):
+            return []
+        from kaine.bus.companion import CompanionDeclaration
+
+        return [CompanionDeclaration(cls.name, "audition.out", "spoken_text")]
     relieves_drives: ClassVar[frozenset[str]] = frozenset({"curiosity", "boredom", "social_drive"})
     _SLEEP_STREAM: ClassVar[str] = SLEEP_STREAM
 

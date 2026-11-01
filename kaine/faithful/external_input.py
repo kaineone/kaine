@@ -18,10 +18,21 @@ redaction (``redact_heard_speech``), the language module's guard check
 entity's own values and words. The language module brings its heard-speech
 guard for any other type, and the episodic memory module keeps the payload of
 no other type in a trace.
+
+The spoken-text rule (``split_spoken_text``) uses the same definitions to keep
+words off the persisted bus: heard text and the entity's own utterance text
+travel only on the never-persisted instance (``kaine.bus.companion``). Every
+string leaf of an external-input event is spoken text, except under the
+reviewed metadata keys ``SPOKEN_TEXT_METADATA_KEYS``; on every other event,
+the language module's own included, every value under a ``HEARD_TEXT_FIELDS``
+key at any depth is. A diverted top-level ``text`` leaves its length and word
+count behind (``text_chars``, ``text_words``), which cannot be turned back
+into words.
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Iterator
 
 if TYPE_CHECKING:
@@ -136,3 +147,152 @@ def is_heard_event(event: "Event") -> bool:
     Decided per event, before any rendering or storage.
     """
     return event.type in EXTERNAL_INPUT_TYPES or bool(heard_texts(event))
+
+
+#: The version of the spoken-text rule; a companion producer under it names it.
+SPOKEN_TEXT_RULE_VERSION = 1
+
+#: Reviewed keys of an external-input event whose strings are never words:
+SPOKEN_TEXT_METADATA_KEYS = frozenset(
+    {
+        # the audio channel an utterance arrived on (live_mic, playlist, remote, ...)
+        "source_label",
+        # the speech-to-text model's identity string
+        "model",
+        # the speech-to-text backend's name
+        "backend",
+    }
+)
+
+#: The field set name of this rule on the companion mechanism.
+SPOKEN_TEXT_FIELD_SET = "spoken_text"
+
+
+def split_spoken_text(event: "Event") -> tuple[dict[str, Any], list[tuple[tuple[Any, ...], Any, Any]]]:
+    """``(main_payload, diverted)`` for ``event`` under the spoken-text rule.
+
+    ``diverted`` lists each diverted value with its path. With nothing to
+    divert, the event's own payload object is returned and the list is empty.
+    """
+    return split_spoken_payload(event.type, event.payload)
+
+
+def split_spoken_payload(
+    event_type: str, payload: Mapping[str, Any], extra_fields: frozenset[str] = frozenset()
+) -> tuple[dict[str, Any], list[tuple[tuple[Any, ...], Any, Any]]]:
+    """The payload form of ``split_spoken_text`` (the bus applies it by type).
+
+    ``extra_fields`` are field names a producer declared into this rule
+    (``kaine.bus.companion.CompanionDeclaration.extra_fields``): on every event
+    they are diverted at any depth, like ``HEARD_TEXT_FIELDS``.
+    """
+    diverted: list[tuple[tuple[Any, ...], Any, Any]] = []
+    if not isinstance(payload, Mapping):
+        return payload, diverted
+    if event_type in EXTERNAL_INPUT_TYPES:
+        main = _divert_strings(payload, (), diverted)
+    else:
+        main = _divert_heard_fields(payload, (), diverted, HEARD_TEXT_FIELDS | extra_fields)
+    if not diverted:
+        return payload, diverted
+    main = dict(main)
+    for path, value, _index in diverted:
+        if path == ("text",) and isinstance(value, str):
+            main["text_chars"] = len(value)
+            main["text_words"] = len(value.split())
+    return main, diverted
+
+
+def _holds_string(value: Any) -> bool:
+    if isinstance(value, str):
+        return True
+    if isinstance(value, Mapping):
+        return any(_holds_string(v) for v in value.values())
+    if isinstance(value, (list, tuple)):
+        return any(_holds_string(v) for v in value)
+    return False
+
+
+def _divert_strings(node: Any, path: tuple[Any, ...], diverted: list) -> Any:
+    """Divert every string leaf, except under the reviewed metadata keys."""
+    if isinstance(node, Mapping):
+        changed = False
+        out: dict[Any, Any] = {}
+        for index, (key, value) in enumerate(node.items()):
+            if key in SPOKEN_TEXT_METADATA_KEYS:
+                out[key] = value
+                continue
+            if isinstance(value, str) or (
+                isinstance(value, (list, tuple))
+                and any(isinstance(v, str) or (isinstance(v, (list, tuple)) and _holds_string(v)) for v in value)
+            ):
+                # A string, or a list holding strings directly: the whole value.
+                diverted.append((path + (key,), value, index))
+                changed = True
+                continue
+            new = _divert_strings(value, path + (key,), diverted)
+            changed = changed or new is not value
+            out[key] = new
+        return out if changed else node
+    if isinstance(node, (list, tuple)):
+        items = [_divert_strings(v, path + (i,), diverted) for i, v in enumerate(node)]
+        if all(a is b for a, b in zip(items, node)):
+            return node
+        return items if isinstance(node, list) else tuple(items)
+    return node
+
+
+def _divert_heard_fields(
+    node: Any, path: tuple[Any, ...], diverted: list, keys: frozenset[str] = HEARD_TEXT_FIELDS
+) -> Any:
+    """Divert every value under a key in ``keys`` at any depth."""
+    if isinstance(node, Mapping):
+        changed = False
+        out: dict[Any, Any] = {}
+        for index, (key, value) in enumerate(node.items()):
+            if key in keys:
+                diverted.append((path + (key,), value, index))
+                changed = True
+                continue
+            new = _divert_heard_fields(value, path + (key,), diverted, keys)
+            changed = changed or new is not value
+            out[key] = new
+        return out if changed else node
+    if isinstance(node, (list, tuple)):
+        items = [_divert_heard_fields(v, path + (i,), diverted, keys) for i, v in enumerate(node)]
+        if all(a is b for a, b in zip(items, node)):
+            return node
+        return items if isinstance(node, list) else tuple(items)
+    return node
+
+
+def drop_spoken_counts(payload: dict[str, Any], diverted: list) -> dict[str, Any]:
+    """Undo the counts the split added once the top-level ``text`` is back."""
+    if any(tuple(item[0]) == ("text",) for item in diverted) and "text" in payload:
+        payload = dict(payload)
+        payload.pop("text_chars", None)
+        payload.pop("text_words", None)
+    return payload
+
+
+def spoken_counts(payload: Mapping[str, Any]) -> tuple[int, int]:
+    """``(characters, words)`` of an event's top-level ``text``: from the text
+    when it is present (a joined or an in-process event), else from the counts
+    the main-bus copy keeps."""
+    text = payload.get("text") if isinstance(payload, Mapping) else None
+    if isinstance(text, str):
+        return len(text), len(text.split())
+    chars = payload.get("text_chars") if isinstance(payload, Mapping) else None
+    words = payload.get("text_words") if isinstance(payload, Mapping) else None
+    ok = lambda v: isinstance(v, int) and not isinstance(v, bool) and v >= 0  # noqa: E731
+    return (chars if ok(chars) else 0), (words if ok(words) else 0)
+
+
+def words_unavailable(payload: Mapping[str, Any]) -> bool:
+    """True when an event's words were diverted and are not here: the main-bus
+    copy counts a non-empty ``text`` but holds none (its companion entry is
+    gone or was never joined)."""
+    if not isinstance(payload, Mapping) or "text" in payload:
+        return False
+    chars = payload.get("text_chars")
+    return isinstance(chars, int) and not isinstance(chars, bool) and chars > 0

@@ -78,6 +78,29 @@ if [[ "$REDIS_OK" -eq 0 || "$QDRANT_OK" -eq 0 ]]; then
   exit 3
 fi
 
+# The never-persisted bus holds heard and spoken words and latent values on
+# companion streams. It has no host port, so it is checked inside its container:
+# it must answer and must not persist (appendonly no, empty save). The cycle
+# refuses to start a module that needs it otherwise.
+VOLATILE_OK=0
+if command -v docker >/dev/null 2>&1; then
+  vol_cfg=$(docker exec kaine-redis-volatile sh -c \
+    'REDISCLI_AUTH="$KAINE_REDIS_VOLATILE_PASSWORD" redis-cli --no-auth-warning CONFIG GET appendonly; REDISCLI_AUTH="$KAINE_REDIS_VOLATILE_PASSWORD" redis-cli --no-auth-warning CONFIG GET save' \
+    2>/dev/null || true)
+  appendonly=$(printf '%s\n' "$vol_cfg" | sed -n '2p')
+  save=$(printf '%s\n' "$vol_cfg" | sed -n '4p')
+  if [[ "$appendonly" == "no" && -z "$save" && -n "$vol_cfg" ]]; then
+    VOLATILE_OK=1
+    echo "  The never-persisted bus answers and does not persist."
+  fi
+fi
+if [[ "$VOLATILE_OK" -eq 0 ]]; then
+  echo "  The never-persisted bus (kaine-redis-volatile) is not running, or it persists." >&2
+  echo "  Set KAINE_REDIS_VOLATILE_PASSWORD in compose/.env and start it with:" >&2
+  echo "    docker compose -f compose/kaine.yml up -d kaine-redis-volatile" >&2
+  exit 3
+fi
+
 echo "[2/4] Verifying loopback-only URLs in config..."
 config="$PROJECT_ROOT/config/kaine.toml"
 for pattern in 'chat_url.*"http' 'speaches_url.*"http' 'chatterbox_url.*"http'; do

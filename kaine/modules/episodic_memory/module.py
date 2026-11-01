@@ -43,6 +43,22 @@ log = logging.getLogger(__name__)
 
 class EpisodicMemory(BaseModule):
     name: ClassVar[str] = "episodic_memory"
+
+    # The entity's own speech is stored as spoken: the broadcast decoder joins
+    # accessed members' companions so its words are back before storage.
+    reads_spoken_text: ClassVar[bool] = True
+
+    @classmethod
+    def companion_declarations(cls, section: dict[str, Any]):
+        """A replay's trace text travels only on the never-persisted bus."""
+        from kaine.bus.companion import CompanionDeclaration
+
+        return [CompanionDeclaration(cls.name, "episodic_memory.out", "spoken_text")]
+    relieves_drives: ClassVar[frozenset[str]] = frozenset({"curiosity", "boredom"})
+    preservation_state_key: ClassVar[str | None] = "memory_state"
+
+    def holds_external_resources(self) -> bool:
+        return True
     relieves_drives: ClassVar[frozenset[str]] = frozenset({"curiosity", "boredom"})
     preservation_state_key: ClassVar[str | None] = "memory_state"
 

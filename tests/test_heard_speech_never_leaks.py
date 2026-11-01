@@ -17,16 +17,17 @@ from kaine.modules.episodic_memory.module import _serialize_snapshot
 from kaine.modules.language import EXTERNAL_STREAM, FakeChatClient, IntentExpressionLog, Language
 from kaine.workspace.action_selection import SPEAK
 from kaine.workspace.report_policy import SelfInitiatedReportPolicy
+from tests._companion import attach_spoken_test_volatile, joined_xrange
 
 
 async def _wait_for_entries(bus: AsyncBus, stream: str, *, timeout_s: float = 2.0):
     deadline = asyncio.get_event_loop().time() + timeout_s
     while asyncio.get_event_loop().time() < deadline:
-        entries = await bus.client.xrange(stream)
+        entries = await joined_xrange(bus, stream)
         if entries:
             return entries
         await asyncio.sleep(0.02)
-    return await bus.client.xrange(stream)
+    return await joined_xrange(bus, stream)
 
 
 def _payloads(entries):
@@ -51,6 +52,7 @@ async def bus():
     fakeredis = pytest.importorskip("fakeredis.aioredis")
     client = fakeredis.FakeRedis(decode_responses=True)
     bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
+    attach_spoken_test_volatile(bus)
     yield bus
     await bus.close()
 
@@ -99,7 +101,7 @@ async def test_heard_sentinel_never_leaves_language(bus: AsyncBus, tmp_path: Pat
     try:
         heard = _snapshot([("t1", _event("audition", "audition.transcription", {"text": sentinel}, 0.9))])
         await _say(language, about=sentinel, snapshot=heard, about_kind="heard")
-        first_payload = _payloads(await bus.client.xrange(EXTERNAL_STREAM))[-1]
+        first_payload = _payloads(await joined_xrange(bus, EXTERNAL_STREAM))[-1]
 
         # A later coalition holds that earlier event. Before the fix its
         # user_input and unredacted rendering carried the heard text back in.
@@ -110,9 +112,9 @@ async def test_heard_sentinel_never_leaves_language(bus: AsyncBus, tmp_path: Pat
             language, about="reflecting on what just happened", snapshot=later, about_kind="event"
         )
 
-        for payload in _payloads(await bus.client.xrange(EXTERNAL_STREAM)):
+        for payload in _payloads(await joined_xrange(bus, EXTERNAL_STREAM)):
             assert sentinel not in json.dumps(payload)
-        language_out = await bus.client.xrange("language.out")
+        language_out = await joined_xrange(bus, "language.out")
         assert language_out
         assert sentinel not in json.dumps(language_out)
         records = _records(language.intent_log.path)
@@ -120,7 +122,7 @@ async def test_heard_sentinel_never_leaves_language(bus: AsyncBus, tmp_path: Pat
         assert sentinel not in language.intent_log.path.read_text()
         assert HEARD_SPEECH_PLACEHOLDER in records[1]["faithful_rendering"]
 
-        snapshot = _snapshot(_events_from_entries(await bus.client.xrange(EXTERNAL_STREAM)))
+        snapshot = _snapshot(_events_from_entries(await joined_xrange(bus, EXTERNAL_STREAM)))
         assert sentinel not in _serialize_snapshot(snapshot)
     finally:
         await language.shutdown()
@@ -148,13 +150,13 @@ async def test_payload_user_input_follows_the_trigger(bus: AsyncBus, tmp_path: P
     try:
         felt = "a pull towards company"
         await _say(language, about=felt, snapshot=_snapshot(), about_kind="felt")
-        felt_payload = _payloads(await bus.client.xrange(EXTERNAL_STREAM))[-1]
+        felt_payload = _payloads(await joined_xrange(bus, EXTERNAL_STREAM))[-1]
         assert felt_payload["user_input"] == felt
 
         sentinel = "PURPLE-HERON-4471 said this"
         heard = _snapshot([("t1", _event("audition", "audition.transcription", {"text": sentinel}, 0.9))])
         await _say(language, about=sentinel, snapshot=heard, about_kind="heard")
-        heard_payload = _payloads(await bus.client.xrange(EXTERNAL_STREAM))[-1]
+        heard_payload = _payloads(await joined_xrange(bus, EXTERNAL_STREAM))[-1]
         assert "user_input" not in heard_payload
     finally:
         await language.shutdown()
@@ -169,10 +171,10 @@ async def test_felt_phrase_echoed_by_language_stays_felt(bus: AsyncBus, tmp_path
     try:
         felt = "a pull towards company"
         await _say(language, about=felt, snapshot=_snapshot(), about_kind="felt")
-        first_payload = _payloads(await bus.client.xrange(EXTERNAL_STREAM))[-1]
+        first_payload = _payloads(await joined_xrange(bus, EXTERNAL_STREAM))[-1]
         later = _snapshot([("l1", _event("language", "external_speech", first_payload))])
         await _say(language, about=felt, snapshot=later, about_kind="felt")
-        second_payload = _payloads(await bus.client.xrange(EXTERNAL_STREAM))[-1]
+        second_payload = _payloads(await joined_xrange(bus, EXTERNAL_STREAM))[-1]
         assert second_payload["user_input"] == felt
         prompt = _records(language.intent_log.path)[-1]["prompt"]
         assert "## What was just said to me" not in prompt
@@ -258,7 +260,7 @@ async def test_embodiment_chat_never_leaves_language(bus: AsyncBus, tmp_path: Pa
 
         for key in await bus.client.keys("*"):
             try:
-                entries = await bus.client.xrange(key)
+                entries = await joined_xrange(bus, key)
             except Exception:
                 continue
             for payload in _payloads(entries):
@@ -273,7 +275,7 @@ async def test_embodiment_chat_never_leaves_language(bus: AsyncBus, tmp_path: Pa
         assert sender not in log_text
         assert HEARD_SPEECH_PLACEHOLDER in records[0]["faithful_rendering"]
 
-        snapshot = _snapshot(_events_from_entries(await bus.client.xrange(EXTERNAL_STREAM)))
+        snapshot = _snapshot(_events_from_entries(await joined_xrange(bus, EXTERNAL_STREAM)))
         serialized = _serialize_snapshot(snapshot)
         assert sentinel not in serialized
         assert sender not in serialized
@@ -305,7 +307,7 @@ async def test_nested_heard_field_never_leaves_language(bus: AsyncBus, tmp_path:
 
         for key in await bus.client.keys("*"):
             try:
-                entries = await bus.client.xrange(key)
+                entries = await joined_xrange(bus, key)
             except Exception:
                 continue
             for payload in _payloads(entries):
@@ -313,7 +315,7 @@ async def test_nested_heard_field_never_leaves_language(bus: AsyncBus, tmp_path:
 
         assert sentinel not in language.intent_log.path.read_text()
 
-        snapshot = _snapshot(_events_from_entries(await bus.client.xrange(EXTERNAL_STREAM)))
+        snapshot = _snapshot(_events_from_entries(await joined_xrange(bus, EXTERNAL_STREAM)))
         assert sentinel not in _serialize_snapshot(snapshot)
     finally:
         await language.shutdown()
@@ -361,7 +363,7 @@ def test_external_input_types_single_source():
 async def _assert_sentinel_nowhere(bus: AsyncBus, language, sentinel: str) -> None:
     for key in await bus.client.keys("*"):
         try:
-            entries = await bus.client.xrange(key)
+            entries = await joined_xrange(bus, key)
         except Exception:
             continue
         for payload in _payloads(entries):

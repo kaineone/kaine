@@ -43,6 +43,12 @@ class BaseModule(ABC):
     # [preservation].require_encryption is true (kaine.security.latent_producer).
     produces_latent_derived: ClassVar[bool] = False
 
+    # True for a module that needs the words of heard and spoken events
+    # (``heard-text-volatile-bus``): the shared broadcast decoder then joins
+    # each member's companion entry for it. Every other module's snapshot holds
+    # the main-bus copy only, with no words.
+    reads_spoken_text: ClassVar[bool] = False
+
     @classmethod
     def companion_declarations(cls, section: dict[str, Any]) -> list[CompanionDeclaration]:
         """The companion streams this module's events need, given its config
@@ -253,7 +259,7 @@ class BaseModule(ABC):
                     break
                 self._workspace_cursor = entry_id
                 try:
-                    snapshot = self._snapshot_from_payload(payload)
+                    snapshot = await self._decode_broadcast(payload)
                     await self.on_workspace(snapshot)
                     self._beat()
                 except Exception:
@@ -262,6 +268,29 @@ class BaseModule(ABC):
             raise
         except Exception:
             log.exception("workspace subscription loop crashed in module %s", self.name)
+
+    async def _decode_broadcast(self, payload: dict[str, Any]) -> WorkspaceSnapshot:
+        """Decode a broadcast; for a module that declares ``reads_spoken_text``,
+        join each member's companion entry so its words are back. A member whose
+        companion entry is gone keeps the main-bus copy (its words are absent)."""
+        snapshot = self._snapshot_from_payload(payload)
+        if not type(self).reads_spoken_text:
+            return snapshot
+        join = getattr(self._bus, "join_companion", None)
+        if not callable(join):
+            return snapshot
+        joined: list[tuple[str, Event]] = []
+        changed = False
+        for entry_id, event in snapshot.selected_events:
+            if event.companion:
+                event, ok = await join(event)
+                changed = changed or ok
+            joined.append((entry_id, event))
+        if not changed:
+            return snapshot
+        import dataclasses
+
+        return dataclasses.replace(snapshot, selected_events=joined)
 
     def _snapshot_from_payload(self, payload: dict[str, Any]) -> WorkspaceSnapshot:
         selected: list[tuple[str, Event]] = []
@@ -279,6 +308,7 @@ class BaseModule(ABC):
                     salience=float(item["salience"]),
                     timestamp=ts_value,
                     causal_parent=item.get("causal_parent") or None,
+                    companion=item.get("companion") or None,
                 )
             except Exception:
                 # Names the member only: its payload may hold words or latents.

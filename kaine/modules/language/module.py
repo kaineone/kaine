@@ -98,6 +98,26 @@ class Language(BaseModule):
     """
 
     name: ClassVar[str] = "language"
+
+    # Heard words quoted in the heard turn, and the residual redaction, need the
+    # words of accessed members: the broadcast decoder joins their companions.
+    reads_spoken_text: ClassVar[bool] = True
+
+    @classmethod
+    def companion_declarations(cls, section: dict[str, Any]):
+        """The entity's own utterance text travels only on the never-persisted
+        bus (``heard-text-volatile-bus``): the three speech streams."""
+        from kaine.bus.companion import CompanionDeclaration
+        from kaine.bus.streams import (
+            LANGUAGE_EXTERNAL_STREAM,
+            LANGUAGE_INTERNAL_STREAM,
+            LANGUAGE_STREAM,
+        )
+
+        return [
+            CompanionDeclaration(cls.name, stream, "spoken_text")
+            for stream in (LANGUAGE_EXTERNAL_STREAM, LANGUAGE_INTERNAL_STREAM, LANGUAGE_STREAM)
+        ]
     relieves_drives: ClassVar[frozenset[str]] = frozenset({"boredom", "social_drive"})
 
     def holds_external_resources(self) -> bool:
@@ -427,7 +447,7 @@ class Language(BaseModule):
                     if self._stopped.is_set():
                         break
                     try:
-                        snap = self._snapshot_from_payload(payload)
+                        snap = await self._decode_broadcast(payload)
                     except Exception:
                         log.debug("language snapshot cache decode failed", exc_info=True)
                         continue

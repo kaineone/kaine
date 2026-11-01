@@ -28,6 +28,7 @@ from kaine.modules.episodic_memory import (
 # Pure unit tests — no bus needed
 # ---------------------------------------------------------------------------
 from kaine.modules.episodic_memory.replay import ReplayEngine, ReplayEntry, select_traces
+from tests._companion import attach_spoken_test_volatile, joined_entries
 
 
 def _entry(
@@ -144,6 +145,7 @@ async def bus():
     fakeredis = pytest.importorskip("fakeredis.aioredis")
     client = fakeredis.FakeRedis(decode_responses=True)
     bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
+    attach_spoken_test_volatile(bus)
     yield bus
     await bus.close()
 
@@ -183,7 +185,7 @@ async def test_replay_emits_events_with_content_inside_window(bus: AsyncBus):
         assert len(events) > 0
 
         # Check that bus received episodic_memory.replay events.
-        bus_entries = await bus.read("episodic_memory.out", last_id="0")
+        bus_entries = await joined_entries(bus, "episodic_memory.out", last_id="0")
         replay_events = [e for _, e in bus_entries if e.type == "episodic_memory.replay"]
         assert len(replay_events) == len(events)
 
@@ -214,7 +216,7 @@ async def test_replay_raises_outside_window_and_emits_nothing(bus: AsyncBus):
             await episodic_memory.replay_now()
 
         # No episodic_memory.replay events should have been emitted.
-        bus_entries = await bus.read("episodic_memory.out", last_id="0")
+        bus_entries = await joined_entries(bus, "episodic_memory.out", last_id="0")
         replay_events = [e for _, e in bus_entries if e.type == "episodic_memory.replay"]
         assert replay_events == []
     finally:

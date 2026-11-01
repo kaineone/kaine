@@ -25,6 +25,7 @@ from kaine.modules.audition import (
 )
 from kaine.modules.audition.acoustic import FakeAcousticEncoder
 from kaine.modules.intensity import graded_intensity
+from tests._companion import attach_spoken_test_volatile, joined_entries
 
 
 def _tone(freq: float, seconds: float = 0.2, amp: float = 0.3, sr: int = 16000) -> bytes:
@@ -41,6 +42,7 @@ async def bus():
     fakeredis = pytest.importorskip("fakeredis.aioredis")
     client = fakeredis.FakeRedis(decode_responses=True)
     bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
+    attach_spoken_test_volatile(bus)
     yield bus
     await bus.close()
 
@@ -72,7 +74,7 @@ async def test_process_audio_publishes_two_events(bus: AsyncBus):
     await audition.initialize()
     try:
         await audition.process_audio(b"\x00" * 1024, sample_rate=16000)
-        entries = await bus.read("audition.out", last_id="0", count=10)
+        entries = await joined_entries(bus, "audition.out", last_id="0", count=10)
         types = sorted(e.type for _, e in entries)
         assert types == ["audition.emotion", "audition.transcription"]
     finally:
@@ -105,7 +107,7 @@ async def test_transcription_gate_off_publishes_no_transcript(bus: AsyncBus):
     await audition.initialize()
     try:
         await audition.process_audio(b"\x00" * 1024, sample_rate=16000)
-        entries = await bus.read("audition.out", last_id="0", count=10)
+        entries = await joined_entries(bus, "audition.out", last_id="0", count=10)
         types = {e.type for _, e in entries}
         assert "audition.transcription" not in types  # no transcript
         assert "audition.emotion" in types  # affect signal unaffected
@@ -120,7 +122,7 @@ async def test_transcription_payload_shape(bus: AsyncBus):
     await audition.initialize()
     try:
         await audition.process_audio(b"\x00" * 4096, sample_rate=24000, source_label="mic1")
-        entries = await bus.read("audition.out", last_id="0", count=10)
+        entries = await joined_entries(bus, "audition.out", last_id="0", count=10)
         trans = next(e for _, e in entries if e.type == "audition.transcription")
         for key in (
             "text",
@@ -145,7 +147,7 @@ async def test_emotion_payload_shape(bus: AsyncBus):
     await audition.initialize()
     try:
         await audition.process_audio(b"\x00", sample_rate=16000)
-        entries = await bus.read("audition.out", last_id="0", count=10)
+        entries = await joined_entries(bus, "audition.out", last_id="0", count=10)
         emo = next(e for _, e in entries if e.type == "audition.emotion")
         for key in (
             "category",
@@ -177,7 +179,7 @@ async def test_stt_failure_still_publishes_emotion(bus: AsyncBus):
     await audition.initialize()
     try:
         await audition.process_audio(b"\x00", sample_rate=16000)
-        entries = await bus.read("audition.out", last_id="0", count=10)
+        entries = await joined_entries(bus, "audition.out", last_id="0", count=10)
         types = sorted(e.type for _, e in entries)
         assert types == ["audition.emotion", "audition.transcription"]
         trans = next(e for _, e in entries if e.type == "audition.transcription")
@@ -202,7 +204,7 @@ async def test_emotion_failure_still_publishes_transcription(bus: AsyncBus):
     await audition.initialize()
     try:
         await audition.process_audio(b"\x00", sample_rate=16000)
-        entries = await bus.read("audition.out", last_id="0", count=10)
+        entries = await joined_entries(bus, "audition.out", last_id="0", count=10)
         emo = next(e for _, e in entries if e.type == "audition.emotion")
         assert emo.payload["category"] == "neutral"
         assert "error" in emo.payload
@@ -228,7 +230,7 @@ async def test_non_neutral_emotion_raises_salience(bus: AsyncBus):
     await audition.initialize()
     try:
         await audition.process_audio(b"\x00", sample_rate=16000)
-        entries = await bus.read("audition.out", last_id="0", count=10)
+        entries = await joined_entries(bus, "audition.out", last_id="0", count=10)
         emo = next(e for _, e in entries if e.type == "audition.emotion")
         assert emo.salience == pytest.approx(audition._alert_salience)
     finally:
@@ -347,12 +349,12 @@ async def test_prosody_published_when_enabled(bus: AsyncBus, monkeypatch):
         deadline = asyncio.get_event_loop().time() + 5.0
         while asyncio.get_event_loop().time() < deadline:
             await asyncio.sleep(0.1)
-            entries = await bus.read("audition.out", last_id="0", count=20)
+            entries = await joined_entries(bus, "audition.out", last_id="0", count=20)
             types = [e.type for _, e in entries]
             if "audition.prosody" in types:
                 break
         else:
-            entries = await bus.read("audition.out", last_id="0", count=20)
+            entries = await joined_entries(bus, "audition.out", last_id="0", count=20)
             types = [e.type for _, e in entries]
         assert "audition.prosody" in types, f"Expected audition.prosody in bus events; got {types}"
     finally:
@@ -378,7 +380,7 @@ async def test_prosody_payload_no_bytes(bus: AsyncBus, monkeypatch):
         deadline = asyncio.get_event_loop().time() + 5.0
         while asyncio.get_event_loop().time() < deadline:
             await asyncio.sleep(0.1)
-            entries = await bus.read("audition.out", last_id="0", count=20)
+            entries = await joined_entries(bus, "audition.out", last_id="0", count=20)
             if any(e.type == "audition.prosody" for _, e in entries):
                 break
         prosody_events = [e for _, e in entries if e.type == "audition.prosody"]
@@ -400,7 +402,7 @@ async def test_prosody_not_published_when_disabled(bus: AsyncBus):
     try:
         await audition.process_audio(b"\x00" * 1024, sample_rate=16000)
         await asyncio.sleep(0.1)
-        entries = await bus.read("audition.out", last_id="0", count=20)
+        entries = await joined_entries(bus, "audition.out", last_id="0", count=20)
         types = [e.type for _, e in entries]
         assert "audition.prosody" not in types, (
             f"audition.prosody must not be published when disabled; got {types}"
@@ -512,7 +514,7 @@ async def test_general_audition_off_publishes_no_perception_event(bus: AsyncBus)
     await audition.initialize()
     try:
         await audition.process_audio(_tone(300), sample_rate=16000)
-        entries = await bus.read("audition.out", last_id="0", count=10)
+        entries = await joined_entries(bus, "audition.out", last_id="0", count=10)
         assert not any(e.type == "audition.perception" for _, e in entries)
     finally:
         await audition.shutdown()
@@ -527,7 +529,7 @@ async def test_general_audition_perceives_non_speech_without_transcribing(
     try:
         # A 7 kHz tone is not speech -> perceived acoustically, no STT/emotion.
         await audition.process_audio(_tone(7000), sample_rate=16000)
-        entries = await bus.read("audition.out", last_id="0", count=10)
+        entries = await joined_entries(bus, "audition.out", last_id="0", count=10)
         types = {e.type for _, e in entries}
         assert "audition.perception" in types
         assert "audition.transcription" not in types
@@ -543,7 +545,7 @@ async def test_general_audition_speech_runs_the_speech_specialization(bus: Async
     try:
         # A 300 Hz tone with energy is in the speech band -> perception + speech.
         await audition.process_audio(_tone(300), sample_rate=16000)
-        entries = await bus.read("audition.out", last_id="0", count=10)
+        entries = await joined_entries(bus, "audition.out", last_id="0", count=10)
         types = {e.type for _, e in entries}
         assert {
             "audition.perception",
@@ -560,7 +562,7 @@ async def test_perception_event_is_content_free(bus: AsyncBus):
     await audition.initialize()
     try:
         await audition.process_audio(_tone(7000), sample_rate=16000)
-        entries = await bus.read("audition.out", last_id="0", count=10)
+        entries = await joined_entries(bus, "audition.out", last_id="0", count=10)
         perc = next(e for _, e in entries if e.type == "audition.perception")
         assert set(perc.payload) == {
             "source_label",
@@ -608,7 +610,7 @@ async def test_perception_stamps_playlist_item_provenance(bus: AsyncBus):
     try:
         item = PlaylistPosition(title="episode-01.mkv", order=0, offset=2.0, item_idx=0)
         await audition.process_audio(_tone(7000), sample_rate=16000, item=item)
-        entries = await bus.read("audition.out", last_id="0", count=10)
+        entries = await joined_entries(bus, "audition.out", last_id="0", count=10)
         perc = next(e for _, e in entries if e.type == "audition.perception")
         assert perc.payload["item"] == "episode-01.mkv"
         assert perc.payload["item_order"] == 0
@@ -627,6 +629,7 @@ async def test_arousal_provider_narrows_the_auditory_window(bus: AsyncBus):
         b = pytest.importorskip("fakeredis.aioredis")
         client = b.FakeRedis(decode_responses=True)
         local = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
+        attach_spoken_test_volatile(local)
         audition = _general_audition(local)
         audition.set_arousal_provider(lambda: arousal)
         await audition.initialize()
@@ -666,7 +669,7 @@ async def test_acoustic_onset_alerts_relative_to_baseline(bus: AsyncBus):
         for _ in range(4):
             await audition.process_audio(steady, sample_rate=16000)
         await audition.process_audio(onset, sample_rate=16000)
-        entries = await bus.read("audition.out", last_id="0", count=50)
+        entries = await joined_entries(bus, "audition.out", last_id="0", count=50)
         perc = [e for _, e in entries if e.type == "audition.perception"]
         assert len(perc) == 5
         # The four steady windows stay at baseline; the onset alerts.
@@ -786,7 +789,7 @@ async def test_acoustic_report_carries_the_paired_evaluations(bus: AsyncBus) -> 
         await audition.process_audio(_tone(6000), sample_rate=16000)
         await audition.process_audio(_tone(4000), sample_rate=16000)
 
-        entries = await bus.read("audition.out", last_id="0", count=50)
+        entries = await joined_entries(bus, "audition.out", last_id="0", count=50)
         perceptions = [e.payload for _, e in entries if e.type == "audition.perception"]
         payload = perceptions[-1]
 
@@ -868,7 +871,7 @@ async def test_acoustic_path_skips_a_non_finite_embedding(bus, monkeypatch) -> N
         await audition.process_audio(_tone(7000), sample_rate=16000)
         await audition.process_audio(_tone(5000), sample_rate=16000)
 
-        entries = await bus.read("audition.out", last_id="0", count=50)
+        entries = await joined_entries(bus, "audition.out", last_id="0", count=50)
         events = [e for _, e in entries if e.type == "audition.perception"]
         assert len(events) == 6
         assert isinstance(events[2].payload["context_gain"], float)
@@ -923,7 +926,7 @@ async def test_tone_path_skips_a_non_finite_feature_vector(bus, monkeypatch):
         assert model.last_reading_skipped is True
         assert list(audition._prediction_errors) == errors_before
 
-        entries = await bus.read("audition.out", last_id="0", count=50)
+        entries = await joined_entries(bus, "audition.out", last_id="0", count=50)
         emotions = [e for _, e in entries if e.type == "audition.emotion"]
         assert len(emotions) == 4
         assert emotions[3].payload["prediction_error"] is None
@@ -943,7 +946,7 @@ async def test_tone_path_skips_a_non_finite_feature_vector(bus, monkeypatch):
             len(errors_before) + 1, audition._prediction_errors.maxlen
         )
 
-        entries = await bus.read("audition.out", last_id="0", count=50)
+        entries = await joined_entries(bus, "audition.out", last_id="0", count=50)
         emotions = [e for _, e in entries if e.type == "audition.emotion"]
         assert emotions[4].payload["prediction_error"] is None
         assert isinstance(emotions[5].payload["prediction_error"], float)
@@ -976,7 +979,7 @@ async def test_variant_grades_an_emotional_tone_by_its_error_ratio(bus: AsyncBus
     try:
         for i in range(6):
             await audition.process_audio(_tone(300 + 20 * i), sample_rate=16000)
-        entries = await bus.read("audition.out", last_id="0", count=50)
+        entries = await joined_entries(bus, "audition.out", last_id="0", count=50)
         emotions = [e for _, e in entries if e.type == "audition.emotion"]
         assert len(emotions) == 6
         for event in emotions:
@@ -1016,7 +1019,7 @@ async def test_categorical_rule_keeps_the_alert_for_an_emotional_tone(bus: Async
     try:
         for i in range(6):
             await audition.process_audio(_tone(300 + 20 * i), sample_rate=16000)
-        entries = await bus.read("audition.out", last_id="0", count=50)
+        entries = await joined_entries(bus, "audition.out", last_id="0", count=50)
         emotions = [e for _, e in entries if e.type == "audition.emotion"]
         assert len(emotions) == 6
         for event in emotions:
@@ -1047,7 +1050,7 @@ async def test_neutral_tone_is_graded_by_the_error_ratio(bus: AsyncBus):
     try:
         for _ in range(6):
             await audition.process_audio(_tone(300), sample_rate=16000)
-        entries = await bus.read("audition.out", last_id="0", count=50)
+        entries = await joined_entries(bus, "audition.out", last_id="0", count=50)
         emotions = [e for _, e in entries if e.type == "audition.emotion"]
         assert len(emotions) == 6
         for event in emotions:
@@ -1080,7 +1083,7 @@ async def test_failed_classification_is_not_classified(bus: AsyncBus):
     await audition.initialize()
     try:
         await audition.process_audio(_tone(300), sample_rate=16000)
-        entries = await bus.read("audition.out", last_id="0", count=10)
+        entries = await joined_entries(bus, "audition.out", last_id="0", count=10)
         emo = next(e for _, e in entries if e.type == "audition.emotion")
         assert emo.payload["classified"] is False
         assert emo.payload["tone_rule"] == "categorical"
@@ -1109,7 +1112,7 @@ async def test_categorical_tone_payload_and_affect_novelty_unchanged(bus: AsyncB
     await audition.initialize()
     try:
         await audition.process_audio(_tone(300), sample_rate=16000)
-        entries = await bus.read("audition.out", last_id="0", count=10)
+        entries = await joined_entries(bus, "audition.out", last_id="0", count=10)
         entry_id, event = next(
             (eid, e) for eid, e in entries if e.type == "audition.emotion"
         )
@@ -1161,7 +1164,7 @@ async def test_variant_grades_a_failed_classification(bus: AsyncBus):
     try:
         for _ in range(3):
             await audition.process_audio(_tone(300), sample_rate=16000)
-        entries = await bus.read("audition.out", last_id="0", count=100)
+        entries = await joined_entries(bus, "audition.out", last_id="0", count=100)
         emos = [e for _, e in entries if e.type == "audition.emotion"]
         assert len(emos) == 3
         for emo in emos:
@@ -1192,7 +1195,7 @@ async def test_default_failed_classification_is_unchanged(bus: AsyncBus):
     await audition.initialize()
     try:
         await audition.process_audio(_tone(300), sample_rate=16000)
-        entries = await bus.read("audition.out", last_id="0", count=10)
+        entries = await joined_entries(bus, "audition.out", last_id="0", count=10)
         emo = next(e for _, e in entries if e.type == "audition.emotion")
         assert emo.payload["classified"] is False
         assert emo.payload["alert"] is True
@@ -1214,7 +1217,7 @@ async def test_audition_emotion_payload_carries_entity_time_s(bus):
 
         audition._clock = FixedClock()
         await audition.process_audio(b"\x00" * 1024, sample_rate=16000)
-        entries = await bus.read("audition.out", last_id="0", count=10)
+        entries = await joined_entries(bus, "audition.out", last_id="0", count=10)
         emo = next(e for _, e in entries if e.type == "audition.emotion")
         assert emo.payload["entity_time_s"] == 12345.5
     finally:

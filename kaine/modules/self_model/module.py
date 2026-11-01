@@ -19,6 +19,7 @@ from kaine.bus.streams import (
     SLEEP_STREAM,
 )
 from kaine.cycle.types import WorkspaceSnapshot
+from kaine.faithful.external_input import spoken_counts
 from kaine.modules.base import BaseModule
 from kaine.modules.self_model.document import (
     SelfModelDocument,
@@ -406,7 +407,8 @@ class SelfModel(BaseModule):
         Only `{timestamp, channel, length, word_count}` is kept; raw speech
         content is never persisted into the self-model (privacy boundary).
         """
-        text = payload.get("text") or ""
+        # The main-bus copy keeps the length and word count, never the words.
+        length, word_count = spoken_counts(payload)
         observation = {
             # Wall-clock event stamp (epoch): WHEN this utterance was heard.
             # A persisted record mark, not a cognitive interval — stays real,
@@ -414,8 +416,8 @@ class SelfModel(BaseModule):
             # infrastructural: real time, not subjective
             "timestamp": time.time(),
             "channel": channel,
-            "length": len(text),
-            "word_count": len(text.split()),
+            "length": length,
+            "word_count": word_count,
         }
         observations = list(self._model.voice_observations)
         observations.append(observation)

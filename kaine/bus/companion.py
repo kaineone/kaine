@@ -129,9 +129,28 @@ def _latent_split(
 LATENT_FIELD_SET = FieldSet("latent", _latent_split)
 
 
+def _spoken_split(
+    event_type: str, payload: Mapping[str, Any], extra_keys: frozenset[str] = frozenset()
+) -> tuple[dict[str, Any], Diverted]:
+    from kaine.faithful.external_input import split_spoken_payload
+
+    return split_spoken_payload(event_type, payload, extra_keys)
+
+
+def _spoken_after_merge(payload: dict[str, Any], diverted: Diverted) -> dict[str, Any]:
+    from kaine.faithful.external_input import drop_spoken_counts
+
+    return drop_spoken_counts(payload, diverted)
+
+
+#: The spoken-text field set (change ``heard-text-volatile-bus``): heard text and
+#: the entity's own utterance text (``kaine.faithful.external_input.split_spoken_text``).
+SPOKEN_TEXT_FIELD_SET = FieldSet("spoken_text", _spoken_split, _spoken_after_merge)
+
+
 def default_field_sets() -> tuple[FieldSet, ...]:
     """The field sets every main-bus publish applies, in split order."""
-    return (LATENT_FIELD_SET,)
+    return (LATENT_FIELD_SET, SPOKEN_TEXT_FIELD_SET)
 
 
 def merge_diverted(payload: Mapping[str, Any], diverted: Iterable[tuple[Any, ...]]) -> dict[str, Any]:

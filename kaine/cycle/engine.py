@@ -74,6 +74,21 @@ class CycleHooks:
         raise ValueError(f"unknown hook event {event!r}")
 
 
+def _member_record(entry_id: str, ev: Event) -> dict[str, Any]:
+    record: dict[str, Any] = {
+        "entry_id": entry_id,
+        "source": ev.source,
+        "type": ev.type,
+        "salience": ev.salience,
+        "payload": without_latent_derived(ev.payload),
+        "timestamp": ev.timestamp.isoformat(),
+        "causal_parent": ev.causal_parent,
+    }
+    if ev.companion:
+        record["companion"] = ev.companion
+    return record
+
+
 class CognitiveCycle:
     # Tick-rate bounds for interoception.regulation reduce_rate advisory.
     _MIN_PROCESSING_RATE_HZ: float = 0.5  # floor: never slower than 0.5 Hz
@@ -1233,6 +1248,9 @@ class CognitiveCycle:
         # copied into the broadcast (the latent rule, kaine.privacy_filter). The
         # strip is copy on write: a member without one is embedded as the same
         # object, so the broadcast is unchanged when nothing carries the key.
+        # A member's words stay on the never-persisted instance: the member
+        # record names its own entry's companion (when it has one) and the bus
+        # splits the member payload, so no second copy of the words is written.
         return {
             "tick_index": snapshot.tick_index,
             "inhibited": snapshot.inhibited,
@@ -1242,16 +1260,7 @@ class CognitiveCycle:
             "salience_scores": dict(snapshot.salience_scores),
             "metadata": dict(snapshot.metadata),
             "selected": [
-                {
-                    "entry_id": entry_id,
-                    "source": ev.source,
-                    "type": ev.type,
-                    "salience": ev.salience,
-                    "payload": without_latent_derived(ev.payload),
-                    "timestamp": ev.timestamp.isoformat(),
-                    "causal_parent": ev.causal_parent,
-                }
-                for entry_id, ev in snapshot.selected_events
+                _member_record(entry_id, ev) for entry_id, ev in snapshot.selected_events
             ],
         }
 

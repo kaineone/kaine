@@ -27,6 +27,7 @@ from kaine.modules.language.context import (
 )
 from kaine.modules.sleep.ignition_audit import classify_realizations
 from kaine.workspace.action_selection import SPEAK
+from tests._companion import attach_spoken_test_volatile, joined_xrange
 from tests._fakes import wait_for
 
 
@@ -44,11 +45,11 @@ async def _publish_intent(bus: AsyncBus, kind: str, about: str) -> None:
 async def _wait_for_entries(bus: AsyncBus, stream: str, *, timeout_s: float = 2.0):
     deadline = asyncio.get_event_loop().time() + timeout_s
     while asyncio.get_event_loop().time() < deadline:
-        entries = await bus.client.xrange(stream)
+        entries = await joined_xrange(bus, stream)
         if entries:
             return entries
         await asyncio.sleep(0.02)
-    return await bus.client.xrange(stream)
+    return await joined_xrange(bus, stream)
 
 
 @pytest.fixture
@@ -56,6 +57,7 @@ async def bus():
     fakeredis = pytest.importorskip("fakeredis.aioredis")
     client = fakeredis.FakeRedis(decode_responses=True)
     bus = AsyncBus(BusConfig(password="x", audit_required=False), client=client)
+    attach_spoken_test_volatile(bus)
     yield bus
     await bus.close()
 
@@ -117,8 +119,8 @@ async def test_speak_publishes_only_to_external(bus: AsyncBus, tmp_path: Path):
     language = _make_language(bus, tmp_path, responses=["spoken text"])
     out = await language.speak("hello")
     assert out == "spoken text"
-    ext = await bus.client.xrange(EXTERNAL_STREAM)
-    inn = await bus.client.xrange(INTERNAL_STREAM)
+    ext = await joined_xrange(bus, EXTERNAL_STREAM)
+    inn = await joined_xrange(bus, INTERNAL_STREAM)
     assert len(ext) == 1
     assert len(inn) == 0
 
@@ -128,8 +130,8 @@ async def test_think_publishes_only_to_internal(bus: AsyncBus, tmp_path: Path):
     language = _make_language(bus, tmp_path, responses=["internal thought"])
     out = await language.think("ponder")
     assert out == "internal thought"
-    ext = await bus.client.xrange(EXTERNAL_STREAM)
-    inn = await bus.client.xrange(INTERNAL_STREAM)
+    ext = await joined_xrange(bus, EXTERNAL_STREAM)
+    inn = await joined_xrange(bus, INTERNAL_STREAM)
     assert len(ext) == 0
     assert len(inn) == 1
 
@@ -144,8 +146,8 @@ async def test_speech_published_with_semantic_event_types(bus: AsyncBus, tmp_pat
     language = _make_language(bus, tmp_path, responses=["spoken", "thought"])
     await language.speak("hello")
     await language.think("ponder")
-    ext = await bus.client.xrange(EXTERNAL_STREAM)
-    inn = await bus.client.xrange(INTERNAL_STREAM)
+    ext = await joined_xrange(bus, EXTERNAL_STREAM)
+    inn = await joined_xrange(bus, INTERNAL_STREAM)
     assert ext and ext[0][1]["type"] == "external_speech"
     assert inn and inn[0][1]["type"] == "internal_speech"
 
@@ -189,7 +191,7 @@ async def test_intent_log_includes_faithful_rendering(bus: AsyncBus, tmp_path: P
 async def test_bus_event_payload_shape(bus: AsyncBus, tmp_path: Path):
     language = _make_language(bus, tmp_path, responses=["spoken"])
     await language.speak("hi", snapshot=_snapshot([_event()]))
-    entries = await bus.client.xrange(EXTERNAL_STREAM)
+    entries = await joined_xrange(bus, EXTERNAL_STREAM)
     _, fields = entries[0]
     payload = json.loads(fields["payload"])
     assert set(payload.keys()) >= {"text", "mode", "model", "prompt_length", "latency_ms"}
@@ -204,9 +206,9 @@ async def test_aggregate_language_out_mirrors_mode_specific_stream(bus: AsyncBus
     await language.speak("hi", snapshot=_snapshot([_event()]))
     await language.think("quiet", snapshot=_snapshot([_event()]))
 
-    external = await bus.client.xrange(EXTERNAL_STREAM)
-    internal = await bus.client.xrange(INTERNAL_STREAM)
-    aggregate = await bus.client.xrange("language.out")
+    external = await joined_xrange(bus, EXTERNAL_STREAM)
+    internal = await joined_xrange(bus, INTERNAL_STREAM)
+    aggregate = await joined_xrange(bus, "language.out")
     assert len(aggregate) == 2
     assert (
         json.loads(external[0][1]["payload"])["text"]
@@ -281,7 +283,7 @@ async def test_language_realizes_think_intent_to_internal(bus: AsyncBus, tmp_pat
         await _publish_intent(bus, "think", "ponder this")
         entries = await _wait_for_entries(bus, INTERNAL_STREAM)
         assert len(entries) == 1
-        ext = await bus.client.xrange(EXTERNAL_STREAM)
+        ext = await joined_xrange(bus, EXTERNAL_STREAM)
         assert len(ext) == 0
     finally:
         await language.shutdown()
@@ -311,7 +313,7 @@ async def test_language_silent_without_intent_on_perceived_input(bus: AsyncBus, 
         await language.on_workspace(snap)
         # Give any (incorrect) reflex a chance to fire.
         await asyncio.sleep(0.1)
-        ext = await bus.client.xrange(EXTERNAL_STREAM)
+        ext = await joined_xrange(bus, EXTERNAL_STREAM)
         assert len(ext) == 0
         assert len(language.chat_client.requests) == 0
     finally:
@@ -374,7 +376,7 @@ async def test_speak_payload_never_carries_heard_input(bus: AsyncBus, tmp_path: 
     published; the A/B observer takes heard input from its audition provider."""
     language = _make_language(bus, tmp_path, responses=["answer"])
     await language.speak("what time is it?")
-    entries = await bus.client.xrange(EXTERNAL_STREAM)
+    entries = await joined_xrange(bus, EXTERNAL_STREAM)
     payload = json.loads(entries[0][1]["payload"])
     assert "user_input" not in payload
     assert "what time is it?" not in json.dumps(payload)
@@ -386,7 +388,7 @@ async def test_think_payload_excludes_user_input(bus: AsyncBus, tmp_path: Path):
     observer's trigger and belongs only on external_speech events."""
     language = _make_language(bus, tmp_path, responses=["a thought"])
     await language.think("something internal")
-    entries = await bus.client.xrange(INTERNAL_STREAM)
+    entries = await joined_xrange(bus, INTERNAL_STREAM)
     payload = json.loads(entries[0][1]["payload"])
     assert "user_input" not in payload
 
@@ -549,11 +551,11 @@ async def test_already_emitted_utterance_is_not_unsaid(bus: AsyncBus, tmp_path: 
         client.release.set()
         deadline = asyncio.get_event_loop().time() + 2.0
         while asyncio.get_event_loop().time() < deadline:
-            entries = await bus.client.xrange(EXTERNAL_STREAM)
+            entries = await joined_xrange(bus, EXTERNAL_STREAM)
             if len(entries) >= 2:
                 break
             await asyncio.sleep(0.02)
-        entries = await bus.client.xrange(EXTERNAL_STREAM)
+        entries = await joined_xrange(bus, EXTERNAL_STREAM)
         texts = [json.loads(e[1]["payload"])["text"] for e in entries]
         assert "first said" in texts  # not un-said
         assert client.cancelled == 0  # first had finished; nothing was aborted
@@ -578,7 +580,7 @@ async def test_shutdown_cancels_in_flight_generation(bus: AsyncBus, tmp_path: Pa
     await language.shutdown()  # must not hang or leak
     assert client.cancelled == 1
     assert client.closed is True
-    entries = await bus.client.xrange(EXTERNAL_STREAM)
+    entries = await joined_xrange(bus, EXTERNAL_STREAM)
     assert entries == []
 
 
@@ -613,7 +615,7 @@ async def test_failed_speak_writes_content_free_realization_failed_record(
     language = _make_failing_language(bus, tmp_path)
     await language._realize_intent(SPEAK, "hello secret")
 
-    entries = await bus.client.xrange(INTERNAL_STREAM)
+    entries = await joined_xrange(bus, INTERNAL_STREAM)
     assert len(entries) == 1
     _entry_id, fields = entries[0]
 
@@ -627,7 +629,7 @@ async def test_failed_speak_writes_content_free_realization_failed_record(
     assert "hello secret" not in stored_text
     assert "organ down" not in stored_text
 
-    ext = await bus.client.xrange(EXTERNAL_STREAM)
+    ext = await joined_xrange(bus, EXTERNAL_STREAM)
     assert len(ext) == 0
 
 
@@ -638,7 +640,7 @@ async def test_realization_failed_record_is_counted_by_ignition_audit(
     language = _make_failing_language(bus, tmp_path)
     await language._realize_intent(SPEAK, "hello secret")
 
-    entries = await bus.client.xrange(INTERNAL_STREAM)
+    entries = await joined_xrange(bus, INTERNAL_STREAM)
     assert len(entries) == 1
     entry_id, fields = entries[0]
 
@@ -664,11 +666,11 @@ def _records(path: Path) -> list[dict]:
 async def _wait_for_entry_count(bus: AsyncBus, stream: str, n: int, *, timeout_s: float = 2.0):
     deadline = asyncio.get_event_loop().time() + timeout_s
     while asyncio.get_event_loop().time() < deadline:
-        entries = await bus.client.xrange(stream)
+        entries = await joined_xrange(bus, stream)
         if len(entries) >= n:
             return entries
         await asyncio.sleep(0.02)
-    return await bus.client.xrange(stream)
+    return await joined_xrange(bus, stream)
 
 
 @pytest.mark.asyncio
@@ -935,7 +937,7 @@ async def test_heard_about_redacted_even_when_coalition_has_moved_on(bus: AsyncB
 
 
 async def _records_of(bus: AsyncBus, type_: str) -> list[dict]:
-    entries = await bus.client.xrange(INTERNAL_STREAM)
+    entries = await joined_xrange(bus, INTERNAL_STREAM)
     return [json.loads(fields["payload"]) for _entry_id, fields in entries if fields["type"] == type_]
 
 
@@ -963,7 +965,7 @@ async def test_speak_failing_after_cycle_stop_is_an_interruption(bus: AsyncBus, 
     _no_trace_no_error(caplog)
     assert await _records_of(bus, "interrupted_by_stop") == [{"mode": SPEAK, "reason_class": "ConnectionError"}]
     assert await _records_of(bus, "realization_failed") == []
-    stored = " ".join(str(v) for _id, f in await bus.client.xrange(INTERNAL_STREAM) for v in f.values())
+    stored = " ".join(str(v) for _id, f in await joined_xrange(bus, INTERNAL_STREAM) for v in f.values())
     assert "hello secret" not in stored and "organ down" not in stored
 
 
@@ -978,7 +980,7 @@ async def test_think_failing_after_stop_writes_no_record(bus: AsyncBus, tmp_path
         await language._realize_intent("think", "inner thought")
 
     _no_trace_no_error(caplog)
-    assert await bus.client.xrange(INTERNAL_STREAM) == []
+    assert await joined_xrange(bus, INTERNAL_STREAM) == []
 
 
 @pytest.mark.asyncio
@@ -1062,7 +1064,7 @@ async def test_module_shutdown_cancel_of_a_speak_leaves_an_interruption_record(b
     assert client.cancelled == 1
     assert await _records_of(bus, "interrupted_by_stop") == [{"mode": SPEAK, "reason_class": "CancelledError"}]
     assert await _records_of(bus, "realization_failed") == []
-    assert await bus.client.xrange(EXTERNAL_STREAM) == []
+    assert await joined_xrange(bus, EXTERNAL_STREAM) == []
 
 
 @pytest.mark.asyncio
@@ -1075,7 +1077,7 @@ async def test_module_shutdown_cancel_of_a_think_leaves_no_record(bus: AsyncBus,
     await language.shutdown()
 
     assert client.cancelled == 1
-    assert await bus.client.xrange(INTERNAL_STREAM) == []
+    assert await joined_xrange(bus, INTERNAL_STREAM) == []
 
 
 @pytest.mark.asyncio
@@ -1103,7 +1105,7 @@ async def test_an_answer_arriving_after_the_stop_began_is_not_published(bus: Asy
 
     assert client.completed == 1
     assert records == [{"mode": SPEAK, "reason_class": "shutdown"}]
-    assert await bus.client.xrange(EXTERNAL_STREAM) == []
-    assert await bus.client.xrange("language.out") == []
+    assert await joined_xrange(bus, EXTERNAL_STREAM) == []
+    assert await joined_xrange(bus, "language.out") == []
     assert not (tmp_path / "intent.jsonl").exists() or (tmp_path / "intent.jsonl").read_text() == ""
     _no_trace_no_error(caplog)

@@ -74,6 +74,15 @@ def operator_approved() -> bool:
 
 class Embodiment(BaseModule):
     name: ClassVar[str] = "embodiment"
+
+    @classmethod
+    def companion_declarations(cls, section: dict[str, Any]):
+        """In-world chat is heard input: its words travel only on the
+        never-persisted bus."""
+        from kaine.bus.companion import CompanionDeclaration
+
+        return [CompanionDeclaration(cls.name, "embodiment.out", "spoken_text")]
+    relieves_drives: ClassVar[frozenset[str]] = frozenset({"curiosity", "boredom", "restlessness"})
     relieves_drives: ClassVar[frozenset[str]] = frozenset({"curiosity", "boredom", "restlessness"})
 
     def __init__(

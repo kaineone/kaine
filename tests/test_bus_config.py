@@ -175,7 +175,7 @@ def test_typical_companion_bytes():
     from kaine.bus.config import DEFAULT_TYPICAL_COMPANION_BYTES, typical_companion_bytes
 
     assert typical_companion_bytes("vision.out.companion") == 40_000
-    assert typical_companion_bytes("audition.out.companion") == DEFAULT_TYPICAL_COMPANION_BYTES
+    assert typical_companion_bytes("planning.out.companion") == DEFAULT_TYPICAL_COMPANION_BYTES
 
 
 def test_malformed_operator_file_falls_back_to_shipped_config(tmp_path: Path):

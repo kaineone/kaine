@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 from kaine.bus.schema import OPERATOR_SOURCES, Event, module_stream
+from kaine.faithful.external_input import spoken_counts
 
 log = logging.getLogger("kaine.cycle.utterance_outcome")
 
@@ -262,8 +263,9 @@ class UtteranceOutcomeObserver:
         source_label = payload.get("source_label")
         if source_label not in OPERATOR_SOURCES:
             return
-        text = payload.get("text")
-        if not isinstance(text, str) or not text.strip():
+        # The words are not on the main bus; their word count is.
+        _chars, words = spoken_counts(payload)
+        if words <= 0:
             return
         if ts - self._open_record.start_ts > self._reply_window_s:
             return
