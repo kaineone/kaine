@@ -26,7 +26,10 @@ MEDIA_METADATA_FIELDS: frozenset[str] = frozenset({"item"})
 
 def without_media_metadata(value: Any, extra: frozenset[str] = frozenset()) -> Any:
     """A copy of ``value`` with every mapping key in ``MEDIA_METADATA_FIELDS``
-    (and ``extra``) removed at any depth, including inside lists and tuples."""
+    (and ``extra``) removed at any depth, including inside lists and tuples.
+
+    The copy is plain: tuples come back as lists and mapping subclasses as
+    ``dict``. Bus payloads are decoded JSON, so producers emit neither."""
     keys = MEDIA_METADATA_FIELDS | extra
     return _without(value, keys)
 

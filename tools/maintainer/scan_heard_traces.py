@@ -19,6 +19,13 @@ Sources:
 * ``--fork-root DIR``: every fork snapshot under a fork root (``state/forks``).
 * ``--bundle DIR``: a preservation bundle directory (``bundle.tar.enc``,
   ``bundle.tar`` or the loose layout).
+* ``--intent-log PATH``: a language-module intent log (a ``.jsonl`` file, or a
+  directory whose ``*.jsonl`` files are read), decrypted in memory. Only the
+  ``media_item`` check applies: a record is flagged when a string anywhere in
+  it holds a rendered ``item=`` or an ``'item': '...'`` repr, and it is
+  reported by its ``record_id`` (or its line number) and the record field.
+  An unreadable line is skipped. A file name the organ repeated in its own
+  words cannot be told apart from its other words and is not detected.
 * ``--qdrant-host HOST``: a running Qdrant store, read by scrolling payloads
   without vectors; the API key is read from the environment variable named by
   ``--qdrant-api-key-env`` (default ``QDRANT_API_KEY``).
@@ -303,7 +310,76 @@ def scan_traces(source: str, traces: Iterable[tuple[str, str]]) -> SourceReport:
     return report
 
 
+# Intent-log record fields reported by name; any other field is reported under
+# one fixed label, so a key can never echo content.
+INTENT_LOG_FIELDS = frozenset(
+    {
+        "prompt",
+        "faithful_rendering",
+        "numeric_rendering",
+        "generated_text",
+        "extra",
+        "snapshot_summary",
+        "about_values",
+    }
+)
+_RECORD_ID = re.compile(r"[0-9a-f]{32}")
+
+
+def _holds_rendered_item(value: Any) -> bool:
+    return any(
+        _RENDERED_ITEM.search(text) or _MEDIA_ITEM_REPR.search(text)
+        for text in iter_text_leaves(value)
+    ) or any(
+        isinstance(v, str) and v.strip() for v in _values_under(value, "item")
+    )
+
+
+def scan_intent_log(source: str, records: Iterable[tuple[str, Any]]) -> SourceReport:
+    """Scan ``(record position, record)`` pairs of an intent log for the media
+    file name. Reports counts, field names and record ids only."""
+    report = SourceReport(source=source)
+    for position, record in records:
+        report.traces += 1
+        if not isinstance(record, dict):
+            continue
+        fields = sorted(
+            (key if key in INTENT_LOG_FIELDS else "<other field>")
+            for key, value in record.items()
+            if _holds_rendered_item(value)
+        )
+        if not fields:
+            continue
+        record_id = record.get("record_id")
+        shown = record_id if isinstance(record_id, str) and _RECORD_ID.fullmatch(record_id) else position
+        report.flagged += 1
+        report.flagged_ids.append(str(shown))
+        for name in fields:
+            report.by_category["media_item"] += 1
+            label = f"intent_log:{name}"
+            report.by_member_type[label] = report.by_member_type.get(label, 0) + 1
+    return report
+
+
 # --- readers (read-only) ------------------------------------------------------
+
+
+def intent_log_records(path: Path) -> Iterator[tuple[str, Any]]:
+    """Yield ``(position, record)`` for every readable line of an intent log
+    file, or of every ``*.jsonl`` file in a directory, decrypted in memory."""
+    from kaine.persistence.encrypted_jsonl import iter_records
+
+    if path.is_dir():
+        files = sorted(p for p in path.glob("*.jsonl") if p.is_file())
+    elif path.is_file():
+        files = [path]
+    else:
+        raise FileNotFoundError(f"no such intent log: {path}")
+    for file in files:
+        for n, line in enumerate(iter_records(file), start=1):
+            if line.unreadable:
+                continue
+            yield f"{file.name}:line {n}", line.record
 
 
 def sqlite_traces(path: Path) -> Iterator[tuple[str, str]]:
@@ -413,9 +489,9 @@ def default_collection_prefixes() -> tuple[str, ...]:
     return (CURRENT_COLLECTION_PREFIX, *old)
 
 
-def _scan(source: str, traces: Iterable[tuple[str, str]]) -> SourceReport:
+def _scan(source: str, traces: Iterable[Any], scanner=None) -> SourceReport:
     try:
-        return scan_traces(source, traces)
+        return (scanner or scan_traces)(source, traces)
     except Exception as exc:  # the exception type and the source only: a message could quote its input
         report = SourceReport(source=source)
         report.error = f"{type(exc).__name__} reading {source}"
@@ -428,6 +504,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--snapshot", type=Path, action="append", default=[])
     parser.add_argument("--fork-root", type=Path, action="append", default=[])
     parser.add_argument("--bundle", type=Path, action="append", default=[])
+    parser.add_argument("--intent-log", type=Path, action="append", default=[])
     parser.add_argument("--qdrant-host")
     parser.add_argument("--qdrant-port", type=int, default=6533)
     parser.add_argument("--qdrant-api-key-env", default="QDRANT_API_KEY")
@@ -439,7 +516,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--json", action="store_true", help="print one JSON object")
     args = parser.parse_args(argv)
-    if args.snapshot or args.fork_root or args.bundle:
+    if args.snapshot or args.fork_root or args.bundle or args.intent_log:
         install_state_key()
 
     reports: list[SourceReport] = []
@@ -452,6 +529,10 @@ def main(argv: list[str] | None = None) -> int:
         reports.append(_scan(f"snapshot:{path}", snapshot_file_traces(path)))
     for bundle in args.bundle:
         reports.append(_scan(f"bundle:{bundle}", bundle_traces(bundle)))
+    for log_path in args.intent_log:
+        reports.append(
+            _scan(f"intent_log:{log_path}", intent_log_records(log_path), scan_intent_log)
+        )
     if args.qdrant_host:
         prefixes = tuple(args.collection_prefix or default_collection_prefixes())
         api_key = os.environ.get(args.qdrant_api_key_env) or None

@@ -352,8 +352,12 @@ def test_heard_string_planted_in_any_field_never_reaches_the_trace(pair, field, 
 
 @pytest.mark.parametrize(
     "pair,field",
-    [(p, f) for p, f in _FIELDS if EPISODIC_FIELD_ALLOWLISTS[p][f] != TOKEN],
-    ids=[i for (p, f), i in zip(_FIELDS, _FIELD_IDS) if EPISODIC_FIELD_ALLOWLISTS[p][f] != TOKEN],
+    [(p, f) for p, f in _FIELDS if not EPISODIC_FIELD_ALLOWLISTS[p][f].admits(HEARD_WORD)],
+    ids=[
+        i
+        for (p, f), i in zip(_FIELDS, _FIELD_IDS)
+        if not EPISODIC_FIELD_ALLOWLISTS[p][f].admits(HEARD_WORD)
+    ],
 )
 @pytest.mark.parametrize("plant", [HEARD_WORD, [HEARD_WORD], {HEARD_WORD: 0.5}], ids=str)
 def test_heard_word_planted_in_a_fixed_value_field_never_reaches_the_trace(pair, field, plant):
@@ -365,26 +369,181 @@ def test_heard_word_planted_in_a_fixed_value_field_never_reaches_the_trace(pair,
     _assert_no_heard(_trace(source, type_, payload))
 
 
-def test_token_fields_are_only_config_labels():
-    """The token-shaped fields refuse anything with a space, and are limited to
-    the social cognition module's agent and channel labels, which come from
-    configuration and fixed channel names (the audit's provenance argument)."""
-    token_fields = sorted(
+def test_only_the_agent_fields_admit_a_free_word():
+    """A single ASCII word that is in no fixed set passes only the social
+    cognition agent fields, which hold the configured speaker label (the
+    audit's provenance argument; ``test_agent_ids_come_only_from_config_or_a_channel``)."""
+    admitting = sorted(
         (pair, field)
         for pair, rules in EPISODIC_FIELD_ALLOWLISTS.items()
         for field, rule in rules.items()
-        if rule == TOKEN
+        if rule.admits(HEARD_WORD) or rule.admits("Erik")
     )
-    assert token_fields == [
+    assert admitting == [
         (("social_cognition", "social_cognition.agent_model"), "agent_id"),
         (("social_cognition", "social_cognition.agent_model"), "agent_label"),
-        (("social_cognition", "social_cognition.agent_model"), "source_label"),
         (("social_cognition", "social_cognition.social_error"), "agent_id"),
         (("social_cognition", "social_cognition.social_error"), "agent_label"),
     ]
     assert not TOKEN.admits(HEARD)
     assert not TOKEN.admits("Alice Smith")
     assert not TOKEN.admits("x" * 65)
+
+
+@pytest.mark.parametrize(
+    "value,admitted",
+    [
+        ("operator", True),
+        ("media:playlist", True),
+        ("media:live_mic", True),
+        ("media:Alice", False),
+        ("media:", False),
+        ("media:playlist:x", False),
+        ("Alice Smith", False),
+        ("operator\n", False),
+    ],
+)
+def test_social_agent_rule(value, admitted):
+    assert own.SOCIAL_AGENT.admits(value) is admitted
+
+
+@pytest.mark.parametrize(
+    "value,admitted",
+    [("playlist", True), ("remote", True), ("microphone", True), ("Alice", False), ("", False)],
+)
+def test_source_label_is_a_fixed_channel(value, admitted):
+    rules = EPISODIC_FIELD_ALLOWLISTS[("social_cognition", "social_cognition.agent_model")]
+    assert rules["source_label"].admits(value) is admitted
+
+
+def test_audition_channels_match_the_code():
+    """Every audition channel name is set in code: the live-mic factory's modes,
+    the remote bridge, process_audio's default, and any literal
+    ``source_label=`` keyword in kaine/."""
+    import ast
+    import pathlib
+
+    import kaine
+    from kaine.boot.factories.audition import _live_mic_source_label
+    from kaine.modules.audition.module import Audition
+
+    names = {_live_mic_source_label(m) for m in ("seeded", "playlist", "stimulus_source", "screen", "live")}
+    names.add(inspect.signature(Audition.process_audio).parameters["source_label"].default)
+    literals: set[str] = set()
+    for path in pathlib.Path(kaine.__file__).parent.rglob("*.py"):
+        for node in ast.walk(ast.parse(path.read_text())):
+            if isinstance(node, ast.keyword) and node.arg == "source_label":
+                if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+                    literals.add(node.value.value)
+    assert "remote" in literals
+    assert names | literals <= own.AUDITION_CHANNELS
+    assert own.AUDITION_CHANNELS == names | literals
+
+
+def test_agent_ids_come_only_from_config_or_a_channel():
+    """Structural: the social cognition module creates an agent only with
+    ``id=agent_id, label=agent_id``; every ``agent_id`` is ``self._agent_for(event)``;
+    ``_agent_for`` returns only the configured speaker label or
+    ``media:<source_label>``; and ``source_label`` is the event's channel. A
+    change that takes agent names from heard speech fails here."""
+    import ast
+
+    from kaine.modules.social_cognition import agent as agent_mod
+    from kaine.modules.social_cognition import module as sc_module
+
+    tree = ast.parse(inspect.getsource(sc_module))
+    calls = [
+        n for n in ast.walk(tree)
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "AgentModel"
+    ]
+    assert calls
+    for call in calls:
+        kw = {k.arg: ast.unparse(k.value) for k in call.keywords}
+        assert kw == {"id": "agent_id", "label": "agent_id"}, ast.unparse(call)
+    assigns = [
+        n for n in ast.walk(tree)
+        if isinstance(n, ast.Assign)
+        and any(isinstance(t, ast.Name) and t.id == "agent_id" for t in n.targets)
+    ]
+    assert assigns
+    for node in assigns:
+        assert ast.unparse(node.value) == "self._agent_for(event)"
+    agent_for = next(
+        n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "_agent_for"
+    )
+    returns = sorted(ast.unparse(r.value) for r in ast.walk(agent_for) if isinstance(r, ast.Return))
+    assert returns == ["f'media:{source_label}'", "self._speaker_label"]
+    sources = [
+        ast.unparse(n.value) for n in ast.walk(agent_for)
+        if isinstance(n, ast.Assign)
+        and any(isinstance(t, ast.Name) and t.id == "source_label" for t in n.targets)
+    ]
+    assert sources == ["event.payload.get('source_label')"]
+    speaker = [
+        ast.unparse(n.value) for n in ast.walk(tree)
+        if isinstance(n, ast.Assign)
+        and any(ast.unparse(t) == "self._speaker_label" for t in n.targets)
+    ]
+    assert speaker == ["speaker_label"]
+    # Nothing else in the module sets an agent's id or label.
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Assign, ast.AugAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            for t in targets:
+                assert not (isinstance(t, ast.Attribute) and t.attr in ("id", "label")), ast.unparse(node)
+    # The agent store restores ids and labels only from its own records.
+    agent_src = inspect.getsource(agent_mod)
+    assert agent_src.count("cls(id=") == 1
+    assert 'cls(id=d["id"], label=d.get("label", d["id"]))' in agent_src
+
+
+# --- strip_vectors on the allowlist branch, and the numeric-list invariant ----
+
+
+def _numeric_lists(rule, field):
+    """Yield every ListOf inside ``rule`` whose items admit a number."""
+    from kaine.faithful.episodic_own_content import AnyOf, ListOf, MapOf
+
+    if isinstance(rule, ListOf):
+        if rule.item.admits(0.5):
+            yield field, rule
+        yield from _numeric_lists(rule.item, field)
+    elif isinstance(rule, AnyOf):
+        for r in rule.rules:
+            yield from _numeric_lists(r, field)
+    elif isinstance(rule, MapOf):
+        yield from _numeric_lists(rule.value, field)
+
+
+def test_allowlisted_numeric_lists_are_short_or_reviewed():
+    """A kept numeric list is shorter than the vector backstop, or sits under a
+    reviewed exempt key (a scalar per step, not a per-dimension vector), and no
+    allowlisted key is a vector field."""
+    from kaine.privacy_filter import VECTOR_BACKSTOP_MIN_LEN, VECTOR_EXEMPT_KEYS, VECTOR_FIELDS
+
+    found = []
+    for rules in EPISODIC_FIELD_ALLOWLISTS.values():
+        assert not set(rules) & VECTOR_FIELDS
+        for field, rule in rules.items():
+            for name, lst in _numeric_lists(rule, field):
+                found.append(name)
+                assert lst.max_len < VECTOR_BACKSTOP_MIN_LEN or name in VECTOR_EXEMPT_KEYS, name
+    assert found == ["step_magnitudes"]
+
+
+def test_strip_vectors_runs_on_the_allowlist_branch(monkeypatch):
+    """A rule that would admit a vector still cannot put one in a trace."""
+    from kaine.faithful.episodic_own_content import ListOf, Number
+
+    pair = ("planning", "planning.vectorish")
+    monkeypatch.setitem(
+        EPISODIC_FIELD_ALLOWLISTS,
+        pair,
+        {"latent": ListOf(Number(), 4096), "scores": ListOf(Number(), 4096), "x": Number()},
+    )
+    vector = [0.123456 + i for i in range(32)]
+    text = _trace(*pair, {"latent": vector, "scores": vector, "x": 1})
+    assert text == "active | planning:planning.vectorish={'x': 1}"
 
 
 @pytest.mark.parametrize("pair", _PAIRS, ids=_PAIR_IDS)
@@ -631,6 +790,56 @@ def test_every_declared_type_drops_a_media_file_name(pair):
     assert "'x': 1" in text
 
 
+# Every read of a playlist position or its title in kaine/modules, by file.
+# A new site (a temporary, ``.update(item=...)``, ``dict(...)``,
+# ``dataclasses.asdict(position)``) changes these counts and needs a review of
+# where the title goes.
+_MEDIA_TITLE_SITES = {
+    ("kaine/modules/audition/feed.py", "PlaylistPosition"): 2,
+    ("kaine/modules/audition/feed.py", "def current_item"): 1,
+    ("kaine/modules/audition/module.py", "title"): 1,
+    # NotifyEffector: a notification's title, not media.
+    ("kaine/modules/effectors/effectors.py", "title"): 2,
+    ("kaine/modules/perception_transition.py", "PlaylistPosition"): 2,
+    ("kaine/modules/perception_transition.py", "current_item"): 2,
+    ("kaine/modules/perception_transition.py", "def current_item"): 2,
+    ("kaine/modules/vision/feed.py", "PlaylistPosition"): 2,
+    ("kaine/modules/vision/feed.py", "def current_item"): 1,
+    ("kaine/modules/vision/live.py", "def current_item"): 1,
+    ("kaine/modules/vision/module.py", "current_item"): 1,
+    ("kaine/modules/vision/module.py", "title"): 1,
+}
+
+
+def test_every_read_of_a_playlist_position_is_a_reviewed_site():
+    import ast
+    import collections
+    import pathlib
+
+    import kaine
+
+    repo = pathlib.Path(kaine.__file__).parent.parent
+    found: collections.Counter = collections.Counter()
+    asdict_sites = set()
+    for path in sorted((repo / "kaine" / "modules").rglob("*.py")):
+        rel = str(path.relative_to(repo))
+        for node in ast.walk(ast.parse(path.read_text())):
+            if isinstance(node, ast.Attribute) and node.attr in ("title", "current_item"):
+                found[(rel, node.attr)] += 1
+            if isinstance(node, ast.Name) and node.id == "PlaylistPosition":
+                found[(rel, "PlaylistPosition")] += 1
+            if isinstance(node, ast.Attribute) and node.attr == "PlaylistPosition":
+                found[(rel, "PlaylistPosition")] += 1
+            if isinstance(node, ast.FunctionDef) and node.name == "current_item":
+                found[(rel, "def current_item")] += 1
+            if isinstance(node, ast.Call):
+                name = node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, "id", "")
+                if name in ("asdict", "astuple"):
+                    asdict_sites.add(rel)
+    assert dict(found) == _MEDIA_TITLE_SITES
+    assert asdict_sites == {"kaine/modules/sleep/module.py"}
+
+
 def test_every_field_a_module_fills_from_a_media_title_is_media_metadata():
     """Any payload key a module fills from a ``.title`` attribute (a subscript
     assignment or a dict literal) is in the shared media list."""
@@ -658,5 +867,8 @@ def test_every_field_a_module_fills_from_a_media_title_is_media_metadata():
                 for key, value in zip(node.keys, node.values):
                     if isinstance(key, ast.Constant) and _is_title(value):
                         found.add(key.value)
+            elif isinstance(node, ast.keyword) and node.arg and _is_title(node.value):
+                # dict(item=pos.title), payload.update(item=pos.title), Event(item=...)
+                found.add(node.arg)
     assert found == {"item"}
     assert found <= MEDIA_METADATA_FIELDS

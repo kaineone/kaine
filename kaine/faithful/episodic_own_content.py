@@ -12,10 +12,10 @@ pairs whose producers were audited field by field
 
 Each audited pair has a field allowlist. The store keeps a field only when the
 allowlist names it and its value passes the field's rule; every other field,
-including one a producer adds later, is dropped. Free text is never allowed: a
-string field must be one of a fixed set of values or match a short token
-pattern with no spaces, so a heard sentence cannot pass even if a producer
-started to copy one. The heard rule still runs first, so a member with a heard
+including one a producer adds later, is dropped. Free text is never allowed:
+a string field must be one of a fixed set of values, a trace id, or the
+configured speaker label (a short token with no spaces), so a heard sentence
+cannot pass even if a producer started to copy one. The heard rule still runs first, so a member with a heard
 field is stored as ``<heard omitted>`` whatever its type.
 
 It also names fields of declared types that the store drops although the
@@ -132,6 +132,24 @@ class MapOf(FieldRule):
 
 # A short label from code or operator configuration: no spaces, no quotes.
 TOKEN = Matches(re.compile(r"[A-Za-z0-9_.:\-]{1,64}"))
+
+# The audition module's channel names, set in code only:
+# kaine.boot.factories.audition._live_mic_source_label, the remote bridge and
+# Audition.process_audio's default.
+AUDITION_CHANNELS: frozenset[str] = frozenset(
+    {"live_mic", "seeded", "playlist", "stimulus_source", "screen", "remote", "microphone"}
+)
+AUDITION_CHANNEL = OneOf(AUDITION_CHANNELS)
+
+# A social cognition agent: ``media:<channel>`` for a fixed channel, or the
+# configured ``[social_cognition].speaker_label`` (a token that does not start
+# with ``media:``). The module creates agent ids only in these two forms.
+SOCIAL_AGENT = AnyOf(
+    (
+        Matches(re.compile("media:(?:" + "|".join(sorted(AUDITION_CHANNELS)) + ")")),
+        Matches(re.compile(r"(?!media:)[A-Za-z0-9_.:\-]{1,64}")),
+    )
+)
 
 # The store's own trace ids: a uuid (hex or dashed), a backend integer id, or a
 # short-term buffer slot.
@@ -367,16 +385,16 @@ EPISODIC_FIELD_ALLOWLISTS: Mapping[tuple[str, str], Mapping[str, FieldRule]] = {
         "planning_proposals_forwarded": _N,
     },
     ("social_cognition", "social_cognition.agent_model"): {
-        "agent_id": TOKEN,
-        "agent_label": TOKEN,
+        "agent_id": SOCIAL_AGENT,
+        "agent_label": SOCIAL_AGENT,
         "familiarity": _N,
         "reliability": _N,
         "interaction_count": _N,
-        "source_label": TOKEN,
+        "source_label": AUDITION_CHANNEL,
     },
     ("social_cognition", "social_cognition.social_error"): {
-        "agent_id": TOKEN,
-        "agent_label": TOKEN,
+        "agent_id": SOCIAL_AGENT,
+        "agent_label": SOCIAL_AGENT,
         "salience": _N,
         "deviation_magnitude": _N,
     },

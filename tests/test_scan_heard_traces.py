@@ -335,3 +335,71 @@ def test_error_holds_the_exception_type_and_source_only(tmp_path: Path, capsys, 
         assert report["error"] == f"ValueError reading snapshot:{path}"
     else:
         assert f"ERROR ValueError reading snapshot:{path}" in out
+
+
+# --- intent logs: counts of records that hold the media file name ----------------
+
+FILM = "Some-Film-Title-1987.mkv"
+
+
+def _intent_log(path: Path) -> list[str]:
+    ids = ["a" * 32, "b" * 32, "c" * 32, "d" * 32]
+    records = [
+        # A numeric-mode record from before the fix: the fallback line in the prompt
+        # and the rendering, so a voice-alignment pair would hold the file name.
+        {
+            "record_id": ids[0],
+            "prompt": f"- audition emitted audition.perception carrying change_score=0.3, item={FILM}.",
+            "faithful_rendering": f"- audition emitted audition.perception carrying item={FILM}.",
+            "generated_text": "reply",
+        },
+        # A felt-mode record: only the numeric sidecar holds it.
+        {
+            "record_id": ids[1],
+            "prompt": "- What I hear is changing.",
+            "faithful_rendering": "- What I hear is changing.",
+            "numeric_rendering": f"- audition emitted audition.perception carrying item={FILM}.",
+        },
+        {"record_id": ids[2], "prompt": "- What I see is still.", "faithful_rendering": "x"},
+        # An unknown field, and a record id that is not a record id.
+        {"record_id": f"id {FILM}", "mystery": {"item": FILM}},
+    ]
+    path.write_text("".join(json.dumps(r) + "\n" for r in records))
+    return ids
+
+
+@pytest.mark.parametrize("as_json", [False, True])
+def test_intent_log_scan_counts_media_items_without_content(tmp_path: Path, capsys, as_json):
+    log = tmp_path / "intent.jsonl"
+    ids = _intent_log(log)
+    before = _sha([log])
+    argv = ["--intent-log", str(log)] + (["--json"] if as_json else [])
+    assert scan.main(argv) == 1
+    out = capsys.readouterr().out
+    assert "Some-Film" not in out
+    assert "1987" not in out
+    assert _sha([log]) == before
+    assert ids[0] in out and ids[1] in out and ids[2] not in out
+    assert "intent.jsonl:line 4" in out
+    if as_json:
+        report = json.loads(out)["reports"][0]
+        assert report["traces"] == 4
+        assert report["flagged"] == 3
+        assert report["by_member_type"] == {
+            "intent_log:<other field>": 1,
+            "intent_log:faithful_rendering": 1,
+            "intent_log:numeric_rendering": 1,
+            "intent_log:prompt": 1,
+        }
+
+
+def test_intent_log_scan_reads_a_directory_and_a_clean_log_exits_zero(tmp_path: Path, capsys):
+    (tmp_path / "a.jsonl").write_text(json.dumps({"record_id": "e" * 32, "prompt": "- calm."}) + "\n")
+    assert scan.main(["--intent-log", str(tmp_path), "--json"]) == 0
+    report = json.loads(capsys.readouterr().out)["reports"][0]
+    assert report["traces"] == 1 and report["flagged"] == 0
+
+
+def test_missing_intent_log_is_an_error_without_content(tmp_path: Path, capsys):
+    assert scan.main(["--intent-log", str(tmp_path / "nope.jsonl")]) == 2
+    assert "FileNotFoundError" in capsys.readouterr().out
