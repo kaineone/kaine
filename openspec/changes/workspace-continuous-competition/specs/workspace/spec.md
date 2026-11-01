@@ -3,16 +3,16 @@
 ### Requirement: Top-k coalition selection
 `Workspace.select` SHALL return a `WorkspaceSnapshot` whose
 `selected_events` is the top `top_k` events by salience, ordered
-descending. The default `top_k` SHALL be 1, one accessed content per broadcast,
-and SHALL be configurable at construction time and adjustable at runtime via
-`set_top_k`. The shipped configuration SHALL set `top_k = 1`.
-
-#### Scenario: Top-1 of ten events
-- **WHEN** ten events are presented with distinct salience scores and the default capacity
-- **THEN** the returned snapshot contains exactly the highest-scoring event
+descending, except that with the candidate pool on, eligible overdue
+protected members come first as the priority requirement states. The
+default `top_k` SHALL be 5 and SHALL be configurable at construction time
+and adjustable at runtime via `set_top_k`. With `[workspace.pool].enabled`
+true, the cycle SHALL build the workspace with `top_k` equal to
+`[workspace.pool].capacity` (default 1) and SHALL NOT read
+`[workspace].top_k`.
 
 #### Scenario: Top-5 of ten events
-- **WHEN** ten events are presented with distinct salience scores and `top_k=5`
+- **WHEN** ten events are presented with distinct salience scores
 - **THEN** the returned snapshot contains exactly five events in
   descending salience order
 
@@ -20,64 +20,55 @@ and SHALL be configurable at construction time and adjustable at runtime via
 - **WHEN** two events are presented with `top_k=5`
 - **THEN** the snapshot contains both events without padding
 
-### Requirement: Broadcasts carry the access threshold
-Every competitive and matched broadcast SHALL record the access threshold in its metadata under `access_threshold`, and every broadcast SHALL name its accessed members under `accessed_ids`. In the competitive arm the accessed members are the coalition members whose score reaches the threshold; in the matched arm they are the drawn members, whatever their score; in the pooled arm they are every member. Processors SHALL take the members named in `accessed_ids` as accessed content and SHALL NOT re-apply the threshold. A broadcast is accessed when at least one member is.
-
-#### Scenario: A rider below the threshold is not accessed
-- **WHEN** a competitive broadcast's coalition has members scoring 0.5 and 0.1 with an access threshold of 0.35
-- **THEN** its metadata records the threshold 0.35, and only the member scoring 0.5 is in `accessed_ids`
-
-#### Scenario: A drawn member below the threshold enters the context
-- **WHEN** the matched arm draws a member scoring 0.1 against a threshold of 0.35
-- **THEN** the member is in `accessed_ids` and enters the processors' context
-
-## REMOVED Requirements
-
-### Requirement: The matched arm draws a score-blind coalition of the competitive size
-**Reason**: Drawing `min(top_k, n)` members and then applying the threshold makes the matched arm equal the competitive arm whenever the pool is no larger than the capacity, and once capacity binds it changes how often access happens instead of what is accessed. Replaced by "The matched arm is count-yoked to the competitive selection".
-**Migration**: Matched-arm runs recorded before this change used the old rule; their records carry `coalition_capacity` and no `matched_counterfactual`, so readers can tell them apart. No pilot or live run of the planned test has been run.
+#### Scenario: One access per broadcast with the pool on
+- **WHEN** the pool is on with the default capacity and six held members score 0.9, 0.7, 0.6, 0.5, 0.2 and 0.1 with none protected
+- **THEN** the snapshot contains only the member scoring 0.9
 
 ## ADDED Requirements
 
-### Requirement: The matched arm is count-yoked to the competitive selection
-On a broadcast tick the matched arm SHALL score every candidate, compose the competitive selection over the same scores as a counterfactual, and be inhibited when it is. Otherwise, with `a` its accessed count, it SHALL draw `a` candidates uniformly without replacement, regardless of score, from a generator seeded from the run seed, order them by score and access all of them. The score table SHALL hold every candidate's score.
+### Requirement: A protected member is overdue after the priority wait
+With the pool on, a protected member SHALL be overdue when its episode has been pending for at least `[workspace.pool].priority_wait_s` (default 1.0 s) of unpaused entity time, and eligible when its final score reaches the access threshold.
 
-#### Scenario: Access follows the competitive selection
-- **WHEN** a broadcast tick has six candidates, `top_k=1`, and the best scores 0.9 against a threshold of 0.35
-- **THEN** the matched snapshot is not inhibited and has one member drawn from the six, whatever its score
+#### Scenario: Not yet overdue
+- **WHEN** a boredom drive event scoring 0.4 has been pending 0.6 s and an audition report scores 0.9, with the threshold 0.35
+- **THEN** the coalition is the audition report
 
-#### Scenario: Inhibition follows the competitive selection
-- **WHEN** every candidate scores below the threshold
-- **THEN** the matched snapshot is inhibited and draws no member
+### Requirement: Overdue protected members take the coalition first
+The coalition SHALL take the eligible overdue protected members first, the longest pending first and ties by key name, then the other candidates by score, up to the capacity. A member below the threshold SHALL NOT be placed by this rule, and the snapshot SHALL be inhibited exactly when no candidate reaches the threshold.
 
-#### Scenario: The same seed reproduces the draws
-- **WHEN** two matched runs with the same seed see the same broadcast ticks
-- **THEN** they draw the same coalitions
+#### Scenario: A concern waits no longer than the bound
+- **WHEN** a boredom drive event scoring 0.4 has been pending 1.2 s, the threshold is 0.35, and an audition report scores 0.9
+- **THEN** the coalition is the boredom event
 
-### Requirement: The matched arm draws only on broadcast ticks and keeps no generator state
-A tick that is not a broadcast tick SHALL draw nothing, and a context that does not say whether the tick is a broadcast tick SHALL be refused rather than fall back to top-k selection. The generator's state SHALL NOT be persisted: the draws are reproducible within one uninterrupted run, and a restart or revive starts the stream again from the seed.
+#### Scenario: Below the threshold the rule does nothing
+- **WHEN** an interoceptive alarm scoring 0.2 has been pending 5 s, the threshold is 0.35, and a vision report scores 0.6
+- **THEN** the coalition is the vision report and the alarm stays held
 
-#### Scenario: A matched selection without the broadcast flag is refused
-- **WHEN** a matched `select` is called with a context that has no `is_experiential` key
-- **THEN** it raises `ValueError`
+#### Scenario: Oldest pending first
+- **WHEN** a fatigue event pending 3 s and a restlessness event pending 1.5 s are both eligible and overdue at capacity 1
+- **THEN** the coalition is the fatigue event, and the restlessness event is accessed on a later broadcast tick on which it is eligible
 
-### Requirement: A matched snapshot carries its counterfactual without content
-A matched snapshot SHALL carry, in its metadata, the content-free comparison of its drawn membership with the counterfactual's: the membership divergence, the counterfactual's accessed count and its inhibition.
-
-#### Scenario: The counterfactual is logged without content
-- **WHEN** a matched broadcast is composed
-- **THEN** its metadata carries the membership divergence, the accessed count and the inhibition of the counterfactual, and no event id or payload of the counterfactual
+#### Scenario: The bound in broadcasts
+- **WHEN** all eight protected keys are pending and eligible on every broadcast tick from the time they become overdue, at capacity 1
+- **THEN** every key is accessed within eight broadcast ticks of becoming overdue
 
 ### Requirement: Novelty is evaluated once per report
-The salience strategy SHALL observe a candidate's novelty once, on the first tick it is scored, and SHALL reuse that value on every later tick while the report is held, keyed by its stream-qualified id. The cached value SHALL be dropped when the report leaves the pool.
+With the pool on, the salience strategy SHALL observe a candidate's novelty once, on the first tick it is scored, and SHALL reuse that value on every later tick while the member is held, keyed by its stream-qualified id. The cached value SHALL be dropped when the member leaves the pool.
 
 #### Scenario: A held report keeps its novelty
 - **WHEN** a report scored with novelty 1.0 is held for five ticks
 - **THEN** its novelty is 1.0 on every tick and the novelty window received one observation of it
 
 ### Requirement: A held report is scored with the current gains
-On every tick a held report SHALL be scored with that tick's arousal contrast, gains and goal factor, from its own intensity and its cached novelty.
+On every tick a held member SHALL be scored with that tick's arousal contrast, gains, goal factor, coherence factor and regulation bias, from its own intensity and its cached novelty.
 
 #### Scenario: Arousal rises while a report is held
 - **WHEN** arousal rises between two ticks on which the same report is held
 - **THEN** its score on the second tick reflects the second tick's contrast
+
+### Requirement: The feedback head observes arrivals only
+With the pool on, `Workspace.select` SHALL take the tick's arrivals separately from the candidates, and the feedback head's `observe_candidates` SHALL receive the arrivals only.
+
+#### Scenario: A held report is observed once
+- **WHEN** feedback is on and a vision report is held for three ticks
+- **THEN** `observe_candidates` received it on its arrival tick only
