@@ -6,7 +6,7 @@
 
 - [ ] 1.1 `kaine/cycle/candidate_pool.py`: report keys and protected keys; replace on arrival; consume accessed members after a published broadcast; stale rule for declared periodic types (running mean of the last eight intervals, nominal period until two) and `event_hold_s` for event-driven types; protected members leave only on access or replacement and keep `pending_since` across replacement; unpaused entity time from `CycleEngine.paused_subjective_seconds`; per-minute content-free summary. `[workspace.pool]` parses `enabled`, `capacity`, `stale_tolerance`, `event_hold_s`, `priority_wait_s` and refuses unknown keys; the `[workspace]` key guard accepts the subtable. Tests in `tests/test_candidate_pool.py`: supersede, consume, inhibited consumes nothing, failed publish consumes nothing, stale periodic, event-driven hold, protected never stale, replacement keeps the pending time, access closes the episode, a freeze ages nothing, no event is created or copied (identity check on held objects), the pool is not in the checkpoint or a bundle.
 - [ ] 1.2 `PERIODIC_REPORT_TYPES` with nominal periods (vision, audition perception and emotion, interoception, affect state, sequence report) and `PROTECTED_REPORT_TYPES` (affect: `affect.drive` keyed by `drive` over the four drives; interoception: alarm report, fatigue, regulation); boot refuses a bad period; `N_p` recorded in the run manifest. Tests over the registry, including that every drive in `DriveSet` is declared and that classification reads no payload field but `alert` and the key field.
-- [ ] 1.3 The citations and design-choice labels of design D2, D3 and D5 at the code sites.
+- [ ] 1.3 The citations and design-choice labels of design D2, D3, D5 and D13 at the code sites: `priority_wait_s`, `event_hold_s`, `stale_tolerance` and the SA1/SA2 bars each labelled a design choice with its reasoning, here and in Table A1; the descending-modulation rationale at the regulation-bias site.
 
 ## 2. Engine
 
@@ -26,6 +26,7 @@
 ## 4. Records
 
 - [ ] 4.1 Research event observer: `pool_size`, `n_accessed`, per-member `held`, `held_s`, `protected`, `pending_s`, `route`; the pool summary; protected access records; defect records; the range sweep bounds the new numeric fields. Tests in the observer test module, including that no payload field appears.
+- [ ] 4.3 The regulated-below-threshold count per protected key in the pool summary and the readout (design D13). Test: tier-1 regulation on interoception with an alarm above θ before the bias and below after is counted and never accessed.
 - [ ] 4.2 Ignition log: pool size and per-member `held`, `held_s`, `protected`. Test that no payload field appears.
 
 ## 5. Preservation

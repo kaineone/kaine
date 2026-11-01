@@ -52,6 +52,13 @@ The coalition SHALL take the eligible overdue protected members first, the longe
 - **WHEN** all eight protected keys are pending and eligible on every broadcast tick from the time they become overdue, at capacity 1
 - **THEN** every key is accessed within eight broadcast ticks of becoming overdue
 
+### Requirement: No member below the threshold is accessed, and regulation may hold an alarm below it
+The priority rule SHALL read each protected member's score after the coherence factor and the tier-1 regulation bias. No route SHALL access a member whose final score is below the access threshold, a protected one included, and the regulation bias MAY lower a protected member's score below the threshold.
+
+#### Scenario: An alarm regulated below the threshold
+- **WHEN** tier-1 regulation holds interoception with factor 0.5 and an overdue alarm scores 0.6 before the bias and 0.3 after it, with the threshold 0.35
+- **THEN** the alarm is not in the coalition and stays held
+
 ### Requirement: Novelty is evaluated once per report
 With the pool on, the salience strategy SHALL observe a candidate's novelty once, on the first tick it is scored, and SHALL reuse that value on every later tick while the member is held, keyed by its stream-qualified id. The cached value SHALL be dropped when the member leaves the pool.
 

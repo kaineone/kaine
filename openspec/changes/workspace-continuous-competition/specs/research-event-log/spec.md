@@ -18,6 +18,13 @@ With the pool on, the cycle SHALL write a pool summary to the research log once 
 - **WHEN** one entity minute passes with the pool on
 - **THEN** one pool summary record is written and it holds no payload field
 
+### Requirement: The pool summary counts alarms regulated below the threshold
+The pool summary SHALL count, per protected key, the broadcast ticks on which its member scored at or above the access threshold before the tier-1 regulation bias and below it after.
+
+#### Scenario: An alarm regulated below the threshold
+- **WHEN** during one entity minute an interoceptive alarm scores above the threshold before the regulation bias and below it after on three broadcast ticks
+- **THEN** that minute's pool summary counts three regulated-below-threshold ticks for the alarm's key
+
 ### Requirement: Every closed protected episode is recorded
 With the pool on, each access of a protected member SHALL write a content-free record with the key name, `pending_s`, the broadcast ticks waited, the counted ticks of the wait bound and the route.
 

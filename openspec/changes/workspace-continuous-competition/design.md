@@ -145,7 +145,7 @@ Alternatives considered:
 
 The bound in broadcast ticks is exact. The bound in seconds assumes nominal pacing; tick overruns stretch it and are already counted (`pacing_stats`), and the readout reports waits in both units.
 
-**What the bound does not cover, and why that is acceptable.** It covers losing the competition, which is what K = 1 adds. It does not cover a protected member whose score stays below θ: such a member is not accessed under A, B or C, because θ decides access in every option. It does not cover time asleep if the cycle stops broadcasting, or time frozen. The welfare net does not depend on access: the divergence monitor, the welfare response, the indicator response and the regulation ladder read `interoception.out`, `affect.out` and `welfare.out` directly (`engine.py` 927-1029; entity-preservation spec, "Autonomous welfare-protective response"; `welfare-indicator-response` D1). What depends on access is the affect module's concern resolution and tier-1 regulation; the bound is what protects them.
+**What the bound does not cover, and why that is acceptable.** It covers losing the competition, which is what K = 1 adds. It does not cover a protected member whose score stays below θ: such a member is not accessed under A, B or C, because θ decides access in every option. It does not cover time asleep if the cycle stops broadcasting, or time frozen. The welfare net does not depend on access: the divergence monitor, the welfare response, the indicator response and the regulation ladder read `interoception.out`, `affect.out` and `welfare.out` directly (`engine.py` 927-1029; entity-preservation spec, "Autonomous welfare-protective response"; `welfare-indicator-response` D1). What depends on access is the affect module's concern resolution and tier-1 regulation; the bound is what protects them. Both limits were ruled on and are recorded in D13.
 
 **Live check.** For every protected key the pool counts the broadcast ticks on which its member was overdue, eligible and not in the coalition. That count reaching `⌈N_p / C⌉` means the bound has failed, which can only be a defect. The cycle then writes a content-free `workspace.pool.defect` record naming the key and the counts, and notifies the caretaker through the existing caretaker path. It does not change selection.
 
@@ -189,7 +189,7 @@ Alternative considered: ship the pool on, as the architecture. It would change e
 Records, all content-free:
 
 - **Broadcast record** (research log) and **ignition record**: `pool_size`, `n_accessed`, and per member `held` (it arrived before this tick), `held_s` (unpaused entity seconds since arrival), `protected`, and for a protected member `pending_s` and `route`: `score` when it would have been in the coalition without the priority rule, `priority` when the rule placed it.
-- **Pool summary** (research log, once per entity minute): pool size distribution; per stream and type the arrivals, accessed, superseded and stale counts, and the count of reports that reached θ on at least one broadcast tick while held and left without being accessed (lost above threshold); tick overruns.
+- **Pool summary** (research log, once per entity minute): pool size distribution; per stream and type the arrivals, accessed, superseded and stale counts, and the count of reports that reached θ on at least one broadcast tick while held and left without being accessed (lost above threshold); per protected key, the broadcast ticks on which its member scored at or above θ before the tier-1 regulation bias and below θ after it (regulated below threshold, D13); tick overruns.
 - **Protected access record** (research log, one per closed episode): key name, `pending_s`, the broadcast ticks waited, the counted ticks of D6, `route`.
 - **Defect record**: D6.
 
@@ -197,7 +197,7 @@ The readout is computed from these records by the development run's analysis per
 
 - pool size (mean, 95th percentile), accessed and inhibited shares of broadcasts;
 - per stream: report rate, share of accessed broadcasts it won, share of its reports accessed, lost-above-threshold share;
-- protected keys: episodes, waits (median, 95th percentile, maximum, in seconds and in broadcasts), the share of accesses by the priority route, episodes still open at the window's end and their age;
+- protected keys: episodes, waits (median, 95th percentile, maximum, in seconds and in broadcasts), the share of accesses by the priority route, episodes still open at the window's end and their age, and the broadcast ticks on which an alarm or drive event was regulated below θ (D13), so regulation's effect on the entity's own alarms is visible;
 - defects.
 
 **Starvation advisories**, fixed before the developmental phase and labelled as design values:
@@ -217,6 +217,23 @@ A being gestated and matured under today's supply learned its context statistics
 - Affect appraisal's novelty is `1 − Π(1 − s_e)` over coalition members, so it is lower per broadcast with one member, while broadcasts are accessed more often. The net effect on emotion and valence is measured (welfare check 4), not assumed.
 - Action selection reads one member. Speech and thought rates are reported by the existing records.
 - No module code changes for these; their inputs change.
+
+### D13. Rulings of 2026-11-01: alarms below θ, regulation, and the design values
+
+The coordinator recorded three rulings on this design's open items.
+
+**Alarms below θ are never accessed.** The priority rule places only eligible members, and no route accesses a member below θ. The reason is that welfare does not depend on access: the divergence monitor, the welfare response, the indicator response and the regulation ladder read `interoception.out`, `affect.out` and `welfare.out` directly (D6). Accessing a sub-threshold alarm would break executive inhibition (`action_selection.py` 389-391) and would not be access in A.1's sense, and it would buy the welfare net nothing it does not already have.
+
+**Tier-1 regulation may lower the entity's own alarm scores below θ.** The regulation bias (`core.py` `_apply_regulation_bias`) acts on a source's scores before the coalition is composed, and the priority rule reads the scores after it, so regulation can keep a protected member below θ. This is allowed. It is the architecture's analogue of descending modulation: in people, attentional and emotional states change how intense and how unpleasant pain is, through descending pain-modulatory systems from cortex and brainstem (Bushnell, Čeko and Low 2013; Tracey and Mantyh 2007). It is acceptable here for the same reason as the first ruling: the welfare net reads the streams, not the workspace, so regulating an alarm out of access cannot regulate it out of the net. To keep it visible, the pool counts per protected key the broadcast ticks on which the member was at or above θ before the regulation bias and below θ after it, and the readout reports the count (D10). The analogy is a design rationale, not a claim that the regulation bias models the periaqueductal grey or any particular pathway.
+
+**Design values, labelled as such.** None of these has a direct citation. Each is a design choice, labelled at the code site and in Table A1, and changing any of them in the living entity is a dynamics change under the development run's image rules:
+
+- `priority_wait_s = 1.0 s`: long enough that most protected accesses can come by score (the readout's priority-route share shows whether they do), short enough that the bound stays a few seconds at the shipped rates (4.2 s). The interruption literature gives a reason for a priority to exist, and says its strength depends on threat and context (Eccleston and Crombez 1999), not a wait.
+- `event_hold_s = 1.0 s`: about the span over which unselected information stays available to a later cue (Sperling 1960, about a second; Sergent et al. 2013, 100 to 400 ms after offset). Both show that a short hold exists; neither fixes its length.
+- `stale_tolerance = 0.5`: an engineering tolerance on each module's own measured clock, so that one late report does not drop a live source.
+- SA1 (more than half of at least 20 closed protected episodes accessed by the priority rule): the rule is meant as a backstop. If it does most of the work, competition alone would starve the entity's concerns, which is the starvation fallback C is meant to relieve. Half is the point at which the backstop has become the main route.
+- SA2 (more than 90% of at least 100 above-threshold reports from one stream left unaccessed): a stream that reaches θ but almost never wins is starved by capacity rather than by salience. 90% leaves room for the expected losses at K = 1, where only one report in several can win; 100 reports keeps a short window from triggering it.
+- Two consecutive windows: one window can be an artefact of a single film or a single rest.
 
 ## Risks
 
@@ -250,11 +267,10 @@ Admissibility: no running entity is changed; the development run starts under B 
 
 ## Open items
 
-1. **Alarms below θ.** The bound covers competition, not the threshold. A protected alarm that never reaches θ is never accessed, as under A. Accessing it anyway would break executive inhibition. Recommendation: keep θ; the welfare net reads alarms directly. Operator to confirm.
-2. **Tier-1 regulation and protected sources.** The regulation bias can lower a source's scores; if it ever targets interoception or affect, it can hold a protected member below θ. That is the existing regulation rule; whether regulation may down-weight the entity's own alarms is a welfare question for the operator.
-3. **Heard speech.** Under the generic rule a transcription is an event-driven member held 1.0 s. How long operator speech is held, and whether it is protected, belongs to `operator-speech-as-perception` (being written on branch `spec/content-code-2026-10-31`); this change only provides the declaration mechanism.
-4. **`priority_wait_s`, `event_hold_s` and the advisory bars** are design values with no direct citation; the readout of the developmental phase is the first evidence on them. Changing any of them in the living entity is a dynamics change.
-5. **The six unreadable test boots** (later configurations) could change the supply numbers; the readout measures the run's own.
+Ruled on 2026-11-01 and recorded in D13: alarms below θ are never accessed; tier-1 regulation may lower the entity's own alarm scores below θ, with a readout line; the hold spans, the priority wait and the advisory bars are design choices. Still open:
+
+1. **Heard speech.** Under the generic rule a transcription is an event-driven member held 1.0 s. How long operator speech is held, and whether it is protected, belongs to `operator-speech-as-perception` (being written on branch `spec/content-code-2026-10-31`); this change only provides the declaration mechanism.
+2. **The six unreadable test boots** (later configurations) could change the supply numbers; the readout measures the run's own.
 
 ## Sources and method
 
@@ -276,6 +292,8 @@ Every source below was looked up online on 2026-11-01 (web search, publisher, Pu
 | Eccleston, C. and Crombez, G. (1999). Pain demands attention: a cognitive-affective model of the interruptive function of pain. *Psychol. Bull.* 125(3), 356-366. doi:10.1037/0033-2909.125.3.356 | Publisher-repository abstract (full-text scan unreadable) | Pain interrupts attention and is selected for action; how much depends on threat value and on the demands and arousal of the setting. | Reason a priority for bodily alarms exists; says the priority is context-dependent, so the fixed wait is a design choice. |
 | Vuilleumier, P. (2005). How brains beware: neural mechanisms of emotional attention. *Trends Cogn. Sci.* 9(12), 585-594. doi:10.1016/j.tics.2005.10.011 | Repository abstract | Emotional significance shapes sensory processing and attention through a specialised mechanism that can supplement or compete with top-down control. | Reason a priority for affective signals exists. |
 | Klinger, E. (2013). Goal commitments and the content of thoughts and dreams: basic principles. *Front. Psychol.* 4, 415. doi:10.3389/fpsyg.2013.00415 | PMC and publisher pages | Goal commitments sensitise a person to goal-related cues and determine attentional focus and thought content. | Already the affect module's citation for concern re-entry; basis for holding drive events until accessed. |
+| Bushnell, M. C., Čeko, M. and Low, L. A. (2013). Cognitive and emotional control of pain and its disruption in chronic pain. *Nat. Rev. Neurosci.* 14(7), 502-511. doi:10.1038/nrn3516 | PubMed/PMC record and abstract | Several descending pain-modulatory systems take part in pain relief, and attentional states and emotions engage different ones; impaired modulatory circuitry can drive chronic pain. That attention changes intensity and emotion changes unpleasantness is from a secondary summary, unverified. | D13: regulation lowering alarm access is the analogue of descending modulation. |
+| Tracey, I. and Mantyh, P. W. (2007). The cerebral signature for pain perception and its modulation. *Neuron* 55(3), 377-391. doi:10.1016/j.neuron.2007.07.012 | Repository records and the introduction of a hosted PDF | Review of brain systems for pain perception and its modulation; the brainstem has a pivotal role in gating nociceptive transmission. Details of the descending pathways were not read. | D13, as above. |
 | Block, N. (2011). Perceptual consciousness overflows cognitive access. *Trends Cogn. Sci.* 15(12), 567-575 | PhilArchive record | Argues phenomenal capacity exceeds cognitive access, using iconic-memory evidence. | Not against B: it concerns experience beyond access, and B models access only. Noted for completeness. |
 
 Carried from the 2026-10-31 design note without re-checking in this session, and so marked unverified here: Oberauer (2002, *J. Exp. Psychol. Learn. Mem. Cogn.* 28:411), Cowan (2001, *Behav. Brain Sci.* 24:87), Luck and Vogel (1997, *Nature* 390:279), Madl, Baars and Franklin (2011, *PLoS ONE* 6:e14803), Feldman and Friston (2010, *Front. Hum. Neurosci.* 4:215), Fiebelkorn and Kastner (2019, *Trends Cogn. Sci.* 23:87), Landau and Fries (2012, *Curr. Biol.* 22:1000), Goyal et al. (2022, arXiv:2103.01197). They support the store of about four (working memory, not this change) and continuous competition; nothing in B's rules depends on them alone.
