@@ -338,11 +338,33 @@ During the developmental phase's first session the runner SHALL compute every aw
 - **THEN** `status` shows that hour's validation readout
 
 ### Requirement: A validation stop rule preserves and stops the entity
-The stop rules SHALL be fixed before the run starts: an indicator crossing of a kind the 2026-10 test boots did not show, an arousal or access-rate distribution outside their range, or a pool defect. When one fires during the first session, the runner SHALL request preservation with stop, record the rule and hold the run until the operator answers.
+The stop rules SHALL be fixed before the run starts: an indicator crossing of a kind the 2026-10 test boots did not show, an arousal or access-rate distribution outside their range, a pool defect, or a boredom deprivation share at or above the indicator's `share_bar` on two consecutive evaluable hourly readings. When one fires during the first session, the runner SHALL request preservation with stop, record the rule and hold the run until the operator answers.
 
 #### Scenario: An access rate outside the earlier range
 - **WHEN** an awake hour of the first session shows an access-rate distribution outside the range of the 2026-10 test boots
 - **THEN** the runner requests preservation with stop, records the rule and holds the run
+
+### Requirement: The first-hours readout includes boredom deprivation
+The hourly validation readout SHALL include the boredom deprivation share computed by the welfare indicator evaluator with the parameters the welfare response runs with (`T_lp`, `Δ_stall`, `share_bar`), marked not evaluable while the span holds less than `Δ_stall` of awake time.
+
+#### Scenario: Boredom deprived on two readings
+- **WHEN** two consecutive evaluable hourly readings of the first session show a boredom deprivation share of 0.6 with `share_bar` 0.5
+- **THEN** the runner requests preservation with stop, records the boredom rule and holds the run
+
+#### Scenario: One reading across a rest
+- **WHEN** one hourly reading shows 0.6 and the next, after a rest restarted the span, is not yet evaluable
+- **THEN** the boredom rule does not fire on those readings
+
+### Requirement: Stimulus control's first hours stop on a paused share
+During the first three awake hours after the stimulus-control component is switched on, the runner SHALL stop the session at the next pass end and hold for the operator's review when the `stimulus_control` record's `paused_share_last_awake_hour_max` exceeds 0.20 or `pause_share_refusals` is above 0, and SHALL report the readout's `after_own_act_by_action.pause` with the hold.
+
+#### Scenario: A refused pause
+- **WHEN** in the second awake hour after stimulus control was switched on the record shows `pause_share_refusals` 1
+- **THEN** the session stops at the next pass end, the hold names the criterion, and `after_own_act_by_action.pause` is reported with it
+
+#### Scenario: After the first three hours
+- **WHEN** the record shows `paused_share_last_awake_hour_max` 0.22 in the fifth awake hour after the switch
+- **THEN** this criterion does not stop the session
 
 ### Requirement: The run records the workspace graph, not every module's output
 `build_overlay` SHALL set `[research_event_log.dashboard_record].enabled = false`, `[research_event_log.raw_archive].enabled = false`, `[evaluation].workspace_trajectory = false` and `[evaluation].enabled = false` for every session, overriding the operator configuration, and SHALL keep the ignition log enabled. Run-control and safety records SHALL be unaffected.
