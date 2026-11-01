@@ -271,7 +271,7 @@ async def test_commands_are_refused_before_the_programme_starts(tmp_path):
     "fault, reason",
     [
         (lambda: StimulusControlError("the programme has ended"), "the programme has ended"),
-        (lambda: RuntimeError(), "RuntimeError"),
+        (RuntimeError, "RuntimeError"),
     ],
 )
 async def test_a_command_the_controller_cannot_apply_is_refused(tmp_path, bus, fault, reason):
