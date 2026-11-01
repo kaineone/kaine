@@ -969,26 +969,18 @@ class Affect(BaseModule):
         # Without the entity's own response, boredom would build at 1 - exc.
         boredom_no_response = max(0.0, 1.0 - nb)
         in_stimulus_window = self._stimulus_credit_on and self._in_stimulus_window(now)
+        # Whether the window changed the credit inputs: a boredom end this update
+        # is then counted as credited by the window alone (the readout).
+        window_changed = False
         if in_stimulus_window and b_relief > 0.0:
             # Novelty or progress after the entity's own stimulus act is its own
             # response (stimulus-control-act, design D5): both relief channels
             # count, so without the response boredom would build unrelieved.
+            window_changed = (not own_relief) or boredom_no_response != 1.0
             own_relief = True
             boredom_no_response = 1.0
+        boredom_own_before = self._drives.boredom.own_ends
         self._drives.relieve_rate("boredom", b_relief, dt, own=own_relief)
-        if self._stimulus_credit is not None:
-            boredom = self._drives.boredom
-            try:
-                self._stimulus_credit(
-                    dt,
-                    in_window=in_stimulus_window,
-                    boredom=float(boredom.value),
-                    boredom_above=bool(boredom.value >= boredom.threshold),
-                    alert_excess=float(nb),
-                    learning_progress=float(lp),
-                )
-            except Exception:
-                log.warning("stimulus-control readout sample failed", exc_info=True)
 
         social_signal = 1.0 if self._interaction_seen else 0.0
         crossings = self._drives.tick(
@@ -999,6 +991,22 @@ class Affect(BaseModule):
             action_signal=max(0.0, 1.0 - self._intent_rate),
             boredom_no_response_signal=boredom_no_response,
         )
+        if self._stimulus_credit is not None:
+            boredom = self._drives.boredom
+            try:
+                self._stimulus_credit(
+                    dt,
+                    in_window=in_stimulus_window,
+                    boredom=float(boredom.value),
+                    boredom_above=bool(boredom.value >= boredom.threshold),
+                    alert_excess=float(nb),
+                    learning_progress=float(lp),
+                    window_credited_end=bool(
+                        window_changed and boredom.own_ends > boredom_own_before
+                    ),
+                )
+            except Exception:
+                log.warning("stimulus-control readout sample failed", exc_info=True)
         crossing_ids: dict[str, str] = {}
         for crossing in crossings:
             entry_id = await self.publish(

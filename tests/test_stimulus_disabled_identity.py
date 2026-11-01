@@ -41,7 +41,14 @@ def test_absent_and_off_build_no_runtime():
 
     assert _stimulus_control_runtime({}, None, 0) == (None, None)
     assert _stimulus_control_runtime({"stimulus_control": {"enabled": False}}, None, 0) == (None, None)
-    reason, runtime = _stimulus_control_runtime({"stimulus_control": {"enabled": True}}, None, 0)
+    reason, runtime = _stimulus_control_runtime(
+        {
+            "stimulus_control": {"enabled": True},
+            "preservation": {"welfare_response": {"enabled": True}},
+        },
+        None,
+        0,
+    )
     assert reason is None and runtime is not None
 
 
@@ -84,3 +91,43 @@ def test_off_leaves_the_action_policy_unwrapped():
     ctx = BootContext()
     policy = object()
     assert _with_stimulus_act(ctx, policy) is policy
+
+
+def test_the_boot_gives_stage_m_the_effectors_ready_check(tmp_path):
+    pytest.importorskip("av")
+    import time as _time
+
+    from kaine.cycle.__main__ import _with_stimulus_act
+    from kaine.cycle.boot_context import BootContext
+    from kaine.modules.effectors.stimulus.config import StimulusControlConfig
+    from kaine.modules.effectors.stimulus.runtime import StimulusControlRuntime
+    from kaine.workspace.stimulus_policy import StimulusActSource
+    from tests.stimulus_media import write_manifest
+
+    runtime = StimulusControlRuntime(
+        StimulusControlConfig.from_section({"enabled": True}), now=_time.monotonic, seed=1
+    )
+    runtime.install_programme(
+        str(write_manifest(tmp_path / "f", [("a.mkv", (255, 0, 0), 300.0, 0.3)])),
+        start=False,
+    )
+
+    class _Effectors:
+        enabled_effectors = frozenset({"stimulus"})
+
+    class _Registry:
+        entity_clock = None
+
+        def __contains__(self, name):
+            return name == "effectors"
+
+        def get(self, name):
+            return _Effectors()
+
+    ctx = BootContext()
+    ctx.stimulus_control = runtime
+    ctx.registry = _Registry()
+    ctx.staging_enabled = False
+    wrapped = _with_stimulus_act(ctx, object())
+    assert isinstance(wrapped, StimulusActSource)
+    assert wrapped._ready == runtime.effector().ready

@@ -6,8 +6,8 @@
 One tally per boot (a viewing). The effector counts accepted and refused
 commands by action, the controller accounts awake time, the time the
 ``entity`` pause holder held the programme, the time spent at each gain and the
-programme items visited, the trailing-awake-hour paused share and its operator
-advisories, and the affect module samples boredom, alert excess
+programme items visited, the trailing-awake-hour paused share and the pauses its bound
+refused, and the affect module samples boredom, alert excess
 and learning progress with a flag for whether the sample falls within the
 credit window after the entity's own realized stimulus act.
 
@@ -84,6 +84,11 @@ class StimulusTally:
         self._visits_dropped = 0
         self._after = _Window()
         self._otherwise = _Window()
+        # The window's samples by the action whose realization opened it.
+        self._after_by_action: dict[str, _Window] = {}
+        self._last_action: str | None = None
+        self._window_action: str | None = None
+        self._window_credited_ends = 0
         self._window_open = False
         self._boredom_at_open: float | None = None
         self._boredom_last: float | None = None
@@ -91,7 +96,7 @@ class StimulusTally:
         self._acts_boredom_fell = 0
         self._paused_share = 0.0
         self._paused_share_max = 0.0
-        self._paused_advisories = 0
+        self._pause_share_refusals = 0
         self._changed = False
 
     # -- writers ------------------------------------------------------------
@@ -100,6 +105,7 @@ class StimulusTally:
         with self._lock:
             if action in self._accepted:
                 self._accepted[action] += 1
+                self._last_action = action
                 self._changed = True
 
     def refused(self, action: str) -> None:
@@ -131,10 +137,10 @@ class StimulusTally:
             self._paused_share = float(share)
             self._paused_share_max = max(self._paused_share_max, float(share))
 
-    def paused_advisory(self) -> None:
-        """The paused share passed the advisory bar (an operator advisory)."""
+    def pause_share_refused(self) -> None:
+        """A pause was refused by the paused-share bound."""
         with self._lock:
-            self._paused_advisories += 1
+            self._pause_share_refusals += 1
             self._changed = True
 
     def visit(self, channel: int, order: int) -> None:
@@ -155,11 +161,18 @@ class StimulusTally:
         boredom_above: bool,
         alert_excess: float,
         learning_progress: float,
+        window_credited_end: bool = False,
     ) -> None:
-        """One affect update: ``dt`` seconds with these values."""
+        """One affect update: ``dt`` seconds with these values.
+
+        ``window_credited_end`` is a boredom crossing that ended as the entity's
+        own response this update only because it fell in the credit window."""
         with self._lock:
+            if window_credited_end:
+                self._window_credited_ends += 1
             if in_window and not self._window_open:
                 self._window_open = True
+                self._window_action = self._last_action
                 self._boredom_at_open = float(boredom)
             elif not in_window and self._window_open:
                 self._window_open = False
@@ -169,13 +182,17 @@ class StimulusTally:
                 self._boredom_at_open = None
             self._boredom_last = float(boredom)
             if awake and dt > 0.0:
-                target = self._after if in_window else self._otherwise
-                target.add(
-                    dt,
+                values = dict(
                     boredom_above=boredom_above,
                     alert_excess=max(0.0, float(alert_excess)),
                     learning_progress=max(0.0, float(learning_progress)),
                 )
+                if in_window:
+                    self._after.add(dt, **values)
+                    key = self._window_action or _OTHER_ACTION
+                    self._after_by_action.setdefault(key, _Window()).add(dt, **values)
+                else:
+                    self._otherwise.add(dt, **values)
             self._changed = True
 
     # -- readers ------------------------------------------------------------
@@ -207,12 +224,16 @@ class StimulusTally:
             ),
             "paused_share_last_awake_hour": self._paused_share,
             "paused_share_last_awake_hour_max": self._paused_share_max,
-            "paused_share_advisories": self._paused_advisories,
+            "pause_share_refusals": self._pause_share_refusals,
             "items_visited": [[c, o] for c, o in self._visits],
             "items_visited_dropped": self._visits_dropped,
             "readout": {
                 "after_own_act": self._after.summary(),
+                "after_own_act_by_action": {
+                    a: w.summary() for a, w in sorted(self._after_by_action.items())
+                },
                 "otherwise": self._otherwise.summary(),
+                "boredom_ends_credited_by_window": self._window_credited_ends,
                 "acts_observed": self._acts_observed,
                 "acts_with_boredom_fall": self._acts_boredom_fell,
             },

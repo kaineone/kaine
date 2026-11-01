@@ -178,3 +178,41 @@ async def test_a_fall_in_the_build_step_with_credit_off_is_not_own(bus):
     t = [0.0]
     off = Affect(bus, clock=lambda: t[0], goal_response_window_s=10.0)
     assert await _end_in_the_build_step(off, t, credit_on=False) == (0, 1)
+
+
+async def test_an_end_the_window_alone_credits_is_counted_for_the_readout(bus):
+    t = [100.0]
+    affect = Affect(bus, clock=lambda: t[0], goal_response_window_s=10.0)
+    samples = []
+    affect.set_stimulus_credit(lambda dt, **kw: samples.append(kw))
+    assert await _end_boredom_by_novelty(affect, t, act=_action(), act_at=100.0) == (1, 0)
+    assert sum(s["window_credited_end"] for s in samples) == 1
+
+
+async def test_an_end_outside_the_window_is_not_counted_as_the_windows(bus):
+    t = [100.0]
+    affect = Affect(bus, clock=lambda: t[0], goal_response_window_s=10.0)
+    samples = []
+    affect.set_stimulus_credit(lambda dt, **kw: samples.append(kw))
+    await _end_boredom_by_novelty(affect, t, act=_action(), act_at=70.0, relief_at=100.0)
+    assert not any(s["window_credited_end"] for s in samples)
+
+
+async def test_an_end_learning_progress_credits_anyway_is_not_the_windows(bus):
+    """Inside the window, an end the plain rule already credits as own (learning
+    progress, no novelty) is not counted as credited by the window."""
+    t = [10.0]
+    affect = Affect(bus, clock=lambda: t[0], goal_response_window_s=10.0)
+    samples = []
+    affect.set_stimulus_credit(lambda dt, **kw: samples.append(kw))
+    await affect._handle_peer_event(EFFECTORS_STREAM, _action())
+    affect._progress = lambda: (0.9, 0.0)
+    boredom = affect.drives.boredom
+    boredom.value = boredom.threshold * boredom.hysteresis_fraction * 1.001
+    boredom._has_fired = True
+    affect._last_tick_at = 10.0
+    t[0] = 11.0
+    await affect._tick()
+    assert not boredom._has_fired and boredom.own_ends == 1
+    assert samples and samples[-1]["in_window"] is True
+    assert not any(s["window_credited_end"] for s in samples)

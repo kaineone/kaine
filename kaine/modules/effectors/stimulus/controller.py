@@ -9,19 +9,27 @@ injected-object pattern); only an action name crosses, and the controller turns
 it into a pause holder, a seek, a gain in decibels or a channel index. No frame
 or sample is written anywhere.
 
-The feeds follow the clock themselves: both read its ``position_epoch()``,
-and when it changes the video source reopens the item and seeks its decoder to
-the clock's offset, and the audio producer resyncs at the clock as on a
-restart. The audio callback passes through
-:meth:`StimulusController.wrap_audio_callback`, which applies the programme gain
-before the audition module reads the samples.
+The feeds follow the clock themselves: both read its position and its
+``position_epoch()`` together (``locate_with_epoch``), and when the epoch
+changes the video source reopens the item and seeks its decoder to the clock's
+offset, and the audio producer resyncs at the clock as on a restart. The audio
+callback passes through :meth:`StimulusController.wrap_audio_callback`, which
+applies the programme gain before the audition module reads the samples.
 
-A poll thread releases an entity pause after ``P_max`` of entity time and
-accounts awake time, the paused share, the gain and the items visited for the
-welfare record. When the entity's pauses hold the programme for more than half
-of the last awake hour it logs an operator advisory, once until the share falls
-back, and counts it in the record. The advisory blocks nothing: each pause
-releases itself and commands are at least ``Delta_sc`` apart.
+Pausing is bounded three ways (design D1, the second review's F1). A pause
+releases itself after ``P_max`` of entity time; a new pause is refused until
+``Delta_sc`` after the previous one ended, whatever other commands came between;
+and a pause is refused unless it can run its full ``P_max`` without the
+entity's pauses holding the programme for more than ``pause_share_max`` (25 %)
+of the trailing awake hour. During a pause the picture holds one frame and the
+sound stops, so nothing relieves boredom, and boredom leads more acts: without
+the last two bounds the uniform draw held the programme paused for 40-47 % of
+three-hour runs, and a scripted sequence for 99.8 %. The first refusal by the
+share bound in an episode is logged for the operator.
+
+A poll thread releases the entity pause and accounts awake viewing time (from
+the programme's start, excluding sleep and freezes), the paused share, the gain
+and the items visited for the welfare record.
 """
 from __future__ import annotations
 
@@ -52,12 +60,8 @@ ENTITY_HOLDER = "entity"
 # net or the operator. Time under them is not awake time.
 NOT_AWAKE_HOLDERS = frozenset({"sleep", "freeze"})
 _GAIN_EPS = 1e-9
-#: The paused-share advisory: the trailing window of awake time, the share of
-#: it held by the entity's pauses past which the operator is told, and the
-#: bucket the window is kept in.
-ADVISORY_WINDOW_S = 3600.0
-ADVISORY_SHARE = 0.5
-_ADVISORY_BUCKET_S = 10.0
+#: The trailing window of awake time over which the paused share is bounded.
+PAUSE_SHARE_WINDOW_S = 3600.0
 
 
 def apply_gain(pcm: bytes, gain_db: float) -> bytes:
@@ -86,6 +90,7 @@ class StimulusState:
     holding: bool  # the stimulus-source-to-world crossfade still holds the programme
     ended: bool
     entity_paused: bool
+    awake: bool  # neither asleep nor frozen
     gain_db: float
     channel: int
     channel_count: int
@@ -114,12 +119,14 @@ class StimulusController:
         # The gain returns to zero at the start of every viewing; a boot is a viewing.
         self._gain_db = 0.0
         self._entity_paused_at: float | None = None
+        # Entity time the previous entity pause ended (by resume or release).
+        self._entity_pause_ended_at: float | None = None
+        # Awake viewing seconds, from the programme's start.
         self._awake_s = 0.0
-        # Paused seconds per bucket of awake time, oldest first, for the
-        # trailing-hour paused share; the last bucket is the one filling.
-        self._paused_buckets: list[float] = [0.0]
-        self._bucket_awake = 0.0
-        self._advisory_active = False
+        # The entity's pauses as [start, end] in awake viewing seconds; the
+        # open one ends at None. Older than the trailing window are dropped.
+        self._pause_spans: list[list[float | None]] = []
+        self._share_episode = False
         self._last_account = now()
         self._last_visit: tuple[int, int] | None = None
         self._stop = threading.Event()
@@ -173,18 +180,44 @@ class StimulusController:
                 holding=TRANSITION_HOLDER in holders,
                 ended=self._clock.ended(),
                 entity_paused=ENTITY_HOLDER in holders,
+                awake=not (holders & NOT_AWAKE_HOLDERS),
                 gain_db=self._gain_db,
                 channel=self._clock.channel,
                 channel_count=self._clock.channel_count,
             )
 
     def awake_seconds(self) -> float:
-        """Awake entity time since boot, the base of the per-awake-hour seek cap."""
+        """Awake viewing time since the programme started, the base of the seek cap."""
         with self._lock:
             return self._awake_s
 
     def is_awake(self) -> bool:
         return not (self._clock.holders & NOT_AWAKE_HOLDERS)
+
+    def paused_share_last_awake_hour(self) -> float:
+        """The share of the trailing awake hour the entity's pauses held."""
+        with self._lock:
+            return self._paused_share_locked()
+
+    def _paused_share_locked(self) -> float:
+        lo = self._awake_s - PAUSE_SHARE_WINDOW_S
+        held = 0.0
+        for start, end in self._pause_spans:
+            stop = self._awake_s if end is None else end
+            held += max(0.0, stop - max(start, lo))
+        return held / PAUSE_SHARE_WINDOW_S
+
+    def _pause_share_refusal_locked(self) -> str | None:
+        """A pause is taken only if its full ``P_max`` fits under the share bound."""
+        share = self._paused_share_locked()
+        room = self._config.pause_share_max - self._config.pause_max_s / PAUSE_SHARE_WINDOW_S
+        if share > room + 1e-9:
+            return (
+                f"the entity's pauses held the programme for {100.0 * share:.1f}% of the last "
+                f"awake hour; a pause is taken only while a full one stays within "
+                f"{100.0 * self._config.pause_share_max:.0f}%"
+            )
+        return None
 
     def refusal(self, action: str) -> str | None:
         """Why the programme cannot take ``action`` now, or None."""
@@ -193,8 +226,24 @@ class StimulusController:
             return "the programme has not started"
         if state.ended:
             return "the programme has ended"
-        if action == PAUSE and state.entity_paused:
-            return "the programme is already paused by the entity"
+        if not state.awake:
+            return "the entity is asleep or frozen"
+        if action == PAUSE:
+            if state.entity_paused:
+                return "the programme is already paused by the entity"
+            with self._lock:
+                ended_at = self._entity_pause_ended_at
+                if ended_at is not None:
+                    since = self._now() - ended_at
+                    if since < self._config.min_interval_s:
+                        return (
+                            f"{since:.2f} s after the previous pause ended, "
+                            f"{self._config.min_interval_s - since:.3f} s short of the "
+                            f"{self._config.min_interval_s:.2f} s between pauses"
+                        )
+                share_reason = self._pause_share_refusal_locked()
+            if share_reason is not None:
+                return share_reason
         if action == RESUME and not state.entity_paused:
             return "the programme is not paused by the entity"
         step = self._config.gain_step_db
@@ -210,6 +259,25 @@ class StimulusController:
                 return "already on that channel"
         return None
 
+    def note_refusal(self, action: str, reason: str) -> None:
+        """Record a refused command's bound in the welfare record and log the
+        first refusal of a paused-share episode for the operator (numbers only)."""
+        if action != PAUSE or "of the last awake hour" not in reason:
+            return
+        if self._tally is not None:
+            self._tally.pause_share_refused()
+        with self._lock:
+            first = not self._share_episode
+            self._share_episode = True
+            share = self._paused_share_locked()
+        if first:
+            log.warning(
+                "stimulus control: a pause was refused because the entity's pauses held the "
+                "programme for %.1f%% of the last awake hour (bound %.0f%%)",
+                100.0 * share,
+                100.0 * self._config.pause_share_max,
+            )
+
     # -- commands -----------------------------------------------------------
 
     def apply(self, action: str) -> dict[str, Any]:
@@ -220,10 +288,10 @@ class StimulusController:
                 raise StimulusControlError(reason)
             if action == PAUSE:
                 self._entity_paused_at = self._now()
+                self._pause_spans.append([self._awake_s, None])
                 self._clock.pause(ENTITY_HOLDER)
             elif action == RESUME:
-                self._entity_paused_at = None
-                self._clock.resume(ENTITY_HOLDER)
+                self._end_entity_pause_locked()
             elif action == NEXT:
                 self._clock.seek(+1)
             elif action == PREVIOUS:
@@ -245,6 +313,13 @@ class StimulusController:
             self._note_visit()
             return {"gain_db": self._gain_db, "channel": self._clock.channel}
 
+    def _end_entity_pause_locked(self) -> None:
+        self._entity_paused_at = None
+        self._entity_pause_ended_at = self._now()
+        if self._pause_spans and self._pause_spans[-1][1] is None:
+            self._pause_spans[-1][1] = self._awake_s
+        self._clock.resume(ENTITY_HOLDER)
+
     # -- feeds --------------------------------------------------------------
 
     def wrap_audio_callback(self, callback: Callable[[bytes], None]) -> Callable[[bytes], None]:
@@ -259,69 +334,40 @@ class StimulusController:
 
     def poll_once(self) -> None:
         now = self._now()
-        advisory: float | None = None
         with self._lock:
             dt = max(0.0, now - self._last_account)
             self._last_account = now
             holders = self._clock.holders
-            if not (holders & NOT_AWAKE_HOLDERS):
+            viewing = (
+                self._clock.started
+                and TRANSITION_HOLDER not in holders
+                and not self._clock.ended()
+            )
+            if viewing and not (holders & NOT_AWAKE_HOLDERS):
                 self._awake_s += dt
                 paused = ENTITY_HOLDER in holders
                 if self._tally is not None:
                     self._tally.account(dt, entity_paused=paused, gain_db=self._gain_db)
-                advisory = self._advance_paused_window(dt, paused)
-            if (
-                ENTITY_HOLDER in holders
-                and self._entity_paused_at is not None
-                and now - self._entity_paused_at >= self._config.pause_max_s
-            ):
-                self._entity_paused_at = None
-                self._clock.resume(ENTITY_HOLDER)
+            release = ENTITY_HOLDER in holders and self._entity_paused_at is not None and (
+                now - self._entity_paused_at >= self._config.pause_max_s
+                # Defensive: a pause is accepted only if it fits under the share
+                # bound, so this second condition should never be what ends it.
+                or self._paused_share_locked() >= self._config.pause_share_max
+            )
+            if release:
+                self._end_entity_pause_locked()
                 if self._tally is not None:
                     self._tally.auto_released()
-        if advisory is not None:
-            # An operator advisory, not a block: numbers only.
-            log.warning(
-                "stimulus control advisory: the entity's pauses held the programme "
-                "for %.0f%% of the last awake hour (more than %.0f%%); nothing is "
-                "blocked, each pause releases itself after %.0f s",
-                100.0 * advisory,
-                100.0 * ADVISORY_SHARE,
-                self._config.pause_max_s,
-            )
-        self._note_visit()
-
-    def paused_share_last_awake_hour(self) -> float:
-        """The share of the trailing awake hour held by the entity's pauses."""
-        with self._lock:
-            return sum(self._paused_buckets) / ADVISORY_WINDOW_S
-
-    def _advance_paused_window(self, dt: float, paused: bool) -> float | None:
-        """Account ``dt`` awake seconds; return the share when an advisory is due."""
-        remaining = dt
-        keep = int(ADVISORY_WINDOW_S / _ADVISORY_BUCKET_S)
-        while remaining > 0.0:
-            step = min(_ADVISORY_BUCKET_S - self._bucket_awake, remaining)
-            if paused:
-                self._paused_buckets[-1] += step
-            self._bucket_awake += step
-            remaining -= step
-            if self._bucket_awake >= _ADVISORY_BUCKET_S - 1e-9:
-                self._paused_buckets.append(0.0)
-                self._bucket_awake = 0.0
-                if len(self._paused_buckets) > keep:
-                    del self._paused_buckets[: len(self._paused_buckets) - keep]
-        share = sum(self._paused_buckets) / ADVISORY_WINDOW_S
-        if self._tally is not None:
-            self._tally.paused_share(share)
-        if share > ADVISORY_SHARE and not self._advisory_active:
-            self._advisory_active = True
+            lo = self._awake_s - PAUSE_SHARE_WINDOW_S
+            self._pause_spans = [
+                s for s in self._pause_spans if s[1] is None or s[1] > lo
+            ]
+            share = self._paused_share_locked()
             if self._tally is not None:
-                self._tally.paused_advisory()
-            return share
-        if share <= ADVISORY_SHARE:
-            self._advisory_active = False
-        return None
+                self._tally.paused_share(share)
+            if self._pause_share_refusal_locked() is None:
+                self._share_episode = False
+        self._note_visit()
 
     def _note_visit(self) -> None:
         if self._tally is None:
@@ -342,10 +388,9 @@ class StimulusController:
 
 
 __all__ = [
-    "ADVISORY_SHARE",
-    "ADVISORY_WINDOW_S",
     "ENTITY_HOLDER",
     "NOT_AWAKE_HOLDERS",
+    "PAUSE_SHARE_WINDOW_S",
     "StimulusController",
     "StimulusState",
     "apply_gain",

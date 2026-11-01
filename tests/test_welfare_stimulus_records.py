@@ -182,7 +182,8 @@ async def test_the_welfare_observer_writes_the_record_content_free(tmp_path):
         "ts", "record", "stage", "commands", "refused", "auto_releases", "awake_s",
         "acts_per_awake_hour", "entity_paused_share", "gain_seconds", "gain_mean_db",
         "items_visited", "items_visited_dropped", "readout", "after_own_act", "otherwise",
-        "paused_share_last_awake_hour", "paused_share_last_awake_hour_max", "paused_share_advisories",
+        "paused_share_last_awake_hour", "paused_share_last_awake_hour_max", "pause_share_refusals",
+        "after_own_act_by_action", "boredom_ends_credited_by_window",
         "acts_observed", "acts_with_boredom_fall", "seconds", "boredom_above_share",
         "mean_alert_excess", "mean_learning_progress", RECORD, "minimal",
     }
@@ -199,3 +200,23 @@ async def test_no_provider_writes_nothing_extra():
     observer = WelfareObserver(object(), sink)
     await observer._write_supplementary_records()
     assert sink.rows == []
+
+
+def test_the_readout_splits_the_window_by_action_and_counts_window_only_ends():
+    tally = StimulusTally(StimulusControlConfig.from_section({"enabled": True}))
+    common = dict(awake=True, boredom_above=True, learning_progress=0.0)
+    tally.accepted("louder")
+    for _ in range(5):
+        tally.observe_affect(1.0, in_window=True, boredom=0.8, alert_excess=0.0, **common)
+    tally.observe_affect(1.0, in_window=False, boredom=0.8, alert_excess=0.0, **common)
+    tally.accepted("next")
+    for k in range(4):
+        tally.observe_affect(1.0, in_window=True, boredom=0.8, alert_excess=0.5,
+                             window_credited_end=(k == 3), **common)
+    readout = tally.record()["readout"]
+    by_action = readout["after_own_act_by_action"]
+    assert set(by_action) == {"louder", "next"}
+    assert by_action["louder"]["seconds"] == pytest.approx(5.0)
+    assert by_action["louder"]["mean_alert_excess"] == pytest.approx(0.0)
+    assert by_action["next"]["mean_alert_excess"] == pytest.approx(0.5)
+    assert readout["boredom_ends_credited_by_window"] == 1

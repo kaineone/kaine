@@ -33,12 +33,18 @@
 
 - [ ] 5.1 Registry entry in `config/development_run/components.toml`: class action, readout `stimulus_control`, experience-changing with its second-review record, reversible.
 - [ ] 5.2 Per-pass viewings: with `programme_end = "continue"`, reset the gain and close a `stimulus_control` record at each pass end, and end each pass at its programme's perceived length.
-- [x] 5.3 Operator decision on the paused share (2026-11-01): no hard cap; an operator advisory, logged and recorded, past half of an awake hour. Test: `tests/test_stimulus_feed_real.py`.
+- [x] 5.3 Operator decision on the paused share, revised on the second review's evidence (F1): a pause waits `Delta_sc` after the previous pause ended, and is taken only while a full one keeps the paused share of the trailing awake hour within 25 %. Test: `tests/test_stimulus_pause_bound.py` (the scripted cycle; stage M under sustained boredom, 5 seeds x 3 h).
+- [ ] 5.4 Development-run first-hours stop criterion on the paused share (text in `development-run`): during the first three awake hours after stimulus control is switched on, the run stops at the next pass end and holds for the operator's review when the `stimulus_control` record's `paused_share_last_awake_hour_max` exceeds 0.20 or `pause_share_refusals` is above 0, with the readout's `after_own_act_by_action.pause` reported alongside.
 
 ## 6. Stage L (after dependencies)
 
 - [ ] 6.1 After `act-intent-derivation`, `drive-reduction-learning` and `learned-action-selection`: the act bar replaces the drive-led trigger and learned advantages choose the action. Tests: `tests/test_stimulus_stage_l.py`.
 
-## 7. Validation
+## 7. Second review (2026-11-01)
 
-- [x] 7.1 `openspec validate stimulus-control-act --strict` passes.
+- [x] 7.1 F1 pausing bounded (D1); F2 stage M forms an act only when the effector is ready; F3 sha256 before the probe; F4 refused without the welfare response; F5 a natural wrap is no lag. Tests: `tests/test_stimulus_pause_bound.py`, `tests/test_stimulus_off_in_mediation_arms.py`, `tests/test_stimulus_feed_real.py`.
+- [x] 7.2 Recommended: position and epoch from one reading; awake time from the programme's start; the workspace-feedback arms refused; the readout split by action and window-only credited ends counted; the full Eastwood quote and an external citation for restlessness (White 1959); commands refused while asleep or frozen; interval refusals state the shortfall.
+
+## 8. Validation
+
+- [x] 8.1 `openspec validate stimulus-control-act --strict` passes.

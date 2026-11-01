@@ -470,73 +470,11 @@ def test_audio_follows_a_channel_switch_and_wraps_inside_it(tmp_path):
         again = _collect(captured, 20, timeout=2.0)
         assert len(again) == 20 and "yellow" in {_tone(b) for b in again}
         _assert_paced(stream, clock, tolerance=0.2)
+        # Natural wraps past the channel's end are not lag (second review F5).
+        assert stream._skips == 0, stream._skips
     finally:
         stream.stop()
         runtime.close()
-
-
-def test_the_paused_share_advisory_is_logged_and_recorded_but_blocks_nothing(tmp_path, caplog):
-    import logging
-
-    mono, runtime = _fake_time_runtime(pause_max_s=120.0, min_interval_s=30.0)
-    clock = runtime.install_programme(
-        str(_programme(tmp_path)), probe=lambda item: 100000.0, start=False, monotonic=mono
-    )
-    clock.start()
-    controller = runtime.controller
-    from kaine.modules.effectors.effectors import StimulusRequest
-
-    effector = runtime.effector()
-    import asyncio
-
-    with caplog.at_level(logging.WARNING, logger="kaine.modules.effectors.stimulus.controller"):
-        # Pause for 120 s, resume at the next interval, for most of an hour: 120 of each 150 s.
-        t = 0.0
-        while t < 3600.0:
-            mono.t = t
-            controller.poll_once()
-            assert asyncio.run(effector.act(StimulusRequest(action="pause"))).success
-            for k in range(1, 121):
-                mono.t = t + k
-                controller.poll_once()
-            mono.t = t + 150.0
-            controller.poll_once()
-            t += 150.0
-    advisories = [r for r in caplog.records if "advisory" in r.getMessage()]
-    assert len(advisories) == 1, [r.getMessage() for r in advisories]
-    assert "/" not in advisories[0].getMessage()
-    record = runtime.tally.record()
-    assert record["paused_share_advisories"] == 1
-    assert record["paused_share_last_awake_hour"] == pytest.approx(0.8, abs=0.02)
-    assert record["paused_share_last_awake_hour_max"] >= 0.5
-    # Nothing is blocked: a pause is still accepted after the advisory.
-    mono.t = t
-    controller.poll_once()
-    assert asyncio.run(effector.act(StimulusRequest(action="pause"))).success
-
-
-def test_the_advisory_rearms_once_the_share_falls_back(tmp_path):
-    mono, runtime = _fake_time_runtime(pause_max_s=4000.0)
-    clock = runtime.install_programme(
-        str(_programme(tmp_path)), probe=lambda item: 100000.0, start=False, monotonic=mono
-    )
-    clock.start()
-    controller = runtime.controller
-    controller.apply("pause")
-    for k in range(1, 2000):  # 1999 s held: past half an awake hour
-        mono.t = float(k)
-        controller.poll_once()
-    assert runtime.tally.record()["paused_share_advisories"] == 1
-    controller.apply("resume")
-    for k in range(2000, 2000 + 3700):  # an awake hour unpaused: the share falls to 0
-        mono.t = float(k)
-        controller.poll_once()
-    assert controller.paused_share_last_awake_hour() == pytest.approx(0.0, abs=1e-9)
-    controller.apply("pause")
-    for k in range(5700, 5700 + 1900):
-        mono.t = float(k)
-        controller.poll_once()
-    assert runtime.tally.record()["paused_share_advisories"] == 2
 
 
 def test_zero_gain_passes_the_samples_through_unchanged():

@@ -15,7 +15,10 @@ Within the effector, a command is refused when it comes less than
 ``min_interval_s`` of entity time after the previous accepted command, when it
 is a seek beyond ``seeks_per_awake_hour`` in the last awake hour, when it would
 leave the gain range, or when the programme cannot take it (not started, ended,
-already paused, not paused, already on that channel). A refused command changes
+the entity asleep or frozen, already paused, not paused, already on that
+channel; a pause also within ``min_interval_s`` of the previous pause's end, or
+when a full pause would carry the entity's paused share of the trailing awake
+hour past ``pause_share_max``). A refused command changes
 nothing and is reported as a failed action, which the effectors module audits
 and publishes. An accepted command goes to the controller in process: only the
 action name crosses.
@@ -81,8 +84,9 @@ class StimulusEffector:
             since = t - self._last_accepted_at
             if since < self._config.min_interval_s:
                 return (
-                    f"{since:.1f} s after the previous command; the minimum interval is "
-                    f"{self._config.min_interval_s:.1f} s"
+                    f"{since:.2f} s after the previous command, "
+                    f"{self._config.min_interval_s - since:.3f} s short of the minimum interval "
+                    f"of {self._config.min_interval_s:.2f} s"
                 )
         if action in SEEK_ACTIONS and not self._seek_budget_left():
             return f"at most {self._config.seeks_per_awake_hour} seeks per awake hour"
@@ -115,6 +119,7 @@ class StimulusEffector:
         if reason is not None:
             if self._tally is not None:
                 self._tally.refused(action)
+            self._controller.note_refusal(action, reason)
             return ActionResult(
                 success=False,
                 elapsed_ms=_now_ms() - start,

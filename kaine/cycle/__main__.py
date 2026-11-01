@@ -218,6 +218,21 @@ def _stimulus_control_runtime(
         return reason, None
     if not config.enabled:
         return None, None
+    # The act changes what the entity experiences: the welfare net, which also
+    # writes its record and readout, must watch every run that has it.
+    from kaine.cycle.preservation_monitor import PreservationConfig
+
+    try:
+        welfare_on = PreservationConfig.from_section(
+            kaine_config.get("preservation") or {}
+        ).welfare_response.enabled
+    except Exception as exc:
+        return f"invalid [preservation] for stimulus control ({type(exc).__name__})", None
+    if not welfare_on:
+        return (
+            "[stimulus_control].enabled needs [preservation.welfare_response].enabled: "
+            "the welfare net must watch an entity that acts on its own stimulus"
+        ), None
     # The entity clock is set when the registry builds it, before any use.
     return None, StimulusControlRuntime(config, now=time.monotonic, seed=seed)
 
@@ -2477,6 +2492,7 @@ def _with_stimulus_act(ctx: BootContext, policy: Any) -> Any:
         clock=clock,
         seed=runtime.seed,
         developing=_development_probe(ctx),
+        ready=runtime.effector().ready,
     )
 
 

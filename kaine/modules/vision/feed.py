@@ -1404,9 +1404,14 @@ class PlaylistSource:
         # First read fixes the shared playback origin (idempotent across feeds).
         self._clock.start()
         n = len(self._manifest.items)
-        epoch_of = getattr(self._clock, "position_epoch", None)
-        epoch = epoch_of() if callable(epoch_of) else None
-        target_idx, offset = self._clock.locate()
+        # A clock that can jump (stimulus control) gives its position and its
+        # position epoch from one reading; the plain clock has neither.
+        located = getattr(self._clock, "locate_with_epoch", None)
+        if callable(located):
+            target_idx, offset, epoch = located()
+        else:
+            epoch = None
+            target_idx, offset = self._clock.locate()
         if target_idx >= n:
             return False, None
         if epoch != self._epoch:

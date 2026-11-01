@@ -21,12 +21,19 @@ The `stimulus_control` record SHALL hold no sensory content, title, path or text
 - **WHEN** stimulus control is disabled
 - **THEN** no `stimulus_control` record is written and the run manifest has no stimulus-control field
 
-### Requirement: An operator advisory on the paused share
-When the entity's pauses hold the programme for more than half of the trailing awake hour, stimulus control SHALL log an operator advisory with numbers only, once until the share falls back to half or less, and the `stimulus_control` record SHALL give the trailing share, its maximum and the count of advisories. The advisory SHALL block no command.
+### Requirement: The record shows the paused share and its bound
+The `stimulus_control` record SHALL give the share of the trailing awake hour held by the entity's pauses, its maximum over the viewing, and the count of pauses the share bound refused.
 
-#### Scenario: Pausing most of an hour
-- **WHEN** the entity pauses at every command interval for an awake hour
-- **THEN** one advisory is logged, the record counts it, and the next pause is still accepted
+#### Scenario: The bound binds
+- **WHEN** pause after pause is sent for two hours
+- **THEN** the record's trailing-hour maximum is at most 25 % and it counts the pauses the bound refused
+
+### Requirement: The readout shows how the credit window credited
+The `stimulus_control` record SHALL split the readout's samples within the credit window by the action whose realization opened it, and SHALL count the boredom crossings credited as the entity's own response only because they fell in the window.
+
+#### Scenario: A louder and a next
+- **WHEN** a `louder` and later a `next` each open a window
+- **THEN** the readout gives each action's window separately, and an end the window alone credited is counted once
 
 ### Requirement: Stimulus control off is bit-identical to absent
 With stimulus control off, a seeded entity-free harness over the affect module, the action layer, the effectors module, the welfare records and the playlist video source, driven by a script that includes realized stimulus actions and a signed act intent naming the stimulus effector, SHALL produce the digest of the build before the component, and SHALL produce a different digest with the credit window on.

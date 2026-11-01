@@ -18,12 +18,15 @@ drawn uniformly from the actions the programme would take now, with a generator
 seeded from the run seed. No act forms in the developmental phase.
 
 Why this trigger: boredom is "the aversive experience of wanting, but being
-unable, to engage" (Eastwood, Frischen, Fenske and Smilek 2012, Perspect Psychol
-Sci 7:482-495); it motivates the pursuit of new goals and experiences (Bench and
+unable, to engage in satisfying activity" (Eastwood, Frischen, Fenske and
+Smilek 2012, Perspect Psychol Sci 7:482-495); it motivates the pursuit of new goals and experiences (Bench and
 Lench 2013, Behav Sci 3:459-472) and signals the opportunity cost of staying
 with the current activity, which favours switching (Agrawal, Mattar, Cohen and
 Daw 2022, Psych Rev 129:564-585). Restlessness is the drive for action of the
-paper's A.4. The link from these drives to an act on the input is that cited
+paper's A.4, which builds while the entity does not act; acting on one's
+surroundings to have an effect on them is itself a motive, the tendency to
+explore and influence one's environment (effectance; White 1959, Psych Rev
+66:297-333, doi:10.1037/h0040934). The link from these drives to an act on the input is that cited
 function; which action relieves what is not given: the draw is uniform, and
 what follows is left to the world (the credit window of the affect module and
 the readout record what does). A fixed mapping such as boredom to ``next``
@@ -64,8 +67,12 @@ class StimulusActSource:
         clock: Callable[[], float],
         seed: int,
         developing: Optional[Callable[[], bool]] = None,
+        ready: Optional[Callable[[], bool]] = None,
     ) -> None:
         self._inner = inner
+        # The effector's own interval check, read when the intent forms: the act
+        # is realized later, so an act formed when it is ready is ready then too.
+        self._ready = ready
         self._allowed_actions = allowed_actions
         self._min_interval_s = float(min_interval_s)
         self._clock = clock
@@ -109,6 +116,8 @@ class StimulusActSource:
             return None
         now = float(self._clock())
         if now - self._last_act_at < self._min_interval_s:
+            return None
+        if self._ready is not None and not self._ready():
             return None
         allowed = list(self._allowed_actions())
         if not allowed:

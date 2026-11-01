@@ -15,6 +15,13 @@ With stage M installed, after the developmental phase, a non-inhibited broadcast
 - **WHEN** the entity is in the developmental phase
 - **THEN** no stimulus act is derived
 
+### Requirement: Stage M forms only acts the effector would take now
+The stage-M source SHALL form a stimulus intent only when the stimulus effector's own interval check passes, so that realization latency never turns an act formed at the `Delta_sc` boundary into a refusal.
+
+#### Scenario: At the interval's boundary
+- **WHEN** a lead arrives 30.02 s after an intent whose act was realized 0.08 s after it formed
+- **THEN** no intent forms, so no act is refused for its interval
+
 ### Requirement: Stage M wraps the policy only when the act can run
 Boot SHALL install the stage-M source around the configured action-selection policy only when `[stimulus_control].enabled` is true with `stage = "minimal"`, a playlist programme is under its control, the effectors module is on and its whitelist names the stimulus effector. The source SHALL pass the wrapped policy's intents and hooks unchanged and add at most one stimulus intent per broadcast; otherwise the policy SHALL be the wrapped one.
 
@@ -22,8 +29,12 @@ Boot SHALL install the stage-M source around the configured action-selection pol
 - **WHEN** stimulus control is enabled but the effector whitelist does not name the stimulus effector
 - **THEN** the policy is not wrapped and the boot logs that no stimulus act is derived
 
-### Requirement: Stimulus control is refused in the workspace-mediation arms
-The boot SHALL refuse a workspace-mediation study whose merged configuration enables stimulus control, and SHALL refuse an invalid `[stimulus_control]` section, before any module starts.
+### Requirement: Stimulus control is refused in the between-arm studies and without the welfare net
+The boot SHALL refuse, before any module starts and with the stimulus-control refusal exit code, a workspace-mediation or workspace-feedback study whose merged configuration enables stimulus control, stimulus control enabled while `[preservation.welfare_response].enabled` is false, and an invalid `[stimulus_control]` section.
+
+#### Scenario: No welfare net
+- **WHEN** stimulus control is enabled and the welfare response is off
+- **THEN** the boot fails with the stimulus-control refusal exit code
 
 #### Scenario: An arm enables it
 - **WHEN** the operator configuration enables stimulus control and a workspace-mediation study is selected

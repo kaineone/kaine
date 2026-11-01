@@ -182,3 +182,15 @@ def test_running_past_a_later_channels_end_wraps_inside_that_channel():
     assert prog.locate() == (1, pytest.approx(0.5))
     assert prog.position_epoch() != epoch
     assert prog.current_position() == (1, 1, 0)
+
+
+def test_position_and_epoch_come_from_one_reading():
+    mono, _plain, prog = _clocks([2.0, 3.0, 1.5])
+    mono.t = 101.0
+    idx, offset, epoch = prog.locate_with_epoch()
+    assert (idx, offset) == prog.locate() and epoch == prog.position_epoch()
+    prog.seek(+1)
+    idx2, offset2, epoch2 = prog.locate_with_epoch()
+    assert (idx2, offset2) == (1, pytest.approx(0.0)) and epoch2 != epoch
+    mono.t = 106.5
+    assert prog.locate_with_epoch()[:2] == (3, 0.0)

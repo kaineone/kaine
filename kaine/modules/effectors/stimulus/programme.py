@@ -279,6 +279,20 @@ class ProgrammeClock(PlaylistClock):
             pos = self._presented_locked(self._elapsed_locked())
             return self._repositions, (pos[0] if pos is not None else 0)
 
+    def locate_with_epoch(self) -> tuple[int, float, tuple[int, int]]:
+        """``(item index, offset, epoch)`` from one reading of the clock, so a
+        surface never pairs a position with the epoch of another moment."""
+        with self._lock:
+            perceived = self._elapsed_locked()
+            pos = self._presented_locked(perceived)
+            epoch = (self._repositions, pos[0] if pos is not None else 0)
+            if self._ended_locked(perceived):
+                return self._n, 0.0, epoch
+            if pos is not None:
+                return pos[1], pos[2], epoch
+        idx, offset = super().locate(perceived)
+        return idx, offset, epoch
+
     def current_position(self) -> tuple[int, int, int]:
         """``(channel, item index, local index in the channel)`` presented now."""
         with self._lock:

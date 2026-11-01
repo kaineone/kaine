@@ -151,7 +151,7 @@ Only read when `[perception_feed].mode = "screen"`. Video goes to the vision mod
 
 ### Stimulus control
 
-`[stimulus_control]` gives the entity a bounded act on its own playlist programme ([the stimulus effector](../09-modules/effectors.md#the-stimulus-effector)). It is held: the shipped file sets `enabled = false`, and off builds nothing. It acts only in `playlist` mode, needs the effectors module on and `"stimulus"` in `[effectors].enabled_effectors`, and the boot refuses it in a workspace-mediation study. An invalid section stops the boot.
+`[stimulus_control]` gives the entity a bounded act on its own playlist programme ([the stimulus effector](../09-modules/effectors.md#the-stimulus-effector)). It is held: the shipped file sets `enabled = false`, and off builds nothing. It acts only in `playlist` mode, needs the effectors module on and `"stimulus"` in `[effectors].enabled_effectors`, and the boot refuses it without `[preservation.welfare_response].enabled` and in a workspace-mediation or workspace-feedback study. An invalid section stops the boot.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -159,12 +159,13 @@ Only read when `[perception_feed].mode = "screen"`. Video goes to the vision mod
 | `stage` | string | `"minimal"` | The only stage built: after maturation, a broadcast led by the entity's own boredom or restlessness drive event yields one act, its action drawn uniformly from those the programme can take now. |
 | `min_interval_s` | float | `30.0` | Entity seconds between two accepted commands (`Delta_sc`). |
 | `seeks_per_awake_hour` | integer | `20` | `next` and `previous` allowed in any awake hour (`n_seek`); sleep and freezes are not awake time. |
-| `pause_max_s` | float | `120.0` | An entity pause releases itself after this many entity seconds (`P_max`). |
+| `pause_max_s` | float | `120.0` | An entity pause releases itself after this many entity seconds (`P_max`); a new pause waits `min_interval_s` after the previous one ended. |
+| `pause_share_max` | float | `0.25` | A pause is taken only if a full `pause_max_s` keeps the entity's pauses within this share of the trailing awake hour; at most 0.25. |
 | `gain_step_db` | float | `2.0` | One `louder` or `quieter` step (`G_step`). |
 | `gain_max_db` | float | `6.0` | The gain stays within plus or minus this of the programme level (`G_max`); at most 6. |
 | `channels` | list of strings | `[]` | Further programme channels, as checksummed manifest paths; channel 0 is `[perception_feed].playlist_manifest`. With two or more channels the effector declares `channel:<k>`. |
 
-With stimulus control on, skipping wraps and never ends a viewing: the viewing ends when perceived programme time (excluding every pause) reaches channel 0's length. Every item is measured before playback, and an item that cannot be measured stops the boot. The run manifest's perception-feed record carries a `stimulus_control` entry with the stage and every bound.
+With stimulus control on, skipping wraps and never ends a viewing: the viewing ends when perceived programme time (excluding every pause) reaches channel 0's length. Every item is verified by sha256 and then measured before playback, and an item that fails either stops the boot. The run manifest's perception-feed record carries a `stimulus_control` entry with the stage and every bound.
 
 ## Perception preview
 

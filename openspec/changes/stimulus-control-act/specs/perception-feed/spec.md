@@ -26,14 +26,25 @@ With stimulus control enabled, the viewing SHALL end when perceived programme ti
 - **THEN** the end-of-programme preservation is requested once, when perceived programme time reaches the programme's total length
 
 ### Requirement: Picture and sound follow a jump
-When the shared clock's presented position jumps (a seek, a channel switch, or a wrap past a channel's end), the video source SHALL reopen the presented item and seek its decoder to the clock's offset, and the audio producer SHALL resync at the clock as on a restart, emit no block from before the jump, and stay paced against the clock.
+When the shared clock's presented position jumps (a seek, a channel switch, or a wrap past a channel's end), the video source SHALL reopen the presented item and seek its decoder to the clock's offset, and the audio producer SHALL resync at the clock as on a restart and stay paced against the clock, with at most the block already in flight from before the jump. Both surfaces SHALL read the position and the epoch from one reading of the clock.
 
 #### Scenario: A seek
 - **WHEN** the entity's `next` is accepted during the first item
 - **THEN** the next frame read and the next PCM heard come from the second item, and the delivered audio position is on the clock's item and offset
 
+### Requirement: A natural wrap is not a lag
+After a channel's last item the audio producer SHALL order the channel's first item by the clock's lap, waiting for it to turn, not by manifest index, so that neither a natural wrap nor the viewing's end is counted or logged as lag.
+
+#### Scenario: Running past the channel's end
+- **WHEN** a skip puts the channel's natural wrap before the viewing's end
+- **THEN** the audio carries on at the channel's first item with no lag skip counted
+
 ### Requirement: Every item is measured before playback
-With stimulus control enabled, boot SHALL register every programme item's container duration on the shared clock before playback, and SHALL stop with a stimulus-control error naming the item by index and order, never by path, when an item cannot be measured.
+With stimulus control enabled, boot SHALL verify every programme item, every channel's, by sha256 before any item is opened, SHALL then register every item's container duration on the shared clock before playback, and SHALL stop with a stimulus-control error naming the item by index and order, never by path, when an item cannot be measured.
+
+#### Scenario: A changed file
+- **WHEN** stimulus control is enabled and an item's sha256 does not match its manifest
+- **THEN** the boot stops before any media is opened
 
 #### Scenario: An item that cannot be measured
 - **WHEN** stimulus control is enabled and an item's duration cannot be measured

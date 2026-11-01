@@ -37,11 +37,25 @@ The awake time over which the stimulus effector counts seeks SHALL exclude every
 - **THEN** a seek after waking is still refused until an awake hour has passed
 
 ### Requirement: The stimulus effector refuses what the programme cannot take
-The stimulus effector SHALL refuse an action outside its declared set, any command before the programme starts, while the stimulus-source-to-world crossfade holds it or after it ends, `pause` while the programme is paused by the entity, `resume` while it is not, and a switch to the current channel, each as a failed, audited action that changes nothing.
+The stimulus effector SHALL refuse an action outside its declared set, any command before the programme starts, while the stimulus-source-to-world crossfade holds it, after it ends or while the entity is asleep or frozen, `pause` while the programme is paused by the entity, `resume` while it is not, and a switch to the current channel, each as a failed, audited action that changes nothing.
 
 #### Scenario: Before the programme starts
 - **WHEN** a `next` command arrives before either feed has read the programme
 - **THEN** the command is refused and nothing changes
+
+### Requirement: Pausing is bounded
+The stimulus effector SHALL refuse `pause` within `Delta_sc` of entity time after the previous entity pause ended, by `resume` or by its release, whatever other commands came between.
+
+#### Scenario: A pause right after a release
+- **WHEN** an entity pause releases itself at `P_max` and a `pause` arrives 0.1 s later, after a `louder` accepted during the pause
+- **THEN** the pause is refused until `Delta_sc` after the release
+
+### Requirement: The paused share is bounded
+The stimulus effector SHALL refuse `pause` unless a full `P_max` keeps the share of the trailing awake hour held by the entity's pauses within `pause_share_max`, so that no pause carries the share past it. `pause_share_max` SHALL NOT be configurable above 25 %, and the first refusal by this bound in an episode SHALL be logged for the operator with numbers only.
+
+#### Scenario: A scripted hold cycle
+- **WHEN** pause, louder, quieter and louder are sent every 30.05 s for two hours
+- **THEN** the entity's pauses hold the programme for at most 25 % of every trailing awake hour
 
 ### Requirement: The gain bound cannot be widened
 The configuration SHALL refuse a `[stimulus_control].gain_max_db` above 6 dB, the design's welfare bound on loudness, and a `gain_step_db` above `gain_max_db`.

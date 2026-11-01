@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import time
+from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from kaine.modules.effectors.stimulus.config import (
@@ -86,6 +87,14 @@ class StimulusControlRuntime:
             raise StimulusControlError(
                 f"stimulus control cannot load the programme channels ({type(exc).__name__})"
             ) from None  # the cause's text can carry a path
+        # Verify every item, every channel's, BEFORE the probe opens any media:
+        # a changed file must stop the boot before a demuxer parses it.
+        try:
+            programme.manifest.verify_against(Path(programme.manifest.manifest_path).parent)
+        except Exception as exc:
+            raise StimulusControlError(
+                f"stimulus control: a programme item failed verification ({type(exc).__name__})"
+            ) from None  # the cause's text carries the path
         clock = ProgrammeClock(
             len(programme.manifest.items), segments=programme.segments, clock=monotonic
         )

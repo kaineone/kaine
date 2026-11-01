@@ -14,7 +14,8 @@ The bounds are the change's design values (Table A1 of the paper carries
 them): ``min_interval_s`` is the shortest entity time between two accepted
 commands (``Delta_sc``), ``seeks_per_awake_hour`` caps ``next`` and
 ``previous`` (``n_seek``), ``pause_max_s`` releases an entity pause on its own
-(``P_max``), and the gain moves in ``gain_step_db`` steps within plus or minus
+(``P_max``), ``pause_share_max`` bounds the share of the trailing awake hour the
+entity's pauses may hold the programme (at most 25 %), and the gain moves in ``gain_step_db`` steps within plus or minus
 ``gain_max_db`` of the programme level (``G_step``, ``G_max``). The gain bound
 cannot be configured above 6 dB, the change's welfare bound on loudness.
 """
@@ -44,6 +45,9 @@ SEEK_ACTIONS = frozenset({NEXT, PREVIOUS})
 # The welfare bound on the programme gain (design D1): the operator may narrow
 # it, never widen it.
 GAIN_MAX_BOUND_DB = 6.0
+# The welfare bound on the share of the trailing awake hour the entity's pauses
+# may hold the programme (design D1, the second review's F1): narrow, never widen.
+PAUSE_SHARE_MAX_BOUND = 0.25
 
 _KEYS = {
     "enabled",
@@ -53,6 +57,7 @@ _KEYS = {
     "pause_max_s",
     "gain_step_db",
     "gain_max_db",
+    "pause_share_max",
     "channels",
 }
 
@@ -97,6 +102,7 @@ class StimulusControlConfig:
     pause_max_s: float = 120.0
     gain_step_db: float = 2.0
     gain_max_db: float = 6.0
+    pause_share_max: float = PAUSE_SHARE_MAX_BOUND
     # Further programme channels, as manifest paths. Channel 0 is always
     # [perception_feed].playlist_manifest; an empty list is one channel.
     channels: tuple[str, ...] = field(default_factory=tuple)
@@ -126,6 +132,16 @@ class StimulusControlConfig:
             )
         if gain_step > gain_max:
             raise ValueError("[stimulus_control].gain_step_db must be <= gain_max_db")
+        pause_share = _positive("pause_share_max", data.get("pause_share_max", PAUSE_SHARE_MAX_BOUND))
+        if pause_share > PAUSE_SHARE_MAX_BOUND:
+            raise ValueError(
+                f"[stimulus_control].pause_share_max must be <= {PAUSE_SHARE_MAX_BOUND} (the welfare bound)"
+            )
+        pause_max = _positive("pause_max_s", data.get("pause_max_s", 120.0))
+        if pause_max / 3600.0 > pause_share:
+            raise ValueError(
+                "[stimulus_control].pause_max_s must fit within pause_share_max of an awake hour"
+            )
         channels = data.get("channels", [])
         if not isinstance(channels, list) or not all(
             isinstance(c, str) and c.strip() for c in channels
@@ -136,9 +152,10 @@ class StimulusControlConfig:
             stage=stage,
             min_interval_s=_positive("min_interval_s", data.get("min_interval_s", 30.0)),
             seeks_per_awake_hour=int(seeks),
-            pause_max_s=_positive("pause_max_s", data.get("pause_max_s", 120.0)),
+            pause_max_s=pause_max,
             gain_step_db=gain_step,
             gain_max_db=gain_max,
+            pause_share_max=pause_share,
             channels=tuple(c.strip() for c in channels),
         )
 
@@ -162,30 +179,39 @@ class StimulusControlConfig:
             "pause_max_s": self.pause_max_s,
             "gain_step_db": self.gain_step_db,
             "gain_max_db": self.gain_max_db,
+            "pause_share_max": self.pause_share_max,
             "channel_count": self.channel_count,
             "declared_actions": list(self.declared_actions()),
         }
 
 
+#: Studies whose arms compare processors on one shared programme (paper §6.3
+#: and §6.4: run r of every arm uses the same seed and stimulus), where an
+#: entity-chosen stimulus would differ between arms and confound the contrast.
+BETWEEN_ARM_STUDY_PREFIXES = ("workspace_mediation", "workspace_feedback")
+
+
 def is_workspace_mediation_study(study: str | None) -> bool:
-    """The workspace-mediation arms compare processors on one shared programme."""
-    return bool(study) and str(study).startswith("workspace_mediation")
+    """A between-arm study: the workspace-mediation or workspace-feedback arms."""
+    return bool(study) and str(study).startswith(BETWEEN_ARM_STUDY_PREFIXES)
 
 
 def refuse_in_mediation_arm(study: str | None, config: StimulusControlConfig) -> str | None:
-    """The boot refusal for a workspace-mediation arm that enables stimulus control."""
+    """The boot refusal for a between-arm study that enables stimulus control."""
     if config.enabled and is_workspace_mediation_study(study):
         return (
-            f"study {study!r} is a workspace-mediation arm, which shares one programme "
-            "across arms; [stimulus_control].enabled must be false"
+            f"study {study!r} is an arm of a between-arm comparison, which shares one "
+            "programme across arms; [stimulus_control].enabled must be false"
         )
     return None
 
 
 __all__ = [
     "BASE_ACTIONS",
+    "BETWEEN_ARM_STUDY_PREFIXES",
     "CHANNEL_PREFIX",
     "GAIN_MAX_BOUND_DB",
+    "PAUSE_SHARE_MAX_BOUND",
     "LOUDER",
     "NEXT",
     "PAUSE",
