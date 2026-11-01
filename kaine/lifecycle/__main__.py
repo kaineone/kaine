@@ -732,6 +732,14 @@ def main(
             )
             return 8
         try:
+            volatile_client = _open_volatile_client()
+        except Exception as exc:
+            out.write(
+                f"FAILED: cannot open the volatile bus ({type(exc).__name__}); nothing was deleted\n"
+            )
+            bus_client.close()
+            return 8
+        try:
             result = delete_entity_state(
                 state_root=state_root,
                 fork_root=fork_root,
@@ -740,6 +748,7 @@ def main(
                 bus_client=bus_client,
                 dry_run=True,
                 qdrant_absent=bool(args.qdrant_absent),
+                volatile_client=volatile_client,
             )
             out.write("\n[dry-run] Would remove:\n")
             for p in result.would_remove_paths:
@@ -754,6 +763,7 @@ def main(
                 out.write(f"  - redis stream: {s}\n")
             for s in result.skipped_non_streams:
                 out.write(f"  - not a stream, kept: {s}\n")
+            out.write(f"  - volatile bus: {result.volatile_bus}\n")
             if result.redis_failed:
                 out.write(f"FAILED: {result.redis_failed}\n")
                 return 8
@@ -764,6 +774,11 @@ def main(
                 bus_client.close()
             except Exception:
                 pass
+            if volatile_client is not None:
+                try:
+                    volatile_client.close()
+                except Exception:
+                    pass
 
     _write_location_split(out, qcfg, state_root=state_root, data_dir=data_dir, fork_root=fork_root, backup=backup)
     out.write("\n" + _NOTICE_GUARDIANS)
@@ -877,6 +892,14 @@ def main(
             f"FAILED: cannot load the bus configuration ({type(exc).__name__}); nothing was deleted\n"
         )
         return 8
+    try:
+        volatile_client = _open_volatile_client()
+    except Exception as exc:
+        out.write(
+            f"FAILED: cannot open the volatile bus ({type(exc).__name__}); nothing was deleted\n"
+        )
+        bus_client.close()
+        return 8
 
     try:
         try:
@@ -948,6 +971,7 @@ def main(
             bus_client=bus_client,
             dry_run=False,
             qdrant_absent=bool(args.qdrant_absent),
+            volatile_client=volatile_client,
         )
 
         if result.incomplete:
@@ -963,6 +987,7 @@ def main(
             out.write(f"  cleared stream: {s}\n")
         for s in result.skipped_non_streams:
             out.write(f"  not a stream, kept: {s}\n")
+        out.write(f"  volatile bus: {result.volatile_bus}\n")
         if result.aof_rewrite is not None:
             out.write(f"  append-only file rewrite: {result.aof_rewrite}\n")
         for key in result.deleted_locations:
@@ -1013,6 +1038,7 @@ def main(
             "skipped_non_streams": result.skipped_non_streams,
             "rdb_snapshot": result.rdb_snapshot,
             "aof_rewrite": result.aof_rewrite,
+            "volatile_bus": result.volatile_bus,
             "errors": result.errors + ([result.redis_failed] if result.redis_failed else []),
             "qdrant_absent_asserted": bool(args.qdrant_absent),
             "trainer_stopped_asserted": bool(args.trainer_stopped),
@@ -1054,6 +1080,11 @@ def main(
             bus_client.close()
         except Exception:
             pass
+        if volatile_client is not None:
+            try:
+                volatile_client.close()
+            except Exception:
+                pass
 
 
 def _open_bus_client() -> Any:
@@ -1063,6 +1094,19 @@ def _open_bus_client() -> Any:
     from kaine.bus.config import load_bus_config
     bus_cfg = load_bus_config()
     return redis.Redis.from_url(bus_cfg.url, socket_connect_timeout=2.0, socket_timeout=5.0)
+
+
+def _open_volatile_client() -> Any:
+    """A Redis client for the never-persisted companion-stream instance, or
+    None when none is configured (``KAINE_REDIS_VOLATILE_URL``)."""
+    from kaine.bus.volatile import resolve_volatile_url
+
+    url = resolve_volatile_url()
+    if not url:
+        return None
+    import redis
+
+    return redis.Redis.from_url(url, socket_connect_timeout=2.0, socket_timeout=5.0)
 
 
 if __name__ == "__main__":

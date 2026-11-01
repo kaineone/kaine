@@ -104,6 +104,9 @@ class DeleteResult:
     redis_failed: str | None = None
     aof_rewrite: str | None = None
     rdb_snapshot: str | None = None
+    # The never-persisted companion-stream instance: "flushed", "would flush" or
+    # "not configured" (it holds nothing then); a failure is in ``errors``.
+    volatile_bus: str | None = None
     deleted_locations: list[str] = field(default_factory=list)
     retained_locations: list[str] = field(default_factory=list)
     shared_kept: list[str] = field(default_factory=list)
@@ -1024,6 +1027,7 @@ def delete_entity_state(
     qdrant_absent: bool = False,
     fork_root: Path | None = None,
     data_root: Path | None = None,
+    volatile_client: Any = None,
 ) -> DeleteResult:
     """Remove the entity's on-disk state, Qdrant collections, and Redis streams.
 
@@ -1032,7 +1036,9 @@ def delete_entity_state(
     a failure on one target does not abort the others.
 
     ``bus_client`` is a connected, authenticated Redis client for the stream
-    step; it is not used for on-disk or Qdrant cleanup.
+    step; it is not used for on-disk or Qdrant cleanup. ``volatile_client`` is
+    a client of the never-persisted companion-stream instance, flushed with the
+    entity's streams; None when no such instance is configured.
     """
     state_root = resolve(state_root)
     fork_root = resolve(fork_root) if fork_root is not None else state_root / "forks"
@@ -1202,6 +1208,9 @@ def delete_entity_state(
     result.redis_failed = clear.failed
     result.aof_rewrite = clear.aof_rewrite
     result.rdb_snapshot = clear.rdb_snapshot
+    result.volatile_bus, volatile_error = flush_volatile_bus(volatile_client, dry_run=dry_run)
+    if volatile_error is not None:
+        result.errors.append(volatile_error)
 
     remote_failed = (len(result.errors) > errors_before_remote) or (
         bus_client is not None and bool(result.redis_failed)
@@ -1383,6 +1392,31 @@ def _entity_redis_streams(redis_cfg: dict[str, Any] | None) -> list[str]:
             expanded.add(name)
 
     return sorted(expanded)
+
+
+def flush_volatile_bus(client: Any, *, dry_run: bool) -> tuple[str, str | None]:
+    """Flush the never-persisted companion-stream instance.
+
+    Returns ``(state, error)``. The instance holds only companion streams of
+    the entity's events, so the whole database is flushed. With no client
+    configured there is nothing to flush.
+    """
+    if client is None:
+        return "not configured", None
+    try:
+        client.ping()
+    except Exception as exc:
+        return "unreachable", (
+            f"volatile bus: cannot reach or authenticate ({type(exc).__name__}); "
+            "its companion streams were not flushed"
+        )
+    if dry_run:
+        return "would flush", None
+    try:
+        client.flushdb()
+    except Exception as exc:
+        return "failed", f"volatile bus: flush failed ({type(exc).__name__})"
+    return "flushed", None
 
 
 @dataclass
