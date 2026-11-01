@@ -164,6 +164,9 @@ SPOKEN_TEXT_METADATA_KEYS = frozenset(
     }
 )
 
+#: Diverted, at any depth, from an event whose ``about_kind`` is ``"heard"``.
+HEARD_ABOUT_FIELDS = frozenset({"about"})
+
 #: The field set name of this rule on the companion mechanism.
 SPOKEN_TEXT_FIELD_SET = "spoken_text"
 
@@ -190,9 +193,14 @@ def split_spoken_payload(
     if not isinstance(payload, Mapping):
         return payload, diverted
     if event_type in EXTERNAL_INPUT_TYPES:
-        main = _divert_strings(payload, (), diverted)
+        main = _divert_external(payload, diverted)
     else:
-        main = _divert_heard_fields(payload, (), diverted, HEARD_TEXT_FIELDS | extra_fields)
+        keys = HEARD_TEXT_FIELDS | extra_fields
+        if payload.get("about_kind") == "heard":
+            # An intent formed from heard speech carries the heard words as its
+            # ``about``; they never reach the persisted intent stream.
+            keys = keys | HEARD_ABOUT_FIELDS
+        main = _divert_heard_fields(payload, (), diverted, keys)
     if not diverted:
         return payload, diverted
     main = dict(main)
@@ -203,43 +211,33 @@ def split_spoken_payload(
     return main, diverted
 
 
-def _holds_string(value: Any) -> bool:
-    if isinstance(value, str):
-        return True
-    if isinstance(value, Mapping):
-        return any(_holds_string(v) for v in value.values())
-    if isinstance(value, (list, tuple)):
-        return any(_holds_string(v) for v in value)
-    return False
+def _is_number_list(value: Any) -> bool:
+    return isinstance(value, (list, tuple)) and all(
+        v is None or isinstance(v, (int, float)) for v in value
+    )
 
 
-def _divert_strings(node: Any, path: tuple[Any, ...], diverted: list) -> Any:
-    """Divert every string leaf, except under the reviewed metadata keys."""
-    if isinstance(node, Mapping):
-        changed = False
-        out: dict[Any, Any] = {}
-        for index, (key, value) in enumerate(node.items()):
-            if key in SPOKEN_TEXT_METADATA_KEYS:
-                out[key] = value
-                continue
-            if isinstance(value, str) or (
-                isinstance(value, (list, tuple))
-                and any(isinstance(v, str) or (isinstance(v, (list, tuple)) and _holds_string(v)) for v in value)
-            ):
-                # A string, or a list holding strings directly: the whole value.
-                diverted.append((path + (key,), value, index))
-                changed = True
-                continue
-            new = _divert_strings(value, path + (key,), diverted)
-            changed = changed or new is not value
-            out[key] = new
-        return out if changed else node
-    if isinstance(node, (list, tuple)):
-        items = [_divert_strings(v, path + (i,), diverted) for i, v in enumerate(node)]
-        if all(a is b for a, b in zip(items, node)):
-            return node
-        return items if isinstance(node, list) else tuple(items)
-    return node
+def _divert_external(payload: Mapping[str, Any], diverted: list) -> Any:
+    """Divert, on an external-input event, every top-level value that is not a
+    number, a boolean, ``None`` or a list of them, except under the reviewed
+    metadata keys: a string, and any mapping or list that could hold words in
+    its values or its keys, is diverted whole. Top-level keys are the event's
+    field names."""
+    changed = False
+    out: dict[Any, Any] = {}
+    for index, (key, value) in enumerate(payload.items()):
+        keep = (
+            key in SPOKEN_TEXT_METADATA_KEYS
+            or value is None
+            or isinstance(value, (int, float))
+            or _is_number_list(value)
+        )
+        if keep:
+            out[key] = value
+            continue
+        diverted.append(((key,), value, index))
+        changed = True
+    return out if changed else payload
 
 
 def _divert_heard_fields(

@@ -107,8 +107,9 @@ def test_split_chat_unknown_string_diverted():
         "tags": ["greeting"], "source_label": "world",
     })
     main, diverted = split_spoken_text(event)
-    assert {p for p, _v, _i in diverted} == {("speaker_name",), ("message",), ("meta", "note"), ("tags",)}
-    assert main == {"channel": 0, "meta": {}, "source_label": "world"}
+    # A nested mapping is diverted whole: its keys could be words too.
+    assert {p for p, _v, _i in diverted} == {("speaker_name",), ("message",), ("meta",), ("tags",)}
+    assert main == {"channel": 0, "source_label": "world"}
 
 
 def test_split_language_event_all_three_fields():
