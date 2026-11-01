@@ -9,10 +9,13 @@ produced by someone else, not by the entity.
 The heard rule (``heard_texts`` and ``is_heard_event``) decides which events
 are heard. The language module uses it to split heard events from the entity's
 own notes, and the episodic memory module uses it to keep heard events out of
-every stored trace. Three narrower checks deliberately use ``HEARD_TEXT_FIELDS``
-without ``text`` on events other than the external-input types: the renderers'
-redaction (``redact_heard_speech``), the language module's guard check
-(``_holds_outside_material``) and its log-residual and publish-time redaction.
+every stored trace. ``heard_words`` is the narrower read of the words actually
+heard: the values under a ``HEARD_TEXT_FIELDS`` key, never an event's metadata.
+The language module quotes only those words to the organ. Three narrower checks
+deliberately use ``HEARD_TEXT_FIELDS`` without ``text`` on events other than the
+external-input types: the renderers' redaction (``redact_heard_speech``), the
+language module's guard check (``_holds_outside_material``) and its log-residual
+and publish-time redaction.
 
 ``INTERNAL_EVENT_TYPES`` declares the event types whose payloads hold only the
 entity's own values and words. The language module brings its heard-speech
@@ -72,9 +75,13 @@ HEARD_TEXT_FIELDS = frozenset({
 
 ``faithful_rendering`` is included because a rendering can embed earlier heard
 lines. External-input event types (``audition.transcription`` and
-``embodiment.chat``) are heard wholesale by type. On the language module's own
-events no field is heard (it redacts heard words before it publishes). On every
-other module's event, these fields are heard at any depth (``heard_texts``).
+``embodiment.chat``) are heard wholesale by type: every text leaf is redacted
+and kept out of storage. Their words are the values under these fields
+(``heard_words``); their other fields (a source label, a model id, a backend
+name, an error message) are metadata and are never quoted as heard speech. On
+the language module's own events no field is heard (it redacts heard words
+before it publishes). On every other module's event, these fields are heard at
+any depth (``heard_texts`` and ``heard_words`` agree there).
 The renderers' redaction leaves ``text`` out of that set on non-external
 events (``redact_heard_speech``).
 """
@@ -96,38 +103,54 @@ def iter_text_leaves(value: Any) -> Iterator[str]:
             yield from iter_text_leaves(child)
 
 
-def heard_texts(event: "Event") -> list[str]:
-    """Return the outside words an event carries.
+def _heard_field_leaves(obj: Any) -> list[str]:
+    """The text leaves found under a ``HEARD_TEXT_FIELDS`` key at any depth."""
+    if isinstance(obj, dict):
+        leaves: list[str] = []
+        for key, value in obj.items():
+            if key in HEARD_TEXT_FIELDS:
+                leaves.extend(iter_text_leaves(value))
+            else:
+                leaves.extend(_heard_field_leaves(value))
+        return leaves
+    if isinstance(obj, (list, tuple)):
+        leaves = []
+        for value in obj:
+            leaves.extend(_heard_field_leaves(value))
+        return leaves
+    return []
 
-    Every text leaf of an external-input event is heard. The language module's
-    own events carry none. Any other module's event carries the text leaves
-    found under a ``HEARD_TEXT_FIELDS`` key at any depth.
+
+def heard_words(event: "Event") -> list[str]:
+    """Return the words another speaker said that an event carries.
+
+    These are the text leaves under a ``HEARD_TEXT_FIELDS`` key at any depth,
+    on an external-input event and on any other module's event alike. The
+    language module's own events carry none. An event's other fields are
+    metadata, not heard speech: a transcription's ``source_label``, ``model``,
+    ``backend`` and ``error`` are never among the words.
+    """
+    payload = event.payload
+    if not isinstance(payload, dict):
+        return []
+    if event.source == "language" and event.type not in EXTERNAL_INPUT_TYPES:
+        return []
+    return _heard_field_leaves(payload)
+
+
+def heard_texts(event: "Event") -> list[str]:
+    """Return the outside strings an event carries, for redaction and storage.
+
+    Every text leaf of an external-input event counts, its metadata included,
+    so redaction and storage fail closed. The language module's own events
+    carry none. Any other module's event carries its ``heard_words``.
     """
     payload = event.payload
     if not isinstance(payload, dict):
         return []
     if event.type in EXTERNAL_INPUT_TYPES:
         return list(iter_text_leaves(payload))
-    if event.source == "language":
-        return []
-
-    def _collect(obj: Any) -> list[str]:
-        if isinstance(obj, dict):
-            leaves: list[str] = []
-            for key, value in obj.items():
-                if key in HEARD_TEXT_FIELDS:
-                    leaves.extend(iter_text_leaves(value))
-                else:
-                    leaves.extend(_collect(value))
-            return leaves
-        if isinstance(obj, (list, tuple)):
-            leaves: list[str] = []
-            for value in obj:
-                leaves.extend(_collect(value))
-            return leaves
-        return []
-
-    return _collect(payload)
+    return heard_words(event)
 
 
 def is_heard_event(event: "Event") -> bool:
