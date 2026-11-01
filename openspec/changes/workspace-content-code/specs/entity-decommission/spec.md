@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Decommission removes the content-code checkpoint
-The content-code checkpoint SHALL be one of the entity's data locations. Decommission SHALL remove it and list it in the audit record, and a dry run SHALL list it.
+The content-code checkpoint and the content-code artifacts in the entity's snapshots SHALL be among the entity's data locations. Decommission SHALL remove them and list them in the audit record, and a dry run SHALL list them.
 
 #### Scenario: The checkpoint is removed
 - **WHEN** an entity with a content-code checkpoint is decommissioned

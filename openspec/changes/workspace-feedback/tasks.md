@@ -18,5 +18,5 @@
 ## 3. Before the feedback ablation runs
 
 - [x] 3.1 Record the gains and conflict episodes in the research log, so the §6.4 stability measures (gain variance, runaway events, time to resolve) can be computed from the log (done in research-log-affect-fields)
-- [ ] 3.2 Preserve the top-down heads and gains through preservation and revive, as the forward models are
+- [ ] 3.2 Preserve the top-down heads and gains through preservation and revive, as the forward models are. Moved to `workspace-content-code` (its decision 4 and task 1.2, which persist the heads in every arm and leave the gains unpersisted because they relax to one within `gain_relax_s`); not built here
 - [ ] 3.3 A synthetic-conflict positive control: two processors fed inconsistent but learnable inputs; the detector flags it at 0.95 and a clean control at 0.05 before any live ablation run
