@@ -133,6 +133,9 @@ def test_deflection_marker_is_never_chosen():
         c = srp.classify_sample(text, prompt)
         assert c["deflection"]
         assert not srp.is_chosen(c)
+    # grounded and otherwise clean, but carrying a marker: still not chosen
+    assert not srp.is_chosen(_s("x", deflection=True)["cls"])
+    assert srp.is_chosen(_s("x")["cls"])
     clean = srp.classify_sample("Steady, a little tired, and glad you asked.", prompt)
     assert not clean["deflection"]
 
