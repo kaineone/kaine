@@ -34,7 +34,9 @@ A member is flagged as:
   under the shared heard rule (``kaine.faithful.external_input``);
 * ``undeclared_text``: a member of a type outside ``INTERNAL_EVENT_TYPES``
   whose payload holds any non-empty string, which could be heard words under
-  another field name;
+  another field name, unless the type has a field allowlist
+  (``kaine.faithful.episodic_own_content``) and every field of the payload is
+  allowlisted and passes its rule;
 * ``unparsed``: a member whose payload could not be read back and holds a
   quoted string, counted on the safe side.
 
@@ -73,6 +75,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from kaine.faithful.episodic_own_content import (  # noqa: E402
+    EPISODIC_FIELD_ALLOWLISTS,
+    allowlisted_payload,
+)
 from kaine.faithful.external_input import (  # noqa: E402
     EXTERNAL_INPUT_TYPES,
     INTERNAL_EVENT_TYPES,
@@ -164,7 +170,12 @@ def classify_member(source: str, type_: str, value: str) -> str | None:
         event = SimpleNamespace(source=source, type=type_, payload=payload)
         if heard_texts(event):
             return "heard_field"
-        if not declared and any(iter_text_leaves(payload)):
+        if declared:
+            return None
+        if allowlisted_payload(source, type_, payload) == payload:
+            # Every field is allowlisted for this type and passes its rule.
+            return None
+        if any(iter_text_leaves(payload)):
             return "undeclared_text"
         return None
     # The payload could not be read back: decide on the safe side.
@@ -183,11 +194,11 @@ UNDECLARED_TYPE = "<undeclared type>"
 
 def _known_pairs() -> frozenset[tuple[str, str]]:
     """Every (source, type) pair the code itself names: the declared own-content
-    types, the felt renderer's templates, the external-input types and the two
-    store markers' types."""
+    types and field-allowlisted pairs, the felt renderer's templates, the
+    external-input types and the two store markers' types."""
     from kaine.faithful.felt import FELT_TEMPLATES
 
-    pairs = set(INTERNAL_EVENT_TYPES) | set(FELT_TEMPLATES)
+    pairs = set(INTERNAL_EVENT_TYPES) | set(EPISODIC_FIELD_ALLOWLISTS) | set(FELT_TEMPLATES)
     pairs |= {(t.split(".", 1)[0], t) for t in EXTERNAL_INPUT_TYPES}
     pairs |= {("embodiment", "embodiment.visual.raw"), ("episodic_memory", "episodic_memory.replay")}
     return frozenset(pairs)

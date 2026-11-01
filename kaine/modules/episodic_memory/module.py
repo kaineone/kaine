@@ -13,6 +13,7 @@ from kaine.bus.schema import Event
 from kaine.bus.streams import AFFECT_STREAM, SLEEP_STREAM
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
+from kaine.faithful.episodic_own_content import allowlisted_payload
 from kaine.faithful.external_input import INTERNAL_EVENT_TYPES, is_heard_event
 from kaine.memory_kinds import EPISODIC_MEMORY_STORE_HEALTH_PATH
 from kaine.modules.base import BaseModule
@@ -583,9 +584,10 @@ _RAW_PERCEPTUAL_EVENT_TYPES: frozenset[str] = frozenset(
 HEARD_OMITTED_MARKER = "<heard omitted>"
 
 # Stored in place of the payload of an event whose type is not declared as
-# holding only the entity's own values and words (``INTERNAL_EVENT_TYPES``). Such
-# a payload could carry another speaker's words under any field name, so the
-# store fails closed and keeps only its source and type.
+# holding only the entity's own values and words (``INTERNAL_EVENT_TYPES``, or
+# a field allowlist in ``kaine.faithful.episodic_own_content``). Such a payload
+# could carry another speaker's words under any field name, so the store fails
+# closed and keeps only its source and type.
 UNCLASSIFIED_OMITTED_MARKER = "<unclassified omitted>"
 
 
@@ -625,9 +627,12 @@ def _serialize_snapshot(snapshot: WorkspaceSnapshot) -> str:
     embeddings; raw-perceptual payloads are not kept at all. A heard event,
     classified by the shared heard rule the language module uses
     (``kaine.faithful.external_input.is_heard_event``), is kept as its source
-    and type with ``<heard omitted>``, never its words. Any other type, known or
-    not, is kept as its source and type with ``<unclassified omitted>``: its
-    payload could hold another speaker's words under any field name. Replay
+    and type with ``<heard omitted>``, never its words. A pair audited field by
+    field (``kaine.faithful.episodic_own_content``) keeps only its allowlisted
+    fields whose values pass their rules; any other field is dropped. Any other
+    type, known or not, is kept as its source and type with
+    ``<unclassified omitted>``: its payload could hold another speaker's words
+    under any field name. Replay
     events from this module are recorded by id only; storing the replayed text
     would nest the old trace inside the new one on every sleep.
 
@@ -654,8 +659,12 @@ def _serialize_snapshot(snapshot: WorkspaceSnapshot) -> str:
         if is_heard_event(event):
             pieces.append(f"{event.source}:{event.type}={HEARD_OMITTED_MARKER}")
             continue
-        if (event.source, event.type) not in INTERNAL_EVENT_TYPES:
+        if (event.source, event.type) in INTERNAL_EVENT_TYPES:
+            pieces.append(f"{event.source}:{event.type}={strip_vectors(event.payload)}")
+            continue
+        kept = allowlisted_payload(event.source, event.type, event.payload)
+        if kept is None:
             pieces.append(f"{event.source}:{event.type}={UNCLASSIFIED_OMITTED_MARKER}")
             continue
-        pieces.append(f"{event.source}:{event.type}={strip_vectors(event.payload)}")
+        pieces.append(f"{event.source}:{event.type}={strip_vectors(kept)}")
     return " | ".join(pieces) if pieces else ""

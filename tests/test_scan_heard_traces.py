@@ -76,6 +76,28 @@ def _sha(paths) -> dict[str, str]:
             ("unparsed", "planning:planning.belief")
         ]),
         ("active | affect:affect.state={'x': <object>, 'label': 'calm'}", []),
+        # A field-allowlisted pair (kaine.faithful.episodic_own_content): a payload
+        # the current store writes is clean; a legacy payload with any other
+        # string field, or a value its rule refuses, is flagged.
+        (
+            "active | planning:planning.belief={'statement': 'salience_high', "
+            "'kind': 'belief', 'frequency': 0.8, 'confidence': 0.6}",
+            [],
+        ),
+        (
+            f"active | planning:planning.error={{'error_reason': 'ValueError: {SECRET}', "
+            "'elapsed_ms': 1.0}",
+            [("undeclared_text", "planning:planning.error")],
+        ),
+        (
+            f"active | social_cognition:social_cognition.agent_model="
+            f"{{'agent_id': 'operator', 'utterance': '{SECRET}'}}",
+            [("undeclared_text", "social_cognition:social_cognition.agent_model")],
+        ),
+        (
+            f"active | planning:planning.belief={{'statement': '{SECRET}', 'kind': 'belief'}}",
+            [("undeclared_text", "planning:planning.belief")],
+        ),
         (
             f"active | affect:affect.state={{'x': <object>, 'heard_text': '{SECRET}'}}",
             [("unparsed", "affect:affect.state")],

@@ -142,10 +142,12 @@ def test_replay_typed_event_from_another_source_follows_the_heard_rule():
         # EXTERNAL_INPUT_TYPES (second review, finding A).
         _ev("embodiment", "embodiment.im", {"message": HEARD, "from": "Avatar Two"}),
         _ev("embodiment", "embodiment.group_chat", {"body": {"lines": [HEARD]}}),
-        _ev("social_cognition", "social_cognition.agent_model", {"utterance": HEARD}),
-        # A known module's type that is not declared own-content.
-        _ev("planning", "planning.belief", {"note": HEARD}),
-        _ev("world_model", "world_model.scenario", {"seed": HEARD}),
+        _ev("social_cognition", "social_cognition.update", {"utterance": HEARD}),
+        # A known module's type that is not declared own-content (the self-model
+        # document holds operator-written text; kaine.faithful.episodic_own_content).
+        _ev("self_model", "self_model.document", {"values": [HEARD]}),
+        _ev("planning", "planning.note", {"note": HEARD}),
+        _ev("world_model", "world_model.dream", {"seed": HEARD}),
         # A language-module type other than its own speech.
         _ev("language", "language.unknown", {"quote": HEARD}),
         # A declared type name from the wrong source.
@@ -277,5 +279,51 @@ async def test_coalition_with_heard_speech_persists_no_heard_text(bus: AsyncBus,
             except Exception:
                 continue
             assert "PURPLE-HERON" not in json.dumps(entries, default=str)
+    finally:
+        await module.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_audited_own_content_persists_safe_fields_and_no_planted_text(
+    bus: AsyncBus, tmp_path: Path
+):
+    """Every audited pair (kaine.faithful.episodic_own_content) on a store on
+    disk: its safe fields are stored, a heard string planted in an unsafe
+    producer field or an unknown field is not, anywhere in the store."""
+    from kaine.faithful.episodic_own_content import EPISODIC_FIELD_ALLOWLISTS
+    from tests.test_episodic_memory_own_content import SAFE_SAMPLES, UNSAFE_PRODUCER_FIELDS
+
+    db_path = tmp_path / "episodic_memory.db"
+    module = await _module_on_disk(bus, db_path, capacity=2)
+    await module.initialize()
+    try:
+        coalitions = []
+        for pair in sorted(EPISODIC_FIELD_ALLOWLISTS):
+            payload = dict(SAFE_SAMPLES[pair])
+            for field in UNSAFE_PRODUCER_FIELDS.get(pair, ()):
+                payload[field] = f"RuntimeError: {HEARD}"
+            payload["message"] = HEARD
+            coalitions.append([_ev(pair[0], pair[1], payload)])
+        for tick, events in enumerate(coalitions):
+            await module.on_workspace(_snapshot(events, tick))
+        await module.consolidate_now()
+        exported = await module.export_preservation_state()
+
+        episodic = module.core.collection_name("episodic")
+        stored = (await module.core.storage.export([episodic]))[episodic]
+        assert len(stored) == len(coalitions)
+        texts = [point["text"] for point in stored]
+        # Positive control: the safe fields are in the store, as written.
+        assert any("'statement': 'salience_high'" in t for t in texts)
+        assert any("'would_be_action': 'shed_module'" in t for t in texts)
+        assert all(UNCLASSIFIED_OMITTED_MARKER not in t for t in texts)
+        for blob in (json.dumps(stored, default=str), json.dumps(exported, default=str)):
+            assert "PURPLE-HERON" not in blob
+            assert "hello there" not in blob
+        await module.core.storage.shutdown()
+        raw = _db_bytes(db_path)
+        assert b"salience_high" in raw
+        assert b"PURPLE-HERON" not in raw
+        assert b"hello there" not in raw
     finally:
         await module.shutdown()
