@@ -105,7 +105,7 @@ audio = [
 # already core; only these vendored-code deps are added here.
 internvideo = [
     "einops>=0.8.2",
-    "timm>=0.9",
+    "timm>=1.0.30",
     "easydict>=1.13",
 ]
 # OPTIONAL fused-attention fast path for the InternVideo-Next encoder. Install
