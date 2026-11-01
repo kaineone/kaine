@@ -6,10 +6,18 @@
 External-input types are events whose entire text payload is heard input
 produced by someone else, not by the entity.
 
-The heard rule (``heard_texts`` and ``is_heard_event``) is the one
-classification of heard words. The language module uses it to keep heard words
-out of the entity's own notes, and the episodic memory module uses it to keep
-heard words out of every stored trace.
+The heard rule (``heard_texts`` and ``is_heard_event``) decides which events
+are heard. The language module uses it to split heard events from the entity's
+own notes, and the episodic memory module uses it to keep heard events out of
+every stored trace. Three narrower checks deliberately use ``HEARD_TEXT_FIELDS``
+without ``text`` on events other than the external-input types: the renderers'
+redaction (``redact_heard_speech``), the language module's guard check
+(``_holds_outside_material``) and its log-residual and publish-time redaction.
+
+``INTERNAL_EVENT_TYPES`` declares the event types whose payloads hold only the
+entity's own values and words. The language module brings its heard-speech
+guard for any other type, and the episodic memory module keeps the payload of
+no other type in a trace.
 """
 
 from __future__ import annotations
@@ -23,6 +31,34 @@ if TYPE_CHECKING:
 # These events carry heard input: every text value in their payload is speech
 # said to or near the entity.
 EXTERNAL_INPUT_TYPES = frozenset({"audition.transcription", "embodiment.chat"})
+
+# Events whose payloads hold only the entity's own values and words; any other
+# event, including one of an unknown type, counts as outside material: the
+# language module brings its heard-speech guard, and the episodic memory module
+# stores it without its payload. Adding a type here asserts that no producer of
+# it ever carries another speaker's words, under any field name.
+INTERNAL_EVENT_TYPES = frozenset(
+    {
+        ("vision", "vision.report"),
+        ("audition", "audition.perception"),
+        ("audition", "audition.emotion"),
+        ("audition", "audition.prosody"),
+        ("interoception", "interoception.report"),
+        ("interoception", "interoception.fatigue"),
+        ("interoception", "interoception.regulation"),
+        ("sequence", "sequence.report"),
+        ("affect", "affect.state"),
+        ("affect", "affect.drive"),
+        ("affect", "affect.emotion"),
+        ("affect", "affect.goal"),
+        ("sleep", "sleep.sleep.started"),
+        ("sleep", "sleep.sleep.completed"),
+        ("sleep", "sleep.rest_request"),
+        ("cycle", "cycle.tick"),
+        ("language", "internal_speech"),
+        ("language", "external_speech"),
+    }
+)
 
 HEARD_TEXT_FIELDS = frozenset({
     "text",

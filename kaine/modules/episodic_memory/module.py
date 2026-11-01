@@ -13,7 +13,7 @@ from kaine.bus.schema import Event
 from kaine.bus.streams import AFFECT_STREAM, SLEEP_STREAM
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
-from kaine.faithful.external_input import is_heard_event
+from kaine.faithful.external_input import INTERNAL_EVENT_TYPES, is_heard_event
 from kaine.memory_kinds import EPISODIC_MEMORY_STORE_HEALTH_PATH
 from kaine.modules.base import BaseModule
 from kaine.modules.episodic_memory.associations import AssociationParams
@@ -582,6 +582,12 @@ _RAW_PERCEPTUAL_EVENT_TYPES: frozenset[str] = frozenset(
 # was heard, never the words.
 HEARD_OMITTED_MARKER = "<heard omitted>"
 
+# Stored in place of the payload of an event whose type is not declared as
+# holding only the entity's own values and words (``INTERNAL_EVENT_TYPES``). Such
+# a payload could carry another speaker's words under any field name, so the
+# store fails closed and keeps only its source and type.
+UNCLASSIFIED_OMITTED_MARKER = "<unclassified omitted>"
+
 
 def _affect_intensity(affect: dict[str, Any] | None) -> float:
     """Cached affect intensity, parsed as a float in [0, 1] when possible."""
@@ -610,16 +616,24 @@ def _replay_entry(point_id: str, memory: Any) -> ReplayEntry:
 def _serialize_snapshot(snapshot: WorkspaceSnapshot) -> str:
     """Serialize the snapshot to the text the episodic memory module stores and recalls against.
 
-    The content view keeps each selected event's source and type with its
-    stripped payload. It drops the tick index and bus entry IDs (both are
-    either stored in the payload or meaningless after stream trimming). Every
-    payload that is kept passes through ``strip_vectors``, so memory text never
-    carries perceptual embeddings; raw-perceptual payloads are not kept at all.
-    A heard event, classified by the shared heard rule the language module uses
+    The content view keeps each selected event's source and type, and the
+    stripped payload only of an event whose type is declared as holding only
+    the entity's own values and words (``INTERNAL_EVENT_TYPES``). It drops the
+    tick index and bus entry IDs (both are either stored in the payload or
+    meaningless after stream trimming). Every payload that is kept passes
+    through ``strip_vectors``, so memory text never carries perceptual
+    embeddings; raw-perceptual payloads are not kept at all. A heard event,
+    classified by the shared heard rule the language module uses
     (``kaine.faithful.external_input.is_heard_event``), is kept as its source
-    and type with ``<heard omitted>``, never its words. Replay events from this
-    module are recorded by id only; storing the replayed text would nest the old
-    trace inside the new one on every sleep.
+    and type with ``<heard omitted>``, never its words. Any other type, known or
+    not, is kept as its source and type with ``<unclassified omitted>``: its
+    payload could hold another speaker's words under any field name. Replay
+    events from this module are recorded by id only; storing the replayed text
+    would nest the old trace inside the new one on every sleep.
+
+    The entity's own speech (``language`` ``external_speech`` and
+    ``internal_speech``) is kept as spoken, so heard words the entity repeated
+    are stored as its own.
     """
     pieces: list[str] = []
     pieces.append("inhibited" if snapshot.inhibited else "active")
@@ -639,6 +653,9 @@ def _serialize_snapshot(snapshot: WorkspaceSnapshot) -> str:
             continue
         if is_heard_event(event):
             pieces.append(f"{event.source}:{event.type}={HEARD_OMITTED_MARKER}")
+            continue
+        if (event.source, event.type) not in INTERNAL_EVENT_TYPES:
+            pieces.append(f"{event.source}:{event.type}={UNCLASSIFIED_OMITTED_MARKER}")
             continue
         pieces.append(f"{event.source}:{event.type}={strip_vectors(event.payload)}")
     return " | ".join(pieces) if pieces else ""

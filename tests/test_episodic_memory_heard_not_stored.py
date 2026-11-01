@@ -5,7 +5,9 @@
 
 The episodic memory module classifies each coalition member with the shared
 heard rule (kaine.faithful.external_input) and stores a heard member as its
-source and type with ``<heard omitted>``. The end-to-end cases run the real
+source and type with ``<heard omitted>``. It keeps a payload only for a type
+declared in ``INTERNAL_EVENT_TYPES`` and stores every other type as
+``<unclassified omitted>``. The end-to-end cases run the real
 module on a sqlite-vec store on disk and read the traces back from that store,
 from the database file itself and from the preservation export.
 """
@@ -23,9 +25,17 @@ from kaine.bus import Event
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.cycle.types import WorkspaceSnapshot
-from kaine.faithful.external_input import EXTERNAL_INPUT_TYPES, HEARD_TEXT_FIELDS
+from kaine.faithful.external_input import (
+    EXTERNAL_INPUT_TYPES,
+    HEARD_TEXT_FIELDS,
+    INTERNAL_EVENT_TYPES,
+)
 from kaine.modules.episodic_memory import EpisodicMemory, EpisodicMemoryCore, FakeEmbedder
-from kaine.modules.episodic_memory.module import HEARD_OMITTED_MARKER, _serialize_snapshot
+from kaine.modules.episodic_memory.module import (
+    HEARD_OMITTED_MARKER,
+    UNCLASSIFIED_OMITTED_MARKER,
+    _serialize_snapshot,
+)
 from kaine.modules.episodic_memory.storage import SqliteVecStorage
 
 HEARD = "PURPLE-HERON-4471 hello there"
@@ -81,7 +91,7 @@ def test_every_external_input_type_is_covered():
     "event", _heard_events(), ids=lambda e: f"{e.source}:{e.type}:{json.dumps(e.payload)[:40]}"
 )
 def test_heard_member_is_stored_without_its_words(event: Event):
-    own = _ev("language", "internal_thought", {"text": OWN})
+    own = _ev("language", "internal_speech", {"text": OWN})
     text = _serialize_snapshot(_snapshot([event, own]))
     assert "PURPLE-HERON" not in text
     assert "hello there" not in text
@@ -122,6 +132,58 @@ def test_replay_typed_event_from_another_source_follows_the_heard_rule():
     assert f"mystery:episodic_memory.replay={HEARD_OMITTED_MARKER}" in text
 
 
+# --- fail closed: only declared own-content types keep their payload ----------
+
+
+@pytest.mark.parametrize(
+    "event",
+    [
+        # Words under a field name the heard rule does not know, on a type outside
+        # EXTERNAL_INPUT_TYPES (second review, finding A).
+        _ev("embodiment", "embodiment.im", {"message": HEARD, "from": "Avatar Two"}),
+        _ev("embodiment", "embodiment.group_chat", {"body": {"lines": [HEARD]}}),
+        _ev("social_cognition", "social_cognition.agent_model", {"utterance": HEARD}),
+        # A known module's type that is not declared own-content.
+        _ev("planning", "planning.belief", {"note": HEARD}),
+        _ev("world_model", "world_model.scenario", {"seed": HEARD}),
+        # A language-module type other than its own speech.
+        _ev("language", "language.unknown", {"quote": HEARD}),
+        # A declared type name from the wrong source.
+        _ev("mystery", "vision.report", {"caption": HEARD}),
+    ],
+    ids=lambda e: f"{e.source}:{e.type}",
+)
+def test_undeclared_type_is_stored_without_its_payload(event: Event):
+    text = _serialize_snapshot(_snapshot([event]))
+    assert "PURPLE-HERON" not in text
+    assert "hello there" not in text
+    assert "Avatar Two" not in text
+    assert text == f"active | {event.source}:{event.type}={UNCLASSIFIED_OMITTED_MARKER}"
+
+
+@pytest.mark.parametrize("pair", sorted(INTERNAL_EVENT_TYPES), ids=lambda p: f"{p[0]}:{p[1]}")
+def test_declared_own_content_type_keeps_its_payload(pair):
+    source, type_ = pair
+    event = _ev(source, type_, {"change_score": 0.25, "label": "calm"})
+    text = _serialize_snapshot(_snapshot([event]))
+    assert f"{source}:{type_}=" + "{'change_score': 0.25, 'label': 'calm'}" in text
+
+
+def test_declared_type_carrying_a_heard_field_is_still_heard():
+    event = _ev("affect", "affect.state", {"state": {"valence": 0.1}, "heard_text": HEARD})
+    text = _serialize_snapshot(_snapshot([event]))
+    assert "PURPLE-HERON" not in text
+    assert f"affect:affect.state={HEARD_OMITTED_MARKER}" in text
+
+
+def test_own_speech_is_kept_as_spoken_even_when_it_repeats_heard_words():
+    """A documented limit: the entity's own speech is stored as spoken, so heard
+    words it repeated are stored as its own (docs/09-modules/episodic-memory.md)."""
+    said = _ev("language", "external_speech", {"text": f"you said {HEARD}"})
+    text = _serialize_snapshot(_snapshot([said]))
+    assert HEARD in text
+
+
 # --- end to end: the real module on a store on disk ---------------------------
 
 
@@ -159,7 +221,7 @@ async def test_coalition_with_heard_speech_persists_no_heard_text(bus: AsyncBus,
         coalitions = [
             [
                 _ev("embodiment", "embodiment.chat", {"message": HEARD, "sender": "Avatar Two"}),
-                _ev("language", "internal_thought", {"text": OWN}),
+                _ev("language", "internal_speech", {"text": OWN}),
             ],
             [
                 _ev("audition", "audition.transcription", {"text": HEARD}),
@@ -169,7 +231,10 @@ async def test_coalition_with_heard_speech_persists_no_heard_text(bus: AsyncBus,
                 _ev("social_cognition", "social_cognition.update", {"partner": {"heard_text": HEARD}}),
                 _ev("dashboard", "dashboard.note", {"items": [{"user_input": HEARD}]}),
             ],
-            [_ev("interoception", "interoception.report", {"wellness": 0.9})],
+            [
+                _ev("embodiment", "embodiment.im", {"message": HEARD}),
+                _ev("interoception", "interoception.report", {"wellness": 0.9}),
+            ],
         ]
         for tick, events in enumerate(coalitions):
             await module.on_workspace(_snapshot(events, tick))
@@ -190,6 +255,8 @@ async def test_coalition_with_heard_speech_persists_no_heard_text(bus: AsyncBus,
             f"social_cognition:social_cognition.update={HEARD_OMITTED_MARKER}" in t for t in texts
         )
         assert any(f"dashboard:dashboard.note={HEARD_OMITTED_MARKER}" in t for t in texts)
+        assert any(f"embodiment:embodiment.im={UNCLASSIFIED_OMITTED_MARKER}" in t for t in texts)
+        assert any("interoception:interoception.report={'wellness': 0.9}" in t for t in texts)
 
         for blob in (
             json.dumps(stored, default=str),

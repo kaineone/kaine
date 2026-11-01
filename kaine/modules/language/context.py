@@ -31,7 +31,12 @@ from typing import Any, Optional
 from kaine.bus import Event
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.faithful import FaithfulRenderer
-from kaine.faithful.external_input import EXTERNAL_INPUT_TYPES, heard_texts, is_heard_event
+from kaine.faithful.external_input import (
+    EXTERNAL_INPUT_TYPES,
+    INTERNAL_EVENT_TYPES,
+    heard_texts,
+    is_heard_event,
+)
 from kaine.faithful.felt import felt_fallback, felt_renderer, redact_heard_speech_felt
 from kaine.faithful.templates import (
     HEARD_SPEECH_PLACEHOLDER,
@@ -100,32 +105,6 @@ HEARD_QUOTE_LIMIT = 500
 # words were.
 HEARD_POINTER_LINE = "Someone else spoke to me."
 HEARD_POINTER_INPUT = "Someone else spoke to me just now, in the words before my notes."
-
-# Events whose payloads hold only the entity's own values and words; any other
-# event, including one of an unknown type, counts as outside material and brings
-# the guard.
-INTERNAL_EVENT_TYPES = frozenset(
-    {
-        ("vision", "vision.report"),
-        ("audition", "audition.perception"),
-        ("audition", "audition.emotion"),
-        ("audition", "audition.prosody"),
-        ("interoception", "interoception.report"),
-        ("interoception", "interoception.fatigue"),
-        ("interoception", "interoception.regulation"),
-        ("sequence", "sequence.report"),
-        ("affect", "affect.state"),
-        ("affect", "affect.drive"),
-        ("affect", "affect.emotion"),
-        ("affect", "affect.goal"),
-        ("sleep", "sleep.sleep.started"),
-        ("sleep", "sleep.sleep.completed"),
-        ("sleep", "sleep.rest_request"),
-        ("cycle", "cycle.tick"),
-        ("language", "internal_speech"),
-        ("language", "external_speech"),
-    }
-)
 
 
 @dataclass(frozen=True)

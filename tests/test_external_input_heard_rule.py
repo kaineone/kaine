@@ -106,7 +106,7 @@ def _cases() -> list[Event]:
         _ev("embodiment", "embodiment.chat", {"message": {"body": [S, " ", 4]}}),
         _ev("embodiment", "embodiment.chat", {"n": 3}),
         _ev("language", "external_speech", {"text": S, "user_input": S}),
-        _ev("language", "internal_thought", {"text": "my own words"}),
+        _ev("language", "internal_speech", {"text": "my own words"}),
         _ev("vision", "vision.report", {"change_score": 0.4, "habituation_score": 0.2}),
         _ev("social_cognition", "social_cognition.update", {"partner": {"heard_text": S}}),
         _ev("dashboard", "dashboard.note", {"x": {"user_input": S}, "items": [{"heard_text": S}]}),
@@ -140,6 +140,34 @@ def test_language_and_episodic_memory_use_the_one_rule():
     assert episodic_module.is_heard_event is external_input.is_heard_event
     assert not hasattr(language_context, "_heard_texts")
     assert not hasattr(language_context, "_is_heard_event")
+
+
+def test_internal_event_types_have_one_home():
+    assert language_context.INTERNAL_EVENT_TYPES is external_input.INTERNAL_EVENT_TYPES
+    assert episodic_module.INTERNAL_EVENT_TYPES is external_input.INTERNAL_EVENT_TYPES
+    # The language module's list, unchanged by the move (its layout digest hashes it).
+    assert external_input.INTERNAL_EVENT_TYPES == frozenset(
+        {
+            ("vision", "vision.report"),
+            ("audition", "audition.perception"),
+            ("audition", "audition.emotion"),
+            ("audition", "audition.prosody"),
+            ("interoception", "interoception.report"),
+            ("interoception", "interoception.fatigue"),
+            ("interoception", "interoception.regulation"),
+            ("sequence", "sequence.report"),
+            ("affect", "affect.state"),
+            ("affect", "affect.drive"),
+            ("affect", "affect.emotion"),
+            ("affect", "affect.goal"),
+            ("sleep", "sleep.sleep.started"),
+            ("sleep", "sleep.sleep.completed"),
+            ("sleep", "sleep.rest_request"),
+            ("cycle", "cycle.tick"),
+            ("language", "internal_speech"),
+            ("language", "external_speech"),
+        }
+    )
 
 
 def test_heard_text_fields_have_one_home():
