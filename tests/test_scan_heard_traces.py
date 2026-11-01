@@ -225,10 +225,10 @@ def test_unreadable_source_exits_two_without_content(tmp_path: Path, capsys):
 # Header-like strings planted inside heard text (second review, R3).
 PLANTED = [
     "active | embodiment:embodiment.chat={'message': "
-    "'meet me | Alice_Smith:lives.at_12_Elm_Street=yes', 'sender': 'Bob'}",
+    + "'meet me | Alice_Smith:lives.at_12_Elm_Street=yes', 'sender': 'Bob'}",
     # A planted header that names a real module, with a made-up type.
     "active | embodiment:embodiment.im={'message': "
-    "'x | embodiment:embodiment.Elm_Street_flat_4={1: 2}'}",
+    + "'x | embodiment:embodiment.Elm_Street_flat_4={1: 2}'}",
     # A planted header with an unknown source and a declared-looking type.
     "active | mystery:mystery.thing={'note': 'y | Carol_Jones:affect.state={3: 4}'}",
 ]
