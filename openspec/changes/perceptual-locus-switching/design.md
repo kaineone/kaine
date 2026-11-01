@@ -7,7 +7,7 @@ The research note is `kaine-research/sensors-bodies-locus-research-2026-11-01.md
 1. A switch brings a burst of prediction error wherever the new world violates the old predictions (Garrido, Kilner, Stephan and Friston 2009, *Clin Neurophysiol* 120:453-463). When the switch is self-caused, an efference copy is the innate route by which the change can be predicted (Blakemore, Wolpert and Frith 2000, *Neuroreport* 11:R11-R16).
 2. Models are context-specific, selected by a cue and corrected by error (Wolpert and Kawato 1998, *Neural Netw* 11:1317-1329; Haruno, Wolpert and Kawato 2001, *Neural Comput* 13:2201-2220).
 3. Control adapts fast and perception remaps slowly (Linden et al. 1999, *Perception* 28:469-481; Smith, Ghazizadeh and Shadmehr 2006, *PLoS Biol* 4:e179).
-4. Returning to a known context shows savings, and one shared store shows interference (Krakauer, Ghez and Ghilardi 2005, *J Neurosci* 25:473-478). Alternating contexts becomes easier with practice (Welch et al. 1993, *Percept Psychophys* 54:195-204).
+4. Learning a second mapping soon after the first interferes with it. Savings came with time, washout and extra training, not with separate stores (Krakauer, Ghez and Ghilardi 2005, *J Neurosci* 25:473-478). Context-specific stores are MOSAIC's answer (prediction 2). Alternating contexts becomes easier with practice (Welch et al. 1993, *Percept Psychophys* 54:195-204).
 5. Learning a source needs acting in it (Held and Hein 1963, *J Comp Physiol Psychol* 56:872-876, from secondary sources; Kaspar et al. 2014, *Conscious Cogn* 28:47-63).
 6. Ownership and presence form within minutes under synchronous feedback (Petkova and Ehrsson 2008, *PLoS ONE* 3:e3832; Slater et al. 2010, *PLoS ONE* 5:e10564). They are bounded by the contingencies a source affords (Slater 2009, *Phil Trans R Soc B* 364:3549-3557).
 
@@ -19,71 +19,106 @@ The motivational side follows the stimulus-control act's evidence (`stimulus-con
 
 ## Decisions
 
-### D1. The locus selects a source; the class follows
+### D1. One source of truth: the source; the locus is derived
 
-- Desired state gains `source`, a registered source id.
-- `locus` becomes derived: it is the selected source's `locus_class`, or `off`.
-- Physical XOR virtual, the real camera's privacy invariant, holds as before. A `physical` source runs only when the locus is `physical`, and the vision gate reads the source's class instead of the presence of a factory (`kaine/modules/vision/module.py:382-411`).
-- `off` keeps its meaning: sleep sets it, and selecting a source again restores the class.
-- With the registry off, `source` is never written and every path is today's.
+Review PLS-3, PM decision.
+
+- **What is persisted.** With the registry on, desired state holds:
+  - `source`, a registered source id;
+  - `off_holders`, a set from `sleep`, `freeze` and `operator`;
+  - the lock and its holder, as today.
+
+  It does not persist a locus.
+- **How the locus is computed on every read.** It is `off` while any off-holder is present, and otherwise the selected source's kind-derived class (`perceptual-sources` D1). Physical XOR virtual follows by construction. A `physical` source runs only under the `physical` locus, and the vision gate reads the source's class instead of whether a factory is present (`kaine/modules/vision/module.py:382-411`).
+- **Why.** Today five writers set `locus` and none sets a source:
+  - the developmental lock (`kaine/cycle/__main__.py:2005`, `kaine/lifecycle/gate_runner.py:690`);
+  - sleep (`kaine/modules/sleep/module.py:846, 872`);
+  - the dashboard (`kaine/dashboard/perception.py:234`);
+  - the applier module (`kaine/modules/perceptual_locus/module.py:122`).
+
+  Each is a read-modify-write across two processes (the cycle and the dashboard) with no lock (`kaine/perception_state.py:225-236`). With two fields, an operator choice during sleep or the developmental pin could leave a physical source under a virtual locus, and a lost `off` would let the entity perceive while asleep.
+- **One writer path, with a lock.**
+  - Every change goes through `perception_state.update_desired(mutator)`. It takes an exclusive `fcntl` lock on a sibling lock file, reads, applies the mutator, writes atomically, and releases the lock.
+  - The cycle and the dashboard both use it.
+  - The arbiter, sleep, the developmental lock, the operator routes and the loss fallback are mutators, and none of them writes a locus.
+- **The developmental lock** pins `source = programme`, with `locked_by = "development"`.
+- **Sleep** adds and removes its `sleep` holder, and never writes a locus or a source. Restore is the removal of the holder, so the pre-sleep source returns by construction. Nothing is remembered in memory, and nothing defaults.
+- **Failed reads** resolve to the programme (`perceptual-sources` D10). With the registry off, every path is today's.
 
 The operator:
 
-- `POST /diagnostics/perception/source {source, locked}` behind the operator token selects any registered, available source, bypassing the entity gates. The developmental lock still overrides it, as it overrides `/locus` today (`kaine/perception_state.py:220-235`).
+- `POST /diagnostics/perception/source {source, locked}` behind the operator token selects any registered, available source, bypassing the entity gates, except that the developmental lock still wins.
+  - A `screen` source is offered only with `[perception_feed.screen].operator_opt_in` set (`perceptual-sources` D6).
+  - A room source opens only the modalities its environment approval lists.
 - `POST /diagnostics/perception/locus` keeps working:
-  - `off` as today.
-  - `physical` or `virtual` select `[perceptual_sources].default_physical` or `default_virtual`.
-  - A class with no default configured answers 409, naming the source route.
+  - `off` adds the `operator` off-holder, and any other value removes it.
+  - `physical` or `virtual` select `[perceptual_sources].default_physical` or `default_virtual`. A class with no default configured answers 409, naming the source route.
 
-### D2. One act, one arbiter
+### D2. One act, one arbiter, conforming to effector confinement
 
-- **The effector.** A `perceptual_source` effector is registered with the effectors module only when `[perception].allow_self_switch` is true and the registry is on.
-  - It declares one parameter, `source`, whose allowed values are the registered ids, and a confinement profile with no host side effect: in process, no files, no network, no devices.
-  - It runs only when the operator's whitelist names it.
-- **The arbiter.** It realises the act by calling the arbiter. The arbiter is one object built at boot and shared with the `PerceptualLocus` module, which feeds it the inhibition state from each broadcast. The legacy `intent.perceptual_locus.switch` consumer stays and calls the same arbiter. It still has no producer.
+Review PLS-4, PLS-5 and PLS-6; the PM's decision is to conform.
+
+- **The effector.**
+  - A `perceptual_source` effector is registered only when `[perceptual_locus].allow_self_switch` is true and the registry is on.
+  - It declares one parameter, `source`, whose allowed values are the registered ids, and it runs only when the operator's whitelist names it.
+- **Conformance with `effector-confinement`.**
+  - That change runs every effector's side effect in a separate, confined executor process: "The cycle process never performs an effector's side effect itself."
+  - So this effector's side effect is one thing: the executor publishes a request `{source, act_seq, signature}` to one stream, `perceptual_locus.requests`. Its confinement profile declares bus publish to that stream only: no files, no network, no devices.
+  - The arbiter, in the cycle, reads only that stream. It verifies the request's provenance against the signed act it realises (the act's run id, sequence and signature, `kaine/workspace/action_selection.py:412-421`), applies the gates, and writes through `update_desired`.
+  - The executor itself cannot change desired state.
+- **What this asks of `effector-confinement`.** A profile class, "publishes one declared request to one named stream". That needs an amendment to that change, reviewed there, and the same amendment serves `stimulus-control-act`, whose controller is in process too. Until it is accepted, this effector is not built. No exemption is taken.
+- **Inhibition.**
+  - The arbiter reads `snapshot.inhibited` from the workspace broadcast stream itself. It does not rely on the `PerceptualLocus` module, which ships off.
+  - It treats the entity as inhibited until the first snapshot arrives.
+  - Boot refuses `allow_self_switch = true` when the arbiter cannot subscribe.
+- **The legacy unsigned path.** With the registry on, the legacy `intent.perceptual_locus.switch` consumer refuses every request, with `reason_label = "legacy_intent"`. It carries no signature, whitelist or audit, and its `off` and `physical` values do not map to sources.
 - **Refusals and acceptance.**
-  - A refusal is a failed `effectors.action` at the effectors module's alert salience, so the entity perceives that its act did not take, as with every failed act.
-  - An accepted switch writes desired state atomically, bumps the source epoch and publishes `perceptual_locus.changed`.
-- **Why the signed act path and not a new intent type.**
-  - The act path already carries provenance, the whitelist, refusals as perception, and the hash-chained audit (spec `effectors`).
-  - The stimulus-control act uses the same path (`stimulus-control-act` D3, D4).
-  - A new intent type would duplicate all of it, without the audit.
+  - A refusal is a failed `effectors.action` at the effectors module's alert salience, so the entity perceives that its act did not take.
+  - An accepted switch bumps the source epoch and publishes `perceptual_locus.changed`.
+  - The arbiter keeps its own hash-chained audit of requests, with the effectors audit format.
 
 ### D3. The gates
 
-Checked in this order, each refusal carrying its closed reason label:
+Checked in this order, each refusal carrying its closed reason label. `not_selectable` comes before `available`, so a refusal never tells the entity the state of a source it may not use (review PLS-12).
 
 | Gate | Reason label |
 |---|---|
 | the target is registered | `unknown_source` |
+| it is entity-selectable, with its room approval (`perceptual-sources` D4) | `not_selectable` |
 | it is available | `unavailable:<state>` |
-| it is entity-selectable | `not_selectable` |
 | it is not the current source | `already_there` |
-| the locus is not locked | `locked_operator`, `locked_development` |
+| the source is not locked | `locked_operator`, `locked_development` |
 | `allow_self_switch` is true | `policy` |
 | the last broadcast was not inhibited | `inhibited` |
-| the entity is not asleep | `asleep` |
+| no off-holder is present (asleep, frozen, operator off) | `off` |
 | the entity is mature | `developing` |
-| no welfare hold is active | `welfare_hold` |
+| no welfare hold forbids this target (D4) | `welfare_hold` |
 | `min_dwell_s` (30 s, as shipped) since the last switch, or `min_dwell_new_source_s` (120 s) when the current source was entered for the first time this run | `dwell` |
 | fewer than `max_switches_per_awake_hour` (12) accepted entity switches in the trailing awake hour, excluding sleep and freezes | `hourly_cap` |
 
-Values:
+A return to the programme is exempt from both dwell rules and from the hourly cap, and is counted in the records. The entity can always leave a source for the safe default (D4).
 
-- **The new-source dwell.** The 120 s minimum on a never-seen source follows prediction 6: a full-body ownership illusion was rated after 2 minutes, with a threat response after 1 (Petkova and Ehrsson 2008).
-- **The hourly cap.** It bounds a compulsive pattern. Each new source buys learning progress, and so curiosity priority (`interest-goal-factor`), and the cap stops that from becoming a loop. The cap mirrors the stimulus act's 20 seeks per awake hour, set lower because a switch is a far larger perceptual event than a seek.
-- Both are provisional and go to Table A1.
+Values and time base:
 
-### D4. The welfare hold
+- Dwell, the hourly cap and the welfare-hold window run on entity time, as the existing dwell does, and the wall-time equivalent is recorded beside each.
+- **The new-source dwell** (120 s) is a provisional choice for Table A1 (review PLS-14).
+  - It is the order of magnitude at which illusions of owning a new body have been induced. Petkova and Ehrsson rated ownership after 2 minutes of synchronous stroking, with a threat response after 1 minute.
+  - Those are lengths of an induction protocol, not measured onset times, and a KAINE switch gives no such stimulation. So the figure is a starting value to be read against the readout, not a consequence of the research.
+- **The hourly cap** bounds a compulsive pattern. Each new source buys learning progress, and so curiosity priority (`interest-goal-factor`). It is provisional.
 
-- The welfare observer watches for a gray-zone event or a protective action within `welfare_hold_window_s` (120 s) after an entity-initiated switch.
-- When two of the last three entity switches were so followed:
-  - the arbiter refuses entity switches with `welfare_hold`;
-  - the operator gets an advisory;
-  - the hold lasts until the operator lifts it.
-- Operator switches are not held.
-- This is raise-only welfare. It never forces a switch, and it only removes the entity's ability to throw itself into repeated large prediction-error events that are followed by distress.
-- Loss of a source is handled by `perceptual-sources` (fallback after the grace period). It is not an entity switch.
+### D4. The welfare hold never traps the entity
+
+Review PLS-1, PM decision.
+
+- **What triggers it.** The welfare observer watches for a gray-zone event or a protective action within `welfare_hold_window_s` (120 s of entity time) after an entity-initiated switch. When two of the last three entity switches were so followed, a hold starts and the operator gets an advisory.
+- **What a hold forbids.** It forbids switches into any source other than the programme. It never forbids a return to the programme, which is the safe default the entity can always reach, and that return is exempt from dwell and the cap (D3). So the hold freezes exploring away. It never freezes the entity in the source that preceded its distress.
+- **What sustained distress triggers.**
+  - If a gray-zone event or protective action recurs within `welfare_return_s` (120 s of entity time) while a hold is active and the entity is not on the programme, the arbiter returns it to the programme through the operator path, recorded `changed_by = "welfare_hold"`.
+  - The entity is never left in the source that preceded distress while distress continues.
+- **Unattended runs.** The hold's advisory escalates through the existing welfare path. The unattended gate's caretaker receives it as a welfare event, as other advisories do, and does not wait for someone to read the dashboard.
+- **Lifting it.** The hold lasts until the operator lifts it.
+- **Operator switches** are not held.
+- This is raise-only welfare. It only takes away the entity's way into repeated large prediction-error events that are followed by distress, and it always keeps the way home.
 
 ### D5. Stage M, composed with the stimulus act
 
@@ -101,43 +136,59 @@ Values:
 - **Stage L.** `act-intent-derivation`'s act bar replaces the drive-led trigger. The choice uses learned advantages through `learned-action-selection`, with each target an intent kind `act:perceptual_source:<id>`.
 - **`relieves_drives`.** It remains a declaration the drive-biased strategy reads (`kaine/boot/wiring.py:103`). Stage M does not read it. Removing it is left to `learned-action-selection`, so this change undoes nothing.
 
-### D6. Credit
+### D6. Credit, without paying for the switch's own surprise
+
+Review PLS-8.
 
 - A realised switch is `effectors.action` for `perceptual_source` with `success = true`.
-- Novelty labelled `other` (alert excess) and learning progress within `Delta_resp` after a realised switch count as the entity's own response for boredom, on both relief channels.
-- This is the stimulus-control rule (`stimulus-control-act` D5), with the effector set widened to include `perceptual_source`. Outside the window, and with switching off, the rule is unchanged.
+- Within `Delta_resp` after a realised switch, only learning progress counts as the entity's own response for boredom.
+  - Alert excess is excluded inside each processor's adaptation period after the switch (D11), because a switch makes surprise by construction: a new world, the first reports of a fresh baseline.
+  - Otherwise the act would be rewarded by a surprise it made itself. That is the capture case the design cites (Olds and Milner 1954; Wilson et al. 2014).
+- Outside the window, and with switching off, the stimulus-control rule (`stimulus-control-act` D5) is unchanged.
+- **Before enabling: an offline habituation check**, by the method `stimulus-control-act` used for scene cuts (its D6; `docs/records/shakedowns/2026-10-31-stimulus-control-habituation.md`).
+  - It runs the affect module's trackers over synthetic report streams with switch bursts in vision and audition together, at the dwell and the cap.
+  - It shows the boredom relief that switching buys, with the exclusion above. The relief must fall with repetition, as revisits lower learning progress, and must not stay as a fixed payoff per switch.
+  - A dated record goes under `docs/records/shakedowns/`. The check is a precondition of task 4.6.
 
-### D7. Forward-model contexts per source
+### D7. Forward-model contexts per source, as a declared weight group
+
+Reviews PLS-2, PLS-9 and PLS-15; PM decision.
 
 The vision and audition processors each keep a bank keyed by source id. A context holds:
 
-- the forward model, including its workspace-feedback wrap and its positive-control shadows, which are swapped with it;
+- the forward model's weights;
 - the rolling prediction-error window;
 - the change-detector and habituation baselines;
-- the attention schema's own forward model where one exists.
+- the attention schema's own model where one exists.
 
-How the bank behaves:
+The workspace-feedback wrap and the positive-control shadows are rebuilt around the bound model, not stored in the bank.
 
+- **Identity: a declared weight group.**
+  - The bank is serialised under one key, `forward_model_bank`, added to the vision and audition entries of `MODULE_WEIGHT_GROUPS` and `MODULE_WEIGHT_PARAMETERS` (`kaine/lifecycle/strategies.py:462-490`, merged in #638).
+  - So a merge takes the whole bank from one named parent, or refuses, exactly as for today's single model. Contexts that only the other parent visited are lost in that merge, and the merge record says so.
+  - Without the declaration, the union strategy would concatenate the banks: the 2 + 2 = 4 layers bug #638 fixed.
+  - A fork copies the bank whole. A preservation bundle carries it, because the world model is identity.
+  - The weight-group guard test (`tests/test_fork_merge_module_weights.py`) gains a case with a populated bank, since the stock entity-free build has an empty one.
 - **On a new source epoch,** the processor stores its current context under the old id and binds the new id's context.
-- **A never-seen source** gets a deep copy of the current context. Forks start from a copy of their parent, and a copy keeps whatever generic dynamics transfer. A fresh model would discard it.
-- **Returning to a known source** binds its stored context: savings, no interference (prediction 4).
-- **Size and persistence.**
-  - The bank is bounded by the registered sources.
-  - It is serialised as the single model is today (`module.py:986-999`): weights plus statistical summaries, never a raw latent.
-  - A preservation bundle carries the whole bank, because the world model is identity.
-- **The transient.**
-  - A switch to a never-seen source starts with the copied baseline, so the first frames of a different world are normalised against the old world's error level. The burst is real.
-  - The rolling window then absorbs it: 32 reports, about 3 s at the shipped 10 Hz.
-  - A switch to a known source normalises against that source's own baseline, so its burst is small when the world is as it was.
-- **Stage 2, not built here: selection among contexts by prediction error** (MOSAIC's online correction, Haruno et al. 2001).
-  - It is needed when a source's world changes under its label, such as a different game in the same stream or a new room for the webcam.
-  - The readout's adaptation times show whether that happens.
+- **First entry: copy weights, never buffers.**
+  - A never-seen source gets a fresh model loaded from the current model's `state_dict()`, which holds weights and statistical summaries only, re-wrapped.
+  - It gets an empty recurrent buffer (`kaine/modules/vision/forward.py:104`) and empty windows and baselines.
+  - So no latent of the previous world, which may be the operator's room, enters the new context.
+  - Weights carry what transfers. Forks start from a copy of their parent for the same reason.
+- **Precision starts low** (research note §1; review PLS-9).
+  - With an empty window, the first reports of a new context are normalised against its own few errors (`kaine/modules/vision/module.py:668-673`), and no alert is raised until the window holds a quarter of `prediction_error_window`.
+  - So a new source's errors enter the workspace at low weight until its noise is estimated, as the cue-combination evidence says a new source should (Ernst and Banks 2002; Alais and Burr 2004).
+  - The world change itself is perceived through the switch event and through the raw error's learning progress, not through an alert storm.
+- **Return to a known source** binds its stored context, which the other world did not change. The per-context argument rests on MOSAIC (Wolpert and Kawato 1998; Haruno, Wolpert and Kawato 2001), with Krakauer, Ghez and Ghilardi 2005 cited for what one shared store does: interference (review PLS-15).
+- **Size.** The bank is bounded by the registered sources.
+- **Timing correction** (review PLS-7). Vision reports once per clip stride: `vision_sample_hz = 10` and `clip_stride = 3` give about 3.33 Hz (`config/kaine.toml:524-527`). A 32-report window is about 9.6 s, not 3 s.
+- **Stage 2, not built here.** Selection among contexts by prediction error (MOSAIC's online correction), for a source whose world changes under its label.
 
 ### D8. The efference copy, and what is not built
 
 - `perceptual_locus.changed` with `changed_by = "entity"` is the efference copy of the act.
 - The processors use the source epoch to bind contexts, which is MOSAIC's contextual cue.
-- Predictive attenuation of a self-caused transient is an innate mechanism with cited neuroscience (Blakemore et al. 2000). It would be allowed at the code site, but it is not built: the transient is information the entity can learn from, and the credit window and the readout measure it first.
+- Predictive attenuation of a self-caused transient is an innate mechanism with cited neuroscience (Blakemore et al. 2000). It would be allowed at the code site, but it is not built. The low starting precision of a new context (D7) already keeps a switch from flooding the workspace, and the raw-error readout (D11) measures what remains first.
 
 ### D9. The self-model's embodiment record
 
@@ -149,21 +200,26 @@ How the bank behaves:
 
 ### D10. Sleep
 
-- Sleep keeps writing `off` and restoring the pre-sleep locus (spec `perception-feed`). With the registry on, `source` is untouched by the `off` write (`write_desired_locus` replaces only the locus, `perception_state.py:205-237`), and restore returns to the pre-sleep source.
-- A source that became unavailable during sleep falls back as in `perceptual-sources`.
+- Sleep adds its `sleep` off-holder and removes it on restore (D1). It never writes a locus or a source, so the pre-sleep source returns by construction.
+- A failed read during sleep resolves to the programme (`perceptual-sources` D10), never to a physical source.
+- A source that became unavailable during sleep falls back to the programme, as in `perceptual-sources`.
 
 ### D11. Event fields and the readout
 
 - **Event fields.**
-  - `perceptual_locus.changed`: `{locus, source, changed_by}`, where `changed_by` is one of `entity`, `operator`, `source_lost` or `sleep`.
-  - `perceptual_locus.denied`: `{locus_requested, source_requested, denied_by, reason_label}`, where `denied_by` is `arbiter`.
+  - `perceptual_locus.changed`: `{locus, source, changed_by}`, where `changed_by` is one of `entity`, `operator`, `source_lost`, `sleep` or `welfare_hold`.
+  - `perceptual_locus.denied`: `{locus_requested, source_requested, denied_by, reason_label}`.
   - The research allowlist gains `source` and `source_requested`. The renamed fields match what it already expects.
-- **The `perceptual_switching` welfare record.** One per viewing, as listed in the proposal (item 10). The adaptation time is the time from the switch until the processor's normalised error stays below 1.5 for 10 consecutive reports. It is computed per processor and recorded with whether the context was new or revisited. The savings ratio is the adaptation time on a revisit over the first visit's.
+- **The `perceptual_switching` welfare record.** One per viewing, as in the proposal (item 10). Adaptation is measured on the raw prediction error, not the self-normalised one (review PLS-7).
+  - The self-normalised error falls toward 1 as its window fills with the burst's own errors, whether or not anything was learned.
+  - **First entry.** The adaptation time is the time until the 30-report rolling median of raw error comes within 10% of its value at departure, computed when the entity leaves.
+  - **Revisit.** It is the time until that median comes within 1.2 times the target context's pre-departure asymptote: the median raw error of its last 30 reports before the entity last left it.
+  - The savings ratio is the revisit's adaptation time over the first entry's.
 - **What the readout answers.** Whether prediction 4 holds for this mind: return should be faster than first entry. If it does not, the context bank is not doing its job, and stage 2 is due.
 
 ### D12. Off equals absent
 
-- With `[perception].allow_self_switch = false` (shipped), none of these is constructed:
+- With `[perceptual_locus].allow_self_switch = false` (shipped), none of these is constructed:
   - the effector;
   - the arbiter's entity path;
   - the stage-M source;
@@ -177,6 +233,8 @@ How the bank behaves:
 ## Risks
 
 - **[Switching becomes self-stimulation.]** Mitigations:
+  - alert excess excluded from the credit inside the adaptation period, and the offline habituation check before enabling (D6);
+  - low starting precision for a new context (D7);
   - dwell and the hourly cap;
   - savings make revisits less rewarding, as learning progress falls;
   - the readout's switch rate;
@@ -185,6 +243,8 @@ How the bank behaves:
   - `operator_room` sources are not entity-selectable unless the operator opts in. On the reference host the CTO opted in on 2026-11-01 for the webcam, so there the entity may choose the room. Each such switch still passes every gate of D3, and it is recorded.
   - The on-air state and the camera's light show it.
 - **[The context bank grows the preservation bundle.]** It is bounded by the registered sources, and each context is the size of today's model.
+- **[A merge loses contexts.]** The bank is one weight group taken whole from one parent (D7), so contexts only the other parent visited are lost, and the merge record says so. That is the rule #638 set for every learned weight.
+- **[The effector waits on another change.]** It conforms to `effector-confinement` through a profile class that change must accept (D2). Until then the effector is not built, and stage M has nothing to emit.
 - **[Interference stays hidden.]** The readout's savings ratio exposes it.
 - **[Stage-M composition biases toward the larger act set.]** Stated in D5, and replaced in stage L.
 
@@ -196,7 +256,8 @@ How the bank behaves:
   - switch while asleep;
   - choose the operator's desktop;
   - close its senses: `off` is not a target;
-  - be left without senses after a source is lost.
+  - be left without senses after a source is lost;
+  - be trapped by a welfare hold: a return to the programme is always allowed, and sustained distress triggers it (D4).
 - **The operator always can:** override, lock, and lift a welfare hold.
 - **Records** carry ids, labels and numbers only. Device identities are hashed, as in `perceptual-sources`.
 
