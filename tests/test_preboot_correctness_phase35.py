@@ -25,6 +25,7 @@ import pytest
 
 from kaine.cycle.engine import BASE_EPOCH, CognitiveCycle
 from kaine.modules.sleep.module import Sleep
+from tests._playlist_fakes import FakeAudioFrame, fake_av_module
 
 
 def _find_class(module_path: str, method: str) -> type:
@@ -367,19 +368,11 @@ async def test_sleep_task_not_collected_and_no_double_trigger():
 # ---------------------------------------------------------------- H1
 
 
-class _Plane:
-    def __init__(self, data):
-        self._data = data
-
-    def __bytes__(self):
-        return self._data
-
-
-class _Frame:
-    def __init__(self, pts, tag, nbytes):
-        self.pts = pts
-        self.time_base = 1 / 1000.0
-        self.planes = [_Plane(bytes([tag]) * nbytes)]
+def _Frame(pts, tag, nbytes):  # noqa: N802 — reads as the PyAV frame it fakes
+    # 10 ms of 48 kHz mono s16 per frame, timestamped in ms (padded plane).
+    return FakeAudioFrame(
+        bytes([tag]) * nbytes, pts=pts, time_base=1 / 1000.0, sample_rate=48000
+    )
 
 
 class _Container:
@@ -396,26 +389,12 @@ class _Container:
 
     def decode(self, stream):
         start_pts = self._seeked_us // 1000
-        for pts in range(start_pts, 10_000, 20):
+        for pts in range(start_pts, 10_000, 10):
             yield _Frame(pts, self.tag, 960)
 
 
-class _Resampler:
-    def __init__(self, **kwargs):
-        pass
-
-    def resample(self, frame):
-        return [frame]
-
-
 def _install_fake_av(monkeypatch):
-    fake_av = SimpleNamespace(
-        open=_Container,
-        audio=SimpleNamespace(
-            resampler=SimpleNamespace(AudioResampler=_Resampler)
-        ),
-    )
-    monkeypatch.setitem(sys.modules, "av", fake_av)
+    monkeypatch.setitem(sys.modules, "av", fake_av_module(_Container))
 
 
 class _FakeClock:

@@ -55,6 +55,11 @@ from kaine.modules.vision.feed import (
     StimulusSourceSchedule,
     load_playlist_manifest,
 )
+from tests._playlist_fakes import (
+    ConstantAudioContainer,
+    FakeVideoDecoders,
+    fake_av_module,
+)
 
 FILM_H, FILM_W = 20, 30
 FPS = 30
@@ -122,36 +127,9 @@ def _film_frame(i: int) -> np.ndarray:
     return ((ys * 5 + xs * 3 + cs * 40 + i * 11) % 256).astype(np.uint8)
 
 
-class _FakeCap:
-    def __init__(self, frame_count: int) -> None:
-        self._n = frame_count
-        self._i = 0
-
-    def isOpened(self) -> bool:  # noqa: N802 — mirrors cv2 API
-        return True
-
-    def get(self, prop) -> float:  # noqa: ANN001
-        return float(self._n)
-
-    def read(self):  # noqa: ANN201
-        if self._i >= self._n:
-            return False, None
-        frame = _film_frame(self._i)
-        self._i += 1
-        return True, frame
-
-    def release(self) -> None:
-        return None
-
-
-class _FakeCv2:
-    CAP_PROP_FRAME_COUNT = 7
-
-    def __init__(self, frame_count: int = 600) -> None:
-        self._n = frame_count
-
-    def VideoCapture(self, path: str) -> _FakeCap:  # noqa: N802 — mirrors cv2 API
-        return _FakeCap(self._n)
+def _film_decoders() -> FakeVideoDecoders:
+    """600 film frames at the manifest's FPS (tests/_playlist_fakes.py)."""
+    return FakeVideoDecoders(600, frame_fn=_film_frame)
 
 
 def _write_manifest(root: Path) -> Path:
@@ -213,7 +191,7 @@ def _video(tmp_path: Path, feed: dict, clock: _FakeClock, timers: _TimerFactory)
     transition, pclock = _build(feed, _born_stage(feed), clock, timers)
     assert transition is not None
     manifest = load_playlist_manifest(feed["playlist_manifest"])
-    inner = PlaylistSource(manifest, playlist_clock=pclock, cv2_module=_FakeCv2())
+    inner = PlaylistSource(manifest, playlist_clock=pclock, decoder_factory=_film_decoders())
     source = TransitionVideoSource(inner, transition)
     opened = source.open()
     assert opened
@@ -425,7 +403,7 @@ def test_video_source_crossfades_then_plays_from_programme_zero(tmp_path):
 def test_first_frame_decode_leaves_the_programme_clock_untouched(tmp_path):
     manifest = load_playlist_manifest(_write_manifest(tmp_path))
     pclock = PlaylistClock(1, clock=_FakeClock())
-    src = PlaylistSource(manifest, playlist_clock=pclock, cv2_module=_FakeCv2())
+    src = PlaylistSource(manifest, playlist_clock=pclock, decoder_factory=_film_decoders())
     assert src.first_frame() is None  # not verified yet
     opened = src.open()
     assert opened
@@ -450,52 +428,9 @@ def test_an_undecodable_first_frame_abandons_the_transition(tmp_path, caplog):
 
 
 def _install_fake_av(monkeypatch) -> None:  # noqa: ANN001
-    class _Plane:
-        def __init__(self, d: bytes) -> None:
-            self._d = d
-
-        def __bytes__(self) -> bytes:
-            return bytes(self._d)
-
-    class _Frame:
-        def __init__(self, d: bytes) -> None:
-            self.planes = [_Plane(d)]
-
-    class _AudioResampler:
-        def __init__(self, **kwargs) -> None:  # noqa: ANN003
-            pass
-
-        def resample(self, frame):  # noqa: ANN001, ANN201
-            yield frame
-
-    class _Streams:
-        audio = [object()]
-
-    class _Container:
-        duration = 8_000_000
-        streams = _Streams()
-
-        def decode(self, stream):  # noqa: ANN001, ANN201
-            for _ in range(8):
-                yield _Frame(b"\x01" * 32_000)
-
-        def close(self) -> None:
-            pass
-
-    class _ResamplerNS:
-        AudioResampler = _AudioResampler
-
-    class _AudioNS:
-        resampler = _ResamplerNS
-
-    class _FakeAv:
-        audio = _AudioNS
-
-        @staticmethod
-        def open(path):  # noqa: ANN001, ANN205
-            return _Container()
-
-    monkeypatch.setitem(sys.modules, "av", _FakeAv)
+    monkeypatch.setitem(
+        sys.modules, "av", fake_av_module(lambda path: ConstantAudioContainer())
+    )
 
 
 def _wait_for(predicate, timeout: float = 5.0) -> bool:  # noqa: ANN001
@@ -535,6 +470,8 @@ def test_audio_is_silent_during_the_crossfade_then_fades_in(tmp_path, monkeypatc
         clock.t = 54.0
         timers.fire_last()  # no video surface: the timer releases
         assert transition.released and pclock.transition_resumes == 1
+        # Programme time runs: the audio is paced against it, so blocks come due.
+        clock.t = 54.1
         assert _wait_for(lambda: len(heard) >= 2)
     finally:
         stream.stop()

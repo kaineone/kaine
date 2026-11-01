@@ -198,7 +198,7 @@ bash scripts/install.sh --python /path/to/python3.12
 | `memory-edge` | Episodic memory `backend = "sqlite_vec"` (`sqlite-vec`) | |
 | `dashboard` | `python -m kaine.dashboard` (`fastapi`, `uvicorn`, `jinja2`) |
 | `nvidia` | Interoception GPU telemetry (`pynvml`) | |
-| `vision` | Vision capture and playlist (`opencv-python-headless`, `transformers`, `Pillow`) | |
+| `vision` | Vision capture and playlist (`opencv-python-headless`, `transformers`, `Pillow`, `av`) | |
 | `audio` | Audition capture and playlist (`sounddevice`, `webrtcvad`, `funasr`, `librosa`, `av`) |
 | `speech-edge` | On-device STT/TTS via sherpa-onnx (`kaine/setup/speech_models.py`) |
 | `reasoning` | The pymdp engine for Planning (`inferactively-pymdp`, `jax[cpu]`) | |
@@ -298,7 +298,7 @@ bash scripts/install.sh --extras speech-edge
 
 ### Research perception feed
 
-With no profile selected, the loader applies the `first_configuration` profile, which sets `[perception_feed].mode = "seeded"`; the shipped `config/kaine.toml` has `mode = "off"`. `seeded` needs no media: it is a pure-NumPy procedural generator, reproducible per seed but not research-grade. The live upgrade is a fixed reference stimulus corpus: `[perception_feed].mode = "playlist"` decodes real, openly licensed video with audio for both senses (OpenCV for the video track, PyAV for the audio track), pinned by a per-item sha256 manifest built with `tools/build_playlist_manifest.py`. Set the manifest path in `config/kaine.operator.toml`, never the shipped profile. See [Configuration: perception and sleep](../appendix-a-configuration/perception-and-sleep.md).
+With no profile selected, the loader applies the `first_configuration` profile, which sets `[perception_feed].mode = "seeded"`; the shipped `config/kaine.toml` has `mode = "off"`. `seeded` needs no media: it is a pure-NumPy procedural generator, reproducible per seed but not research-grade. The live upgrade is a fixed reference stimulus corpus: `[perception_feed].mode = "playlist"` decodes real, openly licensed video with audio for both senses (PyAV for both tracks, with each frame presented at its decoded timestamp), pinned by a per-item sha256 manifest built with `tools/build_playlist_manifest.py`. Set the manifest path in `config/kaine.operator.toml`, never the shipped profile. See [Configuration: perception and sleep](../appendix-a-configuration/perception-and-sleep.md).
 
 Install both surfaces in one name:
 

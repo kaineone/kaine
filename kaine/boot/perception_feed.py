@@ -871,6 +871,12 @@ def _build_perception_feed_audio_factory(
     manifest_path = str(feed.get("playlist_manifest", "")).strip()
     if not manifest_path:
         raise ValueError("[perception_feed].mode = 'playlist' requires playlist_manifest")
+    if int(channels) not in (1, 2):
+        # Refused at boot, not frame by frame once the programme plays.
+        raise ValueError(
+            f"[perception_feed].mode = 'playlist' delivers 1 or 2 audio channels; "
+            f"[audition].channels = {channels}"
+        )
     manifest = load_playlist_manifest(manifest_path)
     # SAME shared start-clock instance the video factory received, so both feeds
     # cross item boundaries together (playlist-realtime-av-sync).

@@ -256,6 +256,7 @@ def _analyse_viewing(
                     "gaps_longer_than_10s": 0,
                     "dropped_records": 0,
                     "unreadable_lines": 0,
+                    "audio_on_other_item": 0,
                 },
                 "expected_null_modules_flagged": [],
             },
@@ -296,6 +297,10 @@ def _analyse_viewing(
     inhibited_count = 0
     paused_count = 0
     drift_values: list[float] = []
+    # Records whose audio position is on another item than the programme's
+    # (an item boundary crossed by one surface a block before the other). Their
+    # offsets are on different films, so they say nothing about drift.
+    audio_on_other_item = 0
 
     for rec in records:
         members = rec.get("members") or []
@@ -308,7 +313,13 @@ def _analyse_viewing(
             paused_count += 1
 
         audio = rec.get("audio")
-        if prog is not None and audio is not None:
+        if (
+            prog is not None
+            and audio is not None
+            and audio.get("item_idx") != prog.get("item_idx")
+        ):
+            audio_on_other_item += 1
+        elif prog is not None and audio is not None:
             try:
                 drift = abs(
                     float(prog.get("offset_s", 0.0))
@@ -388,6 +399,7 @@ def _analyse_viewing(
             "gaps_longer_than_10s": gaps_over_10s,
             "dropped_records": dropped_records,
             "unreadable_lines": unreadable_lines,
+            "audio_on_other_item": audio_on_other_item,
         },
         "expected_null_modules_flagged": expected_nulls_flagged,
         "time_scale_min": time_scale_min,

@@ -303,6 +303,40 @@ def test_picture_to_sound_drift(tmp_path: Path):
     assert pv["drift_max"] == pytest.approx(1.0)
 
 
+def test_drift_left_out_when_audio_is_on_another_item(tmp_path: Path):
+    """At a film boundary the audio can still be on the previous film for a
+    block; its offset is on another film, so it is counted, not measured."""
+    study_dir = _make_study_dir(tmp_path)
+    log_dir = study_dir / "main" / "data" / "ignition"
+    boundary = _record("m0", 2, offset=0.01, item_idx=1, delivered=4711.6)
+    boundary["audio"]["item_idx"] = 0
+    records = [
+        _record("m0", 1, offset=10.0, delivered=9.5),
+        boundary,
+        _record("m0", 3, offset=20.0, item_idx=1, delivered=21.0),
+    ]
+    _write_log(log_dir, records)
+    _write_steps(
+        study_dir,
+        [
+            {
+                "line": "branch",
+                "step": 0,
+                "outcome": "complete",
+                "run_id": "m0",
+                "ignition_log_dir": str(log_dir),
+                "modules": ["interoception"],
+            }
+        ],
+    )
+
+    report = _load_report(study_dir)
+    pv = report["per_viewing"][0]["measures"]
+    assert pv["drift_median"] == pytest.approx(0.75)
+    assert pv["drift_max"] == pytest.approx(1.0)
+    assert pv["data_quality"]["audio_on_other_item"] == 1
+
+
 def test_seq_gaps_counted_as_drops(tmp_path: Path):
     study_dir = _make_study_dir(tmp_path)
     log_dir = study_dir / "main" / "data" / "ignition"

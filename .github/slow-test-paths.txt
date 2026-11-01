@@ -12,3 +12,4 @@
 ^tests/test_module_names_guard\.py$
 ^tools/maintainer/rename_modules\.py$
 ^kaine/legacy_names\.py$
+^tests/test_playlist_av_sync\.py$

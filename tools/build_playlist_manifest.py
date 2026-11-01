@@ -20,7 +20,10 @@ Usage:
     # or from a directory (sorted by filename):
     python tools/build_playlist_manifest.py --dir /path/to/media --out out.toml
 
-Requires ``ffprobe`` (ffmpeg) on PATH to read each file's frame rate.
+Requires ``ffprobe`` (ffmpeg) on PATH to read each file's average frame rate,
+which the manifest records as provenance. The feed times presentation from each
+frame's decoded timestamp, not from this rate (a variable-frame-rate WebM often
+reports a nominal 25 fps here).
 """
 from __future__ import annotations
 
