@@ -6,8 +6,8 @@
 Offline maintainer script on the maternal-voice tool's pattern
 (``generate_maternal_voice.py``): the same Chatterbox TTS version, model revision
 and generation settings, a male reference speaker, original texts. It renders
-every take of every item in ``kaine/modules/audition/added_sounds_data/texts.toml``,
-writes trimmed, level-normalised, peak-limited 8 kHz mono FLAC files, and writes
+every take of every item in ``kaine/modules/audition/added_sounds_data/texts.toml``
+(each line separately, joined by seeded pauses of 0.6 to 1.0 s), writes trimmed, level-normalised, peak-limited 8 kHz mono FLAC files, and writes
 the ``outside_voice`` section of ``manifest.json`` (each take's sha256, frame
 count and seed, the settings and the reference attribution), keeping the
 ``melody`` section as it is. Run it in a GPU window with no entity running; it
@@ -69,6 +69,9 @@ PEAK_CEILING_DBFS = MV.PEAK_CEILING_DBFS
 OUTPUT_SAMPLE_RATE = MV.OUTPUT_SAMPLE_RATE
 BASE_SEED = 20261031
 MAX_TAKE_SECONDS = 20.0
+# Pauses between an item's lines, as between turns of everyday talk.
+PAUSE_MIN_SECONDS = 0.6
+PAUSE_MAX_SECONDS = 1.0
 MANIFEST_FORMAT = 1
 TOOL = "tools/maintainer/generate_outside_voice.py"
 REFERENCE_BASE_URL = "http://festvox.org/cmu_arctic/cmu_arctic/cmu_us_rms_arctic/wav/"
@@ -96,14 +99,17 @@ def load_texts(path: Path):
         raise SystemExit("error: texts.toml must contain an array of tables named 'item'")
     seen, items = set(), []
     for idx, it in enumerate(raw):
-        if not isinstance(it, dict) or set(it) != {"id", "takes", "text"}:
-            raise SystemExit(f"error: item {idx} must have exactly id, takes and text")
+        if not isinstance(it, dict) or set(it) != {"id", "takes", "lines"}:
+            raise SystemExit(f"error: item {idx} must have exactly id, takes and lines")
         if not isinstance(it["id"], str) or not _ID_RE.fullmatch(it["id"]) or it["id"] in seen:
             raise SystemExit(f"error: item {idx} id must match ^x[0-9]{{2}}-[a-z0-9-]+$ and be unique")
         if not isinstance(it["takes"], int) or it["takes"] < 1:
             raise SystemExit(f"error: item {it['id']} takes must be an integer >= 1")
-        if not isinstance(it["text"], str) or not it["text"] or "—" in it["text"] or "–" in it["text"]:
-            raise SystemExit(f"error: item {it['id']} text must be non-empty with no dash characters")
+        lines = it["lines"]
+        if not isinstance(lines, list) or not lines or not all(
+            isinstance(line, str) and line and "\u2014" not in line and "\u2013" not in line for line in lines
+        ):
+            raise SystemExit(f"error: item {it['id']} lines must be non-empty strings with no dash characters")
         seen.add(it["id"])
         items.append(it)
     return items, MV.file_sha256(path)
@@ -140,25 +146,43 @@ def build_reference_wav(ref_dir: Path, librosa, np, soundfile):
 
 
 def render_take(model, reference_wav: Path, item: dict, index: int, take: int, out_dir: Path, mods):
+    """Render one take: each line separately, joined by a seeded pause.
+
+    Chatterbox speaks a whole sentence at about 4.4 words a second whatever its
+    exaggeration, CFG weight or reference pace, which is fast for someone talking in
+    a room. Short lines with the pauses of conversation between them bring the take
+    to an adult conversational pace (about 2.5 to 3 words a second, pauses included).
+    """
     random, np, torch, librosa, soundfile = mods
-    seed = BASE_SEED + 1000 * index + take
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
-    print(f"generating {item['id']} take {take} (seed {seed}) ...")
-    wav = model.generate(
-        item["text"],
-        audio_prompt_path=str(reference_wav),
-        exaggeration=EXAGGERATION,
-        cfg_weight=CFG_WEIGHT,
-        temperature=TEMPERATURE,
-    ).squeeze(0).cpu().numpy().astype("float64")
-    trimmed, _ = librosa.effects.trim(wav, top_db=TRIM_TOP_DB)
-    if trimmed.size < int(0.3 * model.sr):
-        raise SystemExit(f"error: {item['id']} take {take} is shorter than 0.3 s after trimming")
-    resampled = librosa.resample(trimmed, orig_sr=model.sr, target_sr=OUTPUT_SAMPLE_RATE, res_type="soxr_hq")
+    seed = BASE_SEED + 1000 * index + 100 * take
+    pause_rng = random.Random(seed)
+    pieces = []
+    pauses = []
+    for k, line in enumerate(item["lines"]):
+        line_seed = seed + k
+        random.seed(line_seed)
+        np.random.seed(line_seed)
+        torch.manual_seed(line_seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(line_seed)
+        print(f"generating {item['id']} take {take} line {k} (seed {line_seed}) ...")
+        wav = model.generate(
+            line,
+            audio_prompt_path=str(reference_wav),
+            exaggeration=EXAGGERATION,
+            cfg_weight=CFG_WEIGHT,
+            temperature=TEMPERATURE,
+        ).squeeze(0).cpu().numpy().astype("float64")
+        trimmed, _ = librosa.effects.trim(wav, top_db=TRIM_TOP_DB)
+        if trimmed.size < int(0.3 * model.sr):
+            raise SystemExit(f"error: {item['id']} take {take} line {k} is shorter than 0.3 s after trimming")
+        if pieces:
+            pause = PAUSE_MIN_SECONDS + (PAUSE_MAX_SECONDS - PAUSE_MIN_SECONDS) * pause_rng.random()
+            pauses.append(round(pause, 3))
+            pieces.append(np.zeros(int(round(pause * model.sr)), dtype=np.float64))
+        pieces.append(trimmed)
+    joined = np.concatenate(pieces)
+    resampled = librosa.resample(joined, orig_sr=model.sr, target_sr=OUTPUT_SAMPLE_RATE, res_type="soxr_hq")
     seconds = resampled.size / OUTPUT_SAMPLE_RATE
     if seconds > MAX_TAKE_SECONDS:
         raise SystemExit(f"error: {item['id']} take {take} is {seconds:.1f} s, above {MAX_TAKE_SECONDS} s")
@@ -173,6 +197,7 @@ def render_take(model, reference_wav: Path, item: dict, index: int, take: int, o
     out = out_dir / f"{item['id']}.t{take}.flac"
     soundfile.write(str(out), pcm, OUTPUT_SAMPLE_RATE, format="FLAC", subtype="PCM_16")
     final_rms = float(np.sqrt(np.mean((pcm / 32767.0) ** 2)))
+    words = sum(len(re.findall(r"[A-Za-z']+", line)) for line in item["lines"])
     return {
         "take": take,
         "file": out.name,
@@ -180,6 +205,9 @@ def render_take(model, reference_wav: Path, item: dict, index: int, take: int, o
         "frames": int(pcm.size),
         "seconds": round(pcm.size / OUTPUT_SAMPLE_RATE, 3),
         "seed": seed,
+        "line_seeds": [seed + k for k in range(len(item["lines"]))],
+        "pauses_seconds": pauses,
+        "words_per_second": round(words / seconds, 2),
         "rms_dbfs": round(20 * math.log10(final_rms), 2) if final_rms > 0 else None,
     }
 
@@ -263,7 +291,7 @@ def main() -> int:
             {
                 "id": item["id"],
                 "index": index,
-                "text_sha256": hashlib.sha256(item["text"].encode("utf-8")).hexdigest(),
+                "text_sha256": hashlib.sha256("\n".join(item["lines"]).encode("utf-8")).hexdigest(),
                 "takes": takes,
             }
         )
@@ -287,6 +315,8 @@ def main() -> int:
             "exaggeration": EXAGGERATION,
             "cfg_weight": CFG_WEIGHT,
             "temperature": TEMPERATURE,
+            "rendering": "each line separately, joined by a seeded pause",
+            "pause_seconds": [PAUSE_MIN_SECONDS, PAUSE_MAX_SECONDS],
             "trim_top_db": TRIM_TOP_DB,
             "target_rms_dbfs": TARGET_RMS_DBFS,
             "peak_ceiling_dbfs": PEAK_CEILING_DBFS,

@@ -55,7 +55,12 @@
       "exaggeration": 0.5,
       "model_repo": "ResembleAI/chatterbox",
       "model_revision": "5bb1f6ee58e50c3b8d408bc82a6d3740c2db6e18",
+      "pause_seconds": [
+        0.6,
+        1.0
+      ],
       "peak_ceiling_dbfs": -1.0,
+      "rendering": "each line separately, joined by a seeded pause",
       "target_rms_dbfs": -20.0,
       "temperature": 0.8,
       "tool": "tools/maintainer/generate_outside_voice.py",
@@ -69,24 +74,44 @@
         "takes": [
           {
             "file": "x01-kettle.t0.flac",
-            "frames": 23382,
-            "rms_dbfs": -20.0,
-            "seconds": 2.923,
+            "frames": 33332,
+            "line_seeds": [
+              20261031,
+              20261032,
+              20261033
+            ],
+            "pauses_seconds": [
+              0.722,
+              0.906
+            ],
+            "rms_dbfs": -22.0,
+            "seconds": 4.167,
             "seed": 20261031,
-            "sha256": "58f240ed7d39613917026b5c6cd5534285c215dd1f7b586f203da731ddea1572",
-            "take": 0
+            "sha256": "dc3aca786696ee40f3ecae6000bac1cbbb216682945e2e62a0e32d9fdc978b13",
+            "take": 0,
+            "words_per_second": 2.88
           },
           {
             "file": "x01-kettle.t1.flac",
-            "frames": 20480,
-            "rms_dbfs": -21.76,
-            "seconds": 2.56,
-            "seed": 20261032,
-            "sha256": "630e689dd7375dce504f82aa334d91122a96273b72773bfc1664c56e479d4de2",
-            "take": 1
+            "frames": 36048,
+            "line_seeds": [
+              20261131,
+              20261132,
+              20261133
+            ],
+            "pauses_seconds": [
+              0.918,
+              0.772
+            ],
+            "rms_dbfs": -23.01,
+            "seconds": 4.506,
+            "seed": 20261131,
+            "sha256": "e8125505673a0847bc3de87edab4eb33e0a5a49f1c4c2bb305563633fb727fa3",
+            "take": 1,
+            "words_per_second": 2.66
           }
         ],
-        "text_sha256": "3f302b85895477c6a058fdf9f5cddc2be28790e776fbb615629465f9ec3deedc"
+        "text_sha256": "17452637635b26f6683939dfb6746f06feb7605f2510775dcd337ec900e67869"
       },
       {
         "id": "x02-rain",
@@ -94,24 +119,44 @@
         "takes": [
           {
             "file": "x02-rain.t0.flac",
-            "frames": 23894,
-            "rms_dbfs": -20.0,
-            "seconds": 2.987,
+            "frames": 37259,
+            "line_seeds": [
+              20262031,
+              20262032,
+              20262033
+            ],
+            "pauses_seconds": [
+              0.683,
+              0.988
+            ],
+            "rms_dbfs": -20.62,
+            "seconds": 4.657,
             "seed": 20262031,
-            "sha256": "7d50822e470787e1130a636e1184f94f7d005301a78fb9b69262735c5675d5c1",
-            "take": 0
+            "sha256": "d325b0cda3a6671d8fb63ea2dc249c1529e044024241ec71700db5afbeeda74a",
+            "take": 0,
+            "words_per_second": 2.58
           },
           {
             "file": "x02-rain.t1.flac",
-            "frames": 22187,
-            "rms_dbfs": -20.0,
-            "seconds": 2.773,
-            "seed": 20262032,
-            "sha256": "8460b2503070ce0c253b1d4026bf3394c58cf2c17a2774d1979759ded239d2d0",
-            "take": 1
+            "frames": 34021,
+            "line_seeds": [
+              20262131,
+              20262132,
+              20262133
+            ],
+            "pauses_seconds": [
+              0.69,
+              0.661
+            ],
+            "rms_dbfs": -22.35,
+            "seconds": 4.253,
+            "seed": 20262131,
+            "sha256": "e954f3636cb97c4e1a169f9759092c7003d819bd97fcaff0191430b41270b367",
+            "take": 1,
+            "words_per_second": 2.82
           }
         ],
-        "text_sha256": "e867015698f06b7cdca944058cb4c3254762c0169788adf2ad26e02903fa7a38"
+        "text_sha256": "8bf80ca2b0952d969b6910530e22d9ac3c824a82c1436fd269d0727e5c30d1bd"
       },
       {
         "id": "x03-shopping",
@@ -119,24 +164,44 @@
         "takes": [
           {
             "file": "x03-shopping.t0.flac",
-            "frames": 28160,
+            "frames": 39468,
+            "line_seeds": [
+              20263031,
+              20263032,
+              20263033
+            ],
+            "pauses_seconds": [
+              0.938,
+              0.923
+            ],
             "rms_dbfs": -20.0,
-            "seconds": 3.52,
+            "seconds": 4.934,
             "seed": 20263031,
-            "sha256": "09232fbf9ddedf0513a40eacc37643eca406c61429d421087ffa9b1e3b69ade9",
-            "take": 0
+            "sha256": "32a1a3151e1d9c4317c3182af0dbd53c4faeb81fedc6999f068626736ac6ce16",
+            "take": 0,
+            "words_per_second": 2.43
           },
           {
             "file": "x03-shopping.t1.flac",
-            "frames": 27136,
-            "rms_dbfs": -20.0,
-            "seconds": 3.392,
-            "seed": 20263032,
-            "sha256": "540a5f73ffd2c5fac65bf5760a48300e6c0dbe763c3264473d0fafbf3fb31d19",
-            "take": 1
+            "frames": 36417,
+            "line_seeds": [
+              20263131,
+              20263132,
+              20263133
+            ],
+            "pauses_seconds": [
+              0.661,
+              0.777
+            ],
+            "rms_dbfs": -21.29,
+            "seconds": 4.552,
+            "seed": 20263131,
+            "sha256": "c4b8229e954ff029d5f236f74d676d05949fbc096d64b8c34c602c5364418faa",
+            "take": 1,
+            "words_per_second": 2.64
           }
         ],
-        "text_sha256": "337d8ce82c80958ce6ddd99092062908462e959f0f08266d3fb46903487e9656"
+        "text_sha256": "452923655d31a17e1cefa17e0d6c3d949b81c96625d622c173c9a97ed2cc68bd"
       },
       {
         "id": "x04-window",
@@ -144,24 +209,44 @@
         "takes": [
           {
             "file": "x04-window.t0.flac",
-            "frames": 23552,
+            "frames": 36922,
+            "line_seeds": [
+              20264031,
+              20264032,
+              20264033
+            ],
+            "pauses_seconds": [
+              0.812,
+              0.88
+            ],
             "rms_dbfs": -20.0,
-            "seconds": 2.944,
+            "seconds": 4.615,
             "seed": 20264031,
-            "sha256": "5af1f9a6687fd8801874697b3d2b6ede0b0a2a7e66dea8e274023835d154ec20",
-            "take": 0
+            "sha256": "cf9dfc872491df71dbf748dbf2192ff97863b8e3970be9eea19e6bf5b227d955",
+            "take": 0,
+            "words_per_second": 2.6
           },
           {
             "file": "x04-window.t1.flac",
-            "frames": 24576,
-            "rms_dbfs": -20.0,
-            "seconds": 3.072,
-            "seed": 20264032,
-            "sha256": "df283f093dbb7bbb4473392e80721031acca909544c4ac020a29161e0febf8a4",
-            "take": 1
+            "frames": 33530,
+            "line_seeds": [
+              20264131,
+              20264132,
+              20264133
+            ],
+            "pauses_seconds": [
+              0.643,
+              0.604
+            ],
+            "rms_dbfs": -20.28,
+            "seconds": 4.191,
+            "seed": 20264131,
+            "sha256": "c1f66330ccfb8d382d5d71209db167c27efd81204e127e84aced2a6cca97edb9",
+            "take": 1,
+            "words_per_second": 2.86
           }
         ],
-        "text_sha256": "eeeb29916343108992ecefb135258ea4fe84cfdb8633dba2da4621877a06a1a1"
+        "text_sha256": "cd8fbeb30f1897a195ed85379edc9eb2d7abc20c5ad98a81f81a4f09fa518701"
       },
       {
         "id": "x05-garden",
@@ -169,24 +254,40 @@
         "takes": [
           {
             "file": "x05-garden.t0.flac",
-            "frames": 20480,
+            "frames": 28407,
+            "line_seeds": [
+              20265031,
+              20265032
+            ],
+            "pauses_seconds": [
+              0.97
+            ],
             "rms_dbfs": -20.0,
-            "seconds": 2.56,
+            "seconds": 3.551,
             "seed": 20265031,
-            "sha256": "c96cbc13a92e3fbf3bd26d267179cf009a4e8b63d33dbdd939d12e15f0312da3",
-            "take": 0
+            "sha256": "9f764ee0a1355d244ae221f5046a4ed64901376f99ac2cc5dab4f4879718cc6a",
+            "take": 0,
+            "words_per_second": 2.53
           },
           {
             "file": "x05-garden.t1.flac",
-            "frames": 19115,
+            "frames": 28205,
+            "line_seeds": [
+              20265131,
+              20265132
+            ],
+            "pauses_seconds": [
+              0.944
+            ],
             "rms_dbfs": -20.0,
-            "seconds": 2.389,
-            "seed": 20265032,
-            "sha256": "3904d9df7dc0c6c19f6cf74c343422baa4a52e8af650a022b11fc4ff57c0c7af",
-            "take": 1
+            "seconds": 3.526,
+            "seed": 20265131,
+            "sha256": "a876fbf24040f2c3ce59c8811dd68c6c4b2661a76fabb142ee886bb1ba691e3e",
+            "take": 1,
+            "words_per_second": 2.55
           }
         ],
-        "text_sha256": "bee2f07ddaec6ca40b324c60320a9541d9a106cd9261fedb22fa7655cef0441e"
+        "text_sha256": "ce35bb107eba6912a4e4210fe91c0d2b5dbdbca9929707b048c9bb17d3a3307d"
       },
       {
         "id": "x06-bus",
@@ -194,24 +295,44 @@
         "takes": [
           {
             "file": "x06-bus.t0.flac",
-            "frames": 23894,
-            "rms_dbfs": -20.22,
-            "seconds": 2.987,
+            "frames": 45886,
+            "line_seeds": [
+              20266031,
+              20266032,
+              20266033
+            ],
+            "pauses_seconds": [
+              0.984,
+              0.976
+            ],
+            "rms_dbfs": -22.65,
+            "seconds": 5.736,
             "seed": 20266031,
-            "sha256": "bf412a61d570438716945696e7d6b3cf524551157e6ed366287e397573aca577",
-            "take": 0
+            "sha256": "b71a3886166d2427ddd8c7306ebcffa98eb4eb7e3af30ba38e8fa936fc364cbb",
+            "take": 0,
+            "words_per_second": 2.44
           },
           {
             "file": "x06-bus.t1.flac",
-            "frames": 24747,
+            "frames": 40992,
+            "line_seeds": [
+              20266131,
+              20266132,
+              20266133
+            ],
+            "pauses_seconds": [
+              0.902,
+              0.788
+            ],
             "rms_dbfs": -20.0,
-            "seconds": 3.093,
-            "seed": 20266032,
-            "sha256": "d9c2d85e2d56f7d6bb8e1b15dd3661e5e03c3598c68fac1910d5d0b6c037c34a",
-            "take": 1
+            "seconds": 5.124,
+            "seed": 20266131,
+            "sha256": "667e85fba5ef37c228e52214d429b38d14584bdc899327f49a48cdc377c6665a",
+            "take": 1,
+            "words_per_second": 2.73
           }
         ],
-        "text_sha256": "888f9de38f3d71bd4b41adea1ef90132af4ceaacfcce84858e9cd437b62e2fdd"
+        "text_sha256": "567598286e9b7fb55955377e2e1e3605f308abe569e88cf3c56cf118f77e2f7a"
       },
       {
         "id": "x07-dinner",
@@ -219,24 +340,44 @@
         "takes": [
           {
             "file": "x07-dinner.t0.flac",
-            "frames": 27990,
-            "rms_dbfs": -20.16,
-            "seconds": 3.499,
+            "frames": 37449,
+            "line_seeds": [
+              20267031,
+              20267032,
+              20267033
+            ],
+            "pauses_seconds": [
+              0.7,
+              0.823
+            ],
+            "rms_dbfs": -20.0,
+            "seconds": 4.681,
             "seed": 20267031,
-            "sha256": "dfe500cb10399090887930573347acf4fd50e077ce61df2f4d92ac08f597e52b",
-            "take": 0
+            "sha256": "0026b3e1637213fa4793e74e7aa125230e4aadcb43476702b2fa6ebaa3d5421c",
+            "take": 0,
+            "words_per_second": 2.35
           },
           {
             "file": "x07-dinner.t1.flac",
-            "frames": 28502,
-            "rms_dbfs": -20.0,
-            "seconds": 3.563,
-            "seed": 20267032,
-            "sha256": "6b5bfdeb6939effbdfbe3f670b26d890495984b32e73430e51c28133d492a768",
-            "take": 1
+            "frames": 40157,
+            "line_seeds": [
+              20267131,
+              20267132,
+              20267133
+            ],
+            "pauses_seconds": [
+              0.98,
+              0.605
+            ],
+            "rms_dbfs": -21.06,
+            "seconds": 5.02,
+            "seed": 20267131,
+            "sha256": "69a56f8596b4b58584b89c04fd51c1b1a992980f152bcf66dc2a3558ec9ef6db",
+            "take": 1,
+            "words_per_second": 2.19
           }
         ],
-        "text_sha256": "de6a3dae2db6aa9d9df6c0f0d8ca0b91e3c3ca518fe485d2c91656950021d96c"
+        "text_sha256": "ba565fc49dbafea27c0751b3c315cd9c2885e9586468b7308ff63cace60039b3"
       },
       {
         "id": "x08-chair",
@@ -244,24 +385,40 @@
         "takes": [
           {
             "file": "x08-chair.t0.flac",
-            "frames": 30208,
-            "rms_dbfs": -21.44,
-            "seconds": 3.776,
+            "frames": 28389,
+            "line_seeds": [
+              20268031,
+              20268032
+            ],
+            "pauses_seconds": [
+              0.925
+            ],
+            "rms_dbfs": -20.68,
+            "seconds": 3.549,
             "seed": 20268031,
-            "sha256": "fc2cfd1e026a51db28049064a35260b05996e10dfa3ad3decaf5d1cb0b175b7d",
-            "take": 0
+            "sha256": "bc18d1b60765a525095231f867184b4c82d7e366ec9903bcc853dc395491e753",
+            "take": 0,
+            "words_per_second": 2.54
           },
           {
             "file": "x08-chair.t1.flac",
-            "frames": 30379,
-            "rms_dbfs": -20.0,
-            "seconds": 3.797,
-            "seed": 20268032,
-            "sha256": "07f3f88ad1fd15caf2ff38261aec958e183e11c1fbf7bc8b53974078d0b5e0bd",
-            "take": 1
+            "frames": 27409,
+            "line_seeds": [
+              20268131,
+              20268132
+            ],
+            "pauses_seconds": [
+              0.695
+            ],
+            "rms_dbfs": -21.18,
+            "seconds": 3.426,
+            "seed": 20268131,
+            "sha256": "0c94444786b2b9efbffa39b00fec48fd5d818c448e87d041faeb4de60ba310e1",
+            "take": 1,
+            "words_per_second": 2.63
           }
         ],
-        "text_sha256": "51b62e227323ea22578d9f1720df03ce90bc3b0b2ea4ba08598bf6b240976593"
+        "text_sha256": "faf1bc6fcc3892a1839312b25dfd24d4e48725ff6b34fb6e60cc73cb38b69bea"
       },
       {
         "id": "x09-radio",
@@ -269,24 +426,40 @@
         "takes": [
           {
             "file": "x09-radio.t0.flac",
-            "frames": 24747,
-            "rms_dbfs": -20.0,
-            "seconds": 3.093,
+            "frames": 31537,
+            "line_seeds": [
+              20269031,
+              20269032
+            ],
+            "pauses_seconds": [
+              0.955
+            ],
+            "rms_dbfs": -21.68,
+            "seconds": 3.942,
             "seed": 20269031,
-            "sha256": "fa854cf6ccfc7b19e53bfaf05a76b75e53ab7e0977e59688ca9b421f230d117c",
-            "take": 0
+            "sha256": "d4089cb82012774b531a254af725e8fc04cbcfc713abb54533f5fda641177ded",
+            "take": 0,
+            "words_per_second": 2.28
           },
           {
             "file": "x09-radio.t1.flac",
-            "frames": 21334,
+            "frames": 32230,
+            "line_seeds": [
+              20269131,
+              20269132
+            ],
+            "pauses_seconds": [
+              0.935
+            ],
             "rms_dbfs": -20.0,
-            "seconds": 2.667,
-            "seed": 20269032,
-            "sha256": "ad84f11f261427830e4df34524648f829e7a88001a3c08a0c297d22099b7bd1b",
-            "take": 1
+            "seconds": 4.029,
+            "seed": 20269131,
+            "sha256": "16aadf205820a77446191b35e45a87a166788612647455843064331c4e5a4549",
+            "take": 1,
+            "words_per_second": 2.23
           }
         ],
-        "text_sha256": "3a2a3c28a69d4a54a9b9114c9ac9b163c6eb1202578c4655417e58f7cd62bfaf"
+        "text_sha256": "dc6b15f28f32765bef43d7792e1634287d91a4f72c7960484883aeb611c4302f"
       },
       {
         "id": "x10-walk",
@@ -294,24 +467,44 @@
         "takes": [
           {
             "file": "x10-walk.t0.flac",
-            "frames": 24576,
-            "rms_dbfs": -20.3,
-            "seconds": 3.072,
+            "frames": 35600,
+            "line_seeds": [
+              20270031,
+              20270032,
+              20270033
+            ],
+            "pauses_seconds": [
+              0.824,
+              0.618
+            ],
+            "rms_dbfs": -23.11,
+            "seconds": 4.45,
             "seed": 20270031,
-            "sha256": "ec8ffdfced95f5a7b1e3468f590ae976e9554b81323c6b6de182fef001807b65",
-            "take": 0
+            "sha256": "553512a81d0ccbacd00cc1088e3758eaa5dc0c4dab078bbaa159fd3e6903ded8",
+            "take": 0,
+            "words_per_second": 2.7
           },
           {
             "file": "x10-walk.t1.flac",
-            "frames": 22870,
-            "rms_dbfs": -20.0,
-            "seconds": 2.859,
-            "seed": 20270032,
-            "sha256": "8cf518ae4c4b1e55c7094bd9b73d8c6a5d4e2629c01ffb1a5e345e76f0ff5e93",
-            "take": 1
+            "frames": 38064,
+            "line_seeds": [
+              20270131,
+              20270132,
+              20270133
+            ],
+            "pauses_seconds": [
+              0.848,
+              0.817
+            ],
+            "rms_dbfs": -20.65,
+            "seconds": 4.758,
+            "seed": 20270131,
+            "sha256": "178188c753cefdc4e837dae31227144e8c46164f50975bf09a43894be3c43356",
+            "take": 1,
+            "words_per_second": 2.52
           }
         ],
-        "text_sha256": "a19e8320ce89b324756feb22eb09a06d9b2642b1212d9b64ac95519eed4adb07"
+        "text_sha256": "37363eda4bf5d15f96115f4774b051c0d08d9348e624b24249ca977ffb647069"
       }
     ],
     "reference_voice": {
@@ -348,7 +541,7 @@
       ],
       "reference_wav_sha256": "c15114bebf1b767abec2d54b7919527e735a7c390ecb8ce3b38030e85c0190b5"
     },
-    "texts_sha256": "3b75f7ec8c78b2d6aeb562d9d23744569626ad6d13959970b6e83b0bfc3ee06e"
+    "texts_sha256": "14429b734dd0592cf9799bf7c69a428c326a49120ee68443d6f40be6653943cd"
   },
   "sample_rate": 8000
 }

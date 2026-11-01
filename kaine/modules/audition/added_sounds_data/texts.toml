@@ -5,54 +5,56 @@
 # near the mother, heard through the intrauterine path with its intonation
 # (Querleu et al. 1988). Original texts written for KAINE: everyday and neutral,
 # no names, no quoted or copyrighted material. The voice talks to the room, not to
-# the fetus. tools/maintainer/generate_outside_voice.py renders each item.
+# the fetus. Each item is a few short lines; tools/maintainer/generate_outside_voice.py
+# renders each line separately and joins them with seeded pauses of 0.6 to 1.0 s,
+# so the voice talks at an adult conversational pace.
 
 [[item]]
 id = "x01-kettle"
 takes = 2
-text = "I've put the kettle on. Would you like a cup of tea as well?"
+lines = ["The kettle's on.", "Would you like some tea?", "I'll make a pot."]
 
 [[item]]
 id = "x02-rain"
 takes = 2
-text = "It looks like rain this afternoon, so I brought the washing in."
+lines = ["It looks like rain.", "I brought the washing in.", "Just in time."]
 
 [[item]]
 id = "x03-shopping"
 takes = 2
-text = "We need bread and some apples. I can go to the shop after lunch."
+lines = ["We need some bread.", "And a few apples.", "I'll go after lunch."]
 
 [[item]]
 id = "x04-window"
 takes = 2
-text = "Shall I open the window a little? It's quite warm in here."
+lines = ["It's warm in here.", "Shall I open the window?", "Just a little."]
 
 [[item]]
 id = "x05-garden"
 takes = 2
-text = "The tomatoes in the garden are finally turning red."
+lines = ["The tomatoes are turning red.", "We'll have plenty soon."]
 
 [[item]]
 id = "x06-bus"
 takes = 2
-text = "The bus was late again this morning, but I still got there on time."
+lines = ["The bus was late again.", "Ten minutes late.", "I still got there on time."]
 
 [[item]]
 id = "x07-dinner"
 takes = 2
-text = "How about soup for dinner tonight? There are carrots and potatoes left."
+lines = ["How about soup tonight?", "There are carrots left.", "And some potatoes."]
 
 [[item]]
 id = "x08-chair"
 takes = 2
-text = "I fixed the wobbly leg on the kitchen chair. It should be fine now."
+lines = ["I fixed the kitchen chair.", "It doesn't wobble now."]
 
 [[item]]
 id = "x09-radio"
 takes = 2
-text = "They said on the radio that tomorrow will be sunny and mild."
+lines = ["The radio says tomorrow will be sunny.", "Mild, too."]
 
 [[item]]
 id = "x10-walk"
 takes = 2
-text = "Do you feel like a short walk later, once it cools down a bit?"
+lines = ["Shall we go for a walk?", "Later, maybe.", "Once it cools down."]
