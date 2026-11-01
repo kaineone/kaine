@@ -14,6 +14,14 @@ from typing import Any, AsyncIterator, Optional
 import redis.asyncio as aioredis
 from redis.exceptions import ResponseError
 
+from kaine.bus.companion import (
+    COMPANION_FIELD,
+    CompanionDeclaration,
+    CompanionRegistry,
+    companion_ref,
+    companion_stream,
+    parse_companion_ref,
+)
 from kaine.bus.config import BusConfig, load_bus_config, maxlen_for
 from kaine.bus.errors import BusSecurityError, ReservedStreamError
 from kaine.bus.schema import (
@@ -30,14 +38,14 @@ _BUS_INSTANCE: Optional["AsyncBus"] = None
 _BUS_LOCK = asyncio.Lock()
 
 
-def _encode_event(event: Event) -> dict[str, str]:
+def _encode_event(event: Event, payload: Optional[dict[str, Any]] = None) -> dict[str, str]:
     return {
         "source": event.source,
         "type": event.type,
         "salience": repr(event.salience),
         "timestamp": event.timestamp.isoformat(),
         "causal_parent": event.causal_parent or "",
-        "payload": json.dumps(event.payload, separators=(",", ":")),
+        "payload": json.dumps(event.payload if payload is None else payload, separators=(",", ":")),
     }
 
 
@@ -49,6 +57,7 @@ def _decode_event(fields: dict[str, Any]) -> Event:
         return value or ""
 
     causal = _get("causal_parent")
+    companion = _get(COMPANION_FIELD)
     raw_salience = _get("salience")
     try:
         salience = float(raw_salience)
@@ -64,6 +73,7 @@ def _decode_event(fields: dict[str, Any]) -> Event:
         timestamp=datetime.fromisoformat(_get("timestamp")),
         causal_parent=causal or None,
         payload=json.loads(_get("payload") or "{}"),
+        companion=companion if parse_companion_ref(companion) else None,
     )
 
 
@@ -94,7 +104,14 @@ def _decode_workspace(fields: dict[str, Any]) -> dict[str, Any]:
     raw = fields.get("snapshot") or fields.get(b"snapshot")
     if isinstance(raw, bytes):
         raw = raw.decode()
-    return json.loads(raw or "{}")
+    snapshot = json.loads(raw or "{}")
+    # A broadcast whose metadata values went to its companion entry names it.
+    ref = fields.get(COMPANION_FIELD) or fields.get(COMPANION_FIELD.encode())
+    if isinstance(ref, bytes):
+        ref = ref.decode()
+    if isinstance(snapshot, dict) and ref and parse_companion_ref(ref):
+        snapshot[COMPANION_FIELD] = ref
+    return snapshot
 
 
 def _decode_workspace_event(fields: dict[str, Any]) -> Event:
@@ -195,6 +212,8 @@ class AsyncBus:
         client: Optional[aioredis.Redis] = None,
         *,
         client_name: Optional[str] = None,
+        companions: Optional[CompanionRegistry] = None,
+        volatile: Any = None,
     ) -> None:
         self._config = config
         redis_kwargs: dict[str, Any] = {
@@ -207,6 +226,100 @@ class AsyncBus:
             client or aioredis.from_url(config.url, **redis_kwargs)
         )
         self._audited = False
+        # Values that never enter a persisted stream (kaine.bus.companion): the
+        # field sets every main-bus publish applies, the declared companion
+        # streams, and the never-persisted instance that holds them.
+        self._companions = companions if companions is not None else CompanionRegistry()
+        self._volatile = volatile
+        self._companion_errors_logged: set[str] = set()
+
+    @property
+    def companions(self) -> CompanionRegistry:
+        return self._companions
+
+    @property
+    def volatile(self) -> Any:
+        return self._volatile
+
+    def attach_volatile(self, volatile: Any) -> None:
+        """Attach the never-persisted instance (``kaine.bus.volatile.VolatileBus``)."""
+        self._volatile = volatile
+
+    def declare_companions(self, declarations: list[CompanionDeclaration]) -> None:
+        self._companions.declare(declarations)
+
+    async def _split_for_main(
+        self, stream: str, event_type: str, payload: dict[str, Any]
+    ) -> tuple[dict[str, Any], Optional[str]]:
+        """The payload for the persisted stream and, when diverted values were
+        written to the companion stream first, the envelope value naming them.
+
+        Undeclared diverted values are dropped. A failed companion write is
+        logged and the values are lost; they never stay on the main payload.
+        """
+        main, to_companion, _diverted = self._companions.split(stream, event_type, payload)
+        if not to_companion:
+            return dict(main) if main is not payload else payload, None
+        cstream = companion_stream(stream)
+        if self._volatile is None:
+            self._log_companion_error(
+                cstream, "no volatile bus is attached; the diverted values are dropped"
+            )
+            return dict(main), None
+        try:
+            entry_id = await self._volatile.add(
+                cstream,
+                {name: [[list(path), value, index] for path, value, index in diverted]
+                 for name, diverted in to_companion.items()},
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            self._log_companion_error(
+                cstream,
+                f"the companion write failed ({type(exc).__name__}); the diverted values are dropped",
+            )
+            return dict(main), None
+        return dict(main), companion_ref(cstream, entry_id)
+
+    def _log_companion_error(self, cstream: str, message: str) -> None:
+        # Names the stream and the reason only, never a value; once per stream
+        # and reason so a down instance does not flood the log.
+        key = f"{cstream}|{message}"
+        if key in self._companion_errors_logged:
+            return
+        self._companion_errors_logged.add(key)
+        log.error("companion stream %s: %s", cstream, message)
+
+    async def companion_values(self, ref: Optional[str]) -> Optional[dict[str, Any]]:
+        """The values of the companion entry ``ref`` names, or None when ``ref``
+        is empty, malformed or names an entry that is gone."""
+        parsed = parse_companion_ref(ref) if ref else None
+        if parsed is None or self._volatile is None:
+            return None
+        cstream, entry_id = parsed
+        try:
+            return await self._volatile.get(cstream, entry_id)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            log.warning("companion read of %s failed (%s)", cstream, type(exc).__name__)
+            return None
+
+    async def join_companion(self, event: Event) -> tuple[Event, bool]:
+        """``(event with its companion values put back, joined)``.
+
+        An event that names no companion comes back unchanged with ``joined``
+        False. An event whose companion entry is gone comes back unchanged with
+        ``joined`` False too: the values are absent, and a consumer treats them so.
+        """
+        if not event.companion:
+            return event, False
+        values = await self.companion_values(event.companion)
+        if values is None:
+            return event, False
+        payload = self._companions.merge(event.payload, values)
+        return event.model_copy(update={"payload": payload}), True
 
     @property
     def config(self) -> BusConfig:
@@ -301,10 +414,25 @@ class AsyncBus:
     async def publish(self, event: Event) -> str:
         stream = module_stream(event.source)
         ensure_writable(stream, event.source)
+        return await self.publish_on(stream, event)
+
+    async def publish_on(self, stream: str, event: Event, *, maxlen: Optional[int] = None) -> str:
+        """Publish ``event`` on ``stream`` of the main bus.
+
+        Every field set of ``self.companions`` is applied first: values it may
+        not persist are written to the companion stream (when declared) before
+        the main entry, whose envelope then names that entry. An event with
+        nothing to divert is written exactly as before.
+        """
+        ensure_writable(stream, event.source)
+        payload, ref = await self._split_for_main(stream, event.type, event.payload)
+        fields = _encode_event(event, payload)
+        if ref is not None:
+            fields[COMPANION_FIELD] = ref
         return await self._client.xadd(
             stream,
-            _encode_event(event),
-            maxlen=maxlen_for(self._config, stream),
+            fields,
+            maxlen=maxlen if maxlen is not None else maxlen_for(self._config, stream),
             approximate=True,
         )
 
@@ -315,16 +443,64 @@ class AsyncBus:
             raise ReservedStreamError(
                 f"only the workspace module may publish to {WORKSPACE_STREAM}"
             )
+        snapshot, ref = await self._split_broadcast(snapshot)
+        fields = {
+            "snapshot": json.dumps(snapshot, separators=(",", ":")),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "source": WORKSPACE_SOURCE,
+        }
+        if ref is not None:
+            fields[COMPANION_FIELD] = ref
         return await self._client.xadd(
             WORKSPACE_STREAM,
-            {
-                "snapshot": json.dumps(snapshot, separators=(",", ":")),
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "source": WORKSPACE_SOURCE,
-            },
+            fields,
             maxlen=maxlen_for(self._config, WORKSPACE_STREAM),
             approximate=True,
         )
+
+    async def _split_broadcast(
+        self, snapshot: dict[str, Any]
+    ) -> tuple[dict[str, Any], Optional[str]]:
+        """Apply the field sets to a broadcast.
+
+        A selected member's diverted values are dropped: the member's own main
+        entry already names its companion entry, which the broadcast member
+        record carries as ``companion``, so no second copy is written. The
+        broadcast's metadata goes through the companion mechanism of
+        ``workspace.broadcast``. A broadcast with nothing to divert is
+        published exactly as before.
+        """
+        selected = snapshot.get("selected")
+        new_selected = selected
+        if isinstance(selected, list):
+            members = []
+            changed = False
+            for member in selected:
+                if isinstance(member, dict) and isinstance(member.get("payload"), dict):
+                    main, _to_companion, diverted = self._companions.split(
+                        "", str(member.get("type") or ""), member["payload"]
+                    )
+                    if diverted:
+                        member = {**member, "payload": dict(main)}
+                        changed = True
+                members.append(member)
+            if changed:
+                new_selected = members
+        metadata = snapshot.get("metadata")
+        ref = None
+        new_metadata = metadata
+        if isinstance(metadata, dict):
+            new_metadata, ref = await self._split_for_main(
+                WORKSPACE_STREAM, WORKSPACE_STREAM, metadata
+            )
+        if new_selected is selected and new_metadata is metadata:
+            return snapshot, ref
+        out = dict(snapshot)
+        if new_selected is not selected:
+            out["selected"] = new_selected
+        if new_metadata is not metadata:
+            out["metadata"] = new_metadata
+        return out, ref
 
     async def read_entries(
         self, stream: str, last_id: str = "0", count: int = 100, block_ms: int = 0
@@ -597,6 +773,11 @@ class AsyncBus:
 
     async def close(self) -> None:
         await self._client.aclose()
+        if self._volatile is not None:
+            try:
+                await self._volatile.close()
+            except Exception:
+                log.debug("volatile bus close failed", exc_info=True)
 
 
 async def get_bus(client: Optional[aioredis.Redis] = None) -> AsyncBus:

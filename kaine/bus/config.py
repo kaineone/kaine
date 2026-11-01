@@ -222,8 +222,11 @@ def maxlen_for(config: BusConfig, stream: str) -> int:
 #: used only by the pre-boot "Bus budget" row to estimate how much Redis memory
 #: the configured maxlen caps imply. They are not limits and nothing enforces
 #: them. A stream that is not listed uses DEFAULT_TYPICAL_EVENT_BYTES.
+#: ``vision.out`` is not listed: it measured 40 KB with its three perceptual
+#: latents, which the main bus no longer carries (kaine.bus.companion), so it
+#: takes the estimate until a live bus measures it again; the latents' bytes
+#: are counted on the never-persisted instance (TYPICAL_COMPANION_BYTES).
 TYPICAL_EVENT_BYTES: dict[str, int] = {
-    "vision.out": 40_000,
     "workspace.broadcast": 6_600,
     "sequence.out": 1_300,
     "interoception.out": 550,
@@ -238,3 +241,19 @@ DEFAULT_TYPICAL_EVENT_BYTES = 2_000
 def typical_event_bytes(stream: str) -> int:
     """Estimated bytes one entry of ``stream`` occupies in Redis."""
     return TYPICAL_EVENT_BYTES.get(stream, DEFAULT_TYPICAL_EVENT_BYTES)
+
+
+#: Estimated bytes of one companion entry on the never-persisted instance, used
+#: by the preboot "Volatile bus budget" row. The vision companion carries the
+#: three perceptual latents the main ``vision.out`` entry measured 40 KB with.
+TYPICAL_COMPANION_BYTES: dict[str, int] = {
+    "vision.out.companion": 40_000,
+}
+
+#: Estimate for a companion stream without a listed size.
+DEFAULT_TYPICAL_COMPANION_BYTES = 2_000
+
+
+def typical_companion_bytes(stream: str) -> int:
+    """Estimated bytes one entry of companion stream ``stream`` occupies."""
+    return TYPICAL_COMPANION_BYTES.get(stream, DEFAULT_TYPICAL_COMPANION_BYTES)

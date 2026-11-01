@@ -843,18 +843,20 @@ class Language(BaseModule):
             log.exception("language preemption record failed")
 
     async def _write_mode_record(self, stream: str, type_: str, payload: dict[str, Any]) -> None:
-        await self._bus.client.xadd(
+        # Through the bus's publish path, so the companion field sets apply to
+        # the mode-specific stream as to every other main-bus stream.
+        from kaine.bus.schema import validate_event
+
+        await self._bus.publish_on(
             stream,
-            {
-                "source": self.name,
-                "type": type_,
-                "salience": repr(self._baseline_salience),
-                "timestamp": _now_iso(),
-                "causal_parent": "",
-                "payload": _json(payload),
-            },
+            validate_event(
+                source=self.name,
+                type=type_,
+                payload=payload,
+                salience=self._baseline_salience,
+                timestamp=datetime.now(timezone.utc),
+            ),
             maxlen=self._bus.config.default_maxlen,
-            approximate=True,
         )
 
     async def _produce(

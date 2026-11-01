@@ -25,6 +25,10 @@ class Event(BaseModel):
     salience: float = Field(ge=0.0, le=1.0)
     timestamp: datetime
     causal_parent: Optional[str] = None
+    # The companion entry holding the values this event's main-bus entry may not
+    # carry (``kaine.bus.companion``), as ``<companion stream>:<entry id>``; set
+    # by the bus when it decodes an entry whose envelope names one, else None.
+    companion: Optional[str] = Field(default=None, max_length=512)
 
     @field_validator("timestamp")
     @classmethod
