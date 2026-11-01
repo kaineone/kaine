@@ -1141,13 +1141,14 @@ class Audition(BaseModule):
         if "forward_model" in state:
             if state.get("forward_model_features") == "utterance_duration_v2":
                 fm_state = state["forward_model"]
-                if self._forward_model.matches_state_shape(fm_state):
+                mismatch = _state_mismatch(self._forward_model, fm_state)
+                if mismatch is None:
                     self._forward_model.load_state_dict(fm_state)
                 else:
                     log.warning(
                         "audition: discarding speech-path forward-model checkpoint — "
-                        "its tensor shapes do not match the running model; the online "
-                        "forward model will re-learn from scratch"
+                        "%s; the online forward model will re-learn from scratch",
+                        mismatch,
                     )
             else:
                 log.warning(
@@ -1166,15 +1167,21 @@ class Audition(BaseModule):
                 if encoder_id == running_id:
                     if self._acoustic_forward_model is None:
                         continue
-                    if not isinstance(entry, dict) or not self._acoustic_forward_model.matches_state_shape(
-                        entry.get("state_dict", {})
-                    ):
+                    mismatch = (
+                        _state_mismatch(
+                            self._acoustic_forward_model, entry.get("state_dict", {})
+                        )
+                        if isinstance(entry, dict)
+                        else "the entry is not a mapping"
+                    )
+                    if mismatch is not None:
                         log.warning(
                             "audition: discarding acoustic forward-model checkpoint "
-                            "for encoder %r — its tensor shapes do not match the "
-                            "running encoder embedding_dim %d; the online acoustic "
-                            "forward model will re-learn from scratch",
+                            "for encoder %r — %s (running encoder embedding_dim %d); "
+                            "the online acoustic forward model will re-learn from "
+                            "scratch",
                             encoder_id,
+                            mismatch,
                             self._acoustic_forward_model.feature_dim,
                         )
                         continue
@@ -1182,6 +1189,17 @@ class Audition(BaseModule):
                 else:
                     # Carry forward snapshots for encoders that are not running now.
                     self._acoustic_states_carried[encoder_id] = entry
+
+
+def _state_mismatch(model: Any, state: Any) -> Optional[str]:
+    """Why ``state`` does not fit ``model``, or None; a model without
+    ``state_shape_mismatch`` answers through ``matches_state_shape``."""
+    explain = getattr(model, "state_shape_mismatch", None)
+    if callable(explain):
+        return explain(state)
+    if model.matches_state_shape(state):
+        return None
+    return "its tensor shapes do not match the running model"
 
 
 def _estimate_energy(audio_bytes: bytes) -> float:

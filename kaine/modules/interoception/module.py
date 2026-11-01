@@ -1109,6 +1109,7 @@ class Interoception(BaseModule):
         if "read_interval_s" in state:
             self._read_interval_s = float(state["read_interval_s"])
 
+        readout_refused = False
         if "forward_model" in state or "reservoir_seed" in state:
             fm = self._forward_model
             seed = state.get("reservoir_seed")
@@ -1127,10 +1128,19 @@ class Interoception(BaseModule):
                     "interoception: snapshot has no reservoir seed; the reservoir is new"
                 )
             if "forward_model" in state:
+                # A readout whose structure differs from the running model (a
+                # different feature dimension, or two parents' rows concatenated
+                # by a merge) is refused before any weight is copied; the
+                # readout starts fresh and the rest of the state is kept.
                 try:
                     self._forward_model.load_state_dict(state["forward_model"])
-                except Exception:
-                    log.warning("failed to restore forward model weights", exc_info=True)
+                except Exception as exc:
+                    readout_refused = True
+                    log.warning(
+                        "interoception: discarding forward-model readout weights — "
+                        "%s; the readout re-learns from scratch",
+                        exc,
+                    )
 
         if "fatigue" in state:
             try:
@@ -1138,7 +1148,15 @@ class Interoception(BaseModule):
             except Exception:
                 log.warning("failed to restore fatigue state", exc_info=True)
         if "expected_error" in state:
-            self._expected_error.load_state_dict(state["expected_error"])
+            if readout_refused:
+                # The statistics describe the discarded readout's errors; they
+                # go with it, and the fresh readout's are learned anew.
+                log.warning(
+                    "interoception: discarding expected-error statistics with "
+                    "the refused readout"
+                )
+            else:
+                self._expected_error.load_state_dict(state["expected_error"])
 
         if self._self_rhythm is not None and "self_rhythm" in state:
             try:

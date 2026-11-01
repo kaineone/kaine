@@ -281,6 +281,16 @@ class ModuleOscillator:
 
     def deserialize(self, state: dict[str, Any]) -> None:
         torch = self._torch
+        # Per-unit arrays of another population size (two parents' arrays
+        # concatenated by a merge, or another configuration) are refused before
+        # anything is restored.
+        for key in ("mem", "weights"):
+            values = state.get(key)
+            if values is not None and len(values) != self._population_size:
+                raise ValueError(
+                    f"oscillator state {key!r} holds {len(values)} units for a "
+                    f"population of {self._population_size}"
+                )
         self._beta = float(state.get("beta", self._beta))
         self._threshold = float(state.get("threshold", self._threshold))
         self._base_drive = float(state.get("base_drive", self._base_drive))
@@ -747,6 +757,10 @@ class SelfRhythmOscillator(ModuleOscillator):
             )
             return
 
+        # All or nothing: every attribute the restore below assigns is
+        # reassigned, not mutated in place, so putting the attribute table back
+        # undoes a restore that fails part-way.
+        before = dict(self.__dict__)
         try:
             params = state.get("params", {})
             structural: dict[str, float] = {
@@ -766,9 +780,10 @@ class SelfRhythmOscillator(ModuleOscillator):
                 abs(structural[k] - getattr(self, f"_{k}")) > 1e-12
                 for k in structural
             ):
-                logger.info(
-                    "Ignoring v2 SelfRhythmOscillator state: structural "
-                    "generator parameters differ"
+                logger.warning(
+                    "interoception self-rhythm: discarding the restored state — "
+                    "its structural generator parameters differ from the running "
+                    "oscillator's; the rhythm starts fresh"
                 )
                 return
 
@@ -817,7 +832,13 @@ class SelfRhythmOscillator(ModuleOscillator):
                 self.identity_restored = True
 
         except Exception as exc:
-            logger.info("Ignoring invalid v2 SelfRhythmOscillator state: %s", exc)
+            self.__dict__.clear()
+            self.__dict__.update(before)
+            logger.warning(
+                "interoception self-rhythm: discarding the restored state — %s; "
+                "the rhythm keeps its state from before the restore",
+                exc,
+            )
             return
 
 

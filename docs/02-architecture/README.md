@@ -292,11 +292,12 @@ Core runtime must run with the sidecar absent, so nothing under `kaine/` imports
 | Module | Merge strategy |
 |--------|----------------|
 | Episodic memory | Sum `short_term_size`; tag retrieved memories; surface mismatches |
-| Planning | One-sided selection by posterior certainty (lower mean entropy wins); emits `planning.merge_warning` when the forks diverged significantly |
+| Planning | The posterior, last action and learned prior are a weight group (below); the strategy's selection by posterior certainty applies only when it is called with posteriors |
 | Self-model | Deduplicate values and norms; sum speech count; concatenate identity history; average personality baseline |
 | Affect | Average dimensional baseline; max drives; union goals; concatenate emotional history |
 | Social cognition | Sum interaction counts; average emotion histograms, behavioural summaries and reliability weighted by interaction count; earliest `first_seen`, latest `last_seen` |
-| World model | World-model weights travel in the snapshot; the merge refuses to choose between two world models unless `world_model_from` is given |
+| World model | World-model weights travel in the snapshot; the merge refuses to choose between two world models unless `world_model_from` is given, and the module's state comes from the same parent as its weights |
+| Learned module weights | Vision, audition, interoception, sequence and planning declare a weight group (`MODULE_WEIGHT_GROUPS`); each group is taken whole from one parent, and two differing groups need `module_weights_from` |
 | All others | `UnionMergeStrategy` (last-write-wins union for scalars, recursive for dicts, deduplicated lists) |
 
 LoRA adapter merging is set by `adapter_merger`: `"auto"` (the default) uses PEFT TIES/DARE merging (`kaine/lifecycle/adapter_merge.py`, with a capability-loss veto) when the `[training]` extra is installed and falls back to `"fake"` (which unions the parent adapter paths) otherwise. `"ties_dare"` and `"fake"` force one or the other.

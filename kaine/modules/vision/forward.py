@@ -433,36 +433,59 @@ class LatentForwardModel:
         return {"layers": layers}
 
     def matches_state_shape(self, state: dict[str, Any]) -> bool:
-        """Whether a ``state_dict()`` snapshot's tensor shapes fit this model.
+        """Whether a ``state_dict()`` snapshot's structure fits this model.
 
-        Guards the dim cascade (topos-temporal-video-encoder §3): a checkpoint
-        sized to a different encoder ``latent_dim`` (input ``2*latent_dim``
-        → hidden ``units`` → output ``latent_dim``) must be detected BEFORE
-        any ``copy_``.  Also accepts legacy checkpoints saved before the
-        context input was added (input length ``2*latent_dim``).  Returns
-        False on any malformed/short layer list."""
-        layers = state.get("layers")
-        if not isinstance(layers, list) or len(layers) < 2:
-            return False
-        try:
-            first_w = layers[0]["weight"]
-            last_w = layers[-1]["weight"]
-            in_units = len(first_w)  # hidden width
-            in_dim = len(first_w[0])  # 2 * latent_dim (+ context_dim)
-            out_dim = len(last_w)  # latent_dim
-        except (KeyError, TypeError, IndexError):
-            return False
+        True when :meth:`state_shape_mismatch` finds nothing wrong."""
+        return self.state_shape_mismatch(state) is None
 
-        expected_in_dim = 2 * self._latent_dim + self._context_dim
+    def state_shape_mismatch(self, state: Any) -> Optional[str]:
+        """Why a ``state_dict()`` snapshot does not fit this model, or None.
+
+        Checked BEFORE any ``copy_``: the number of layers must equal the
+        network's number of linear layers, and every layer's weight and bias
+        shapes must match. This refuses a checkpoint sized to a different
+        encoder ``latent_dim`` (the dim cascade, topos-temporal-video-encoder
+        §3) and a state whose layer list holds more layers than the network
+        (two parents' lists concatenated by a merge). A legacy first layer
+        saved before the context input was added (input length
+        ``2*latent_dim``) fits."""
+        import torch.nn as nn
+
+        linears = [m for m in self._net if isinstance(m, nn.Linear)]
+        layers = state.get("layers") if isinstance(state, dict) else None
+        if not isinstance(layers, list):
+            return "the state holds no layer list"
+        if len(layers) != len(linears):
+            return f"{len(layers)} layers for a {len(linears)}-layer network"
         legacy_in_dim = 2 * self._latent_dim
-        return (
-            in_units == self._units
-            and (
-                in_dim == expected_in_dim
-                or (self._context_dim > 0 and in_dim == legacy_in_dim)
-            )
-            and out_dim == self._latent_dim
-        )
+        for idx, (layer, module) in enumerate(zip(layers, linears)):
+            try:
+                weight = layer["weight"]
+                bias = layer["bias"]
+                rows = len(weight)
+                widths = {len(row) for row in weight}
+                bias_len = len(bias)
+            except (KeyError, TypeError):
+                return f"layer {idx} is malformed"
+            want_rows, want_cols = (int(d) for d in module.weight.shape)
+            if rows != want_rows or len(widths) != 1:
+                return (
+                    f"layer {idx} weight has {rows} rows of widths {sorted(widths)}, "
+                    f"expected {want_rows} rows of width {want_cols}"
+                )
+            (cols,) = widths
+            if cols != want_cols and not (
+                idx == 0 and self._context_dim > 0 and cols == legacy_in_dim
+            ):
+                return f"layer {idx} weight width {cols}, expected {want_cols}"
+            if bias_len != want_rows:
+                return f"layer {idx} bias length {bias_len}, expected {want_rows}"
+            try:
+                self._torch.tensor(weight, dtype=self._torch.float32)
+                self._torch.tensor(bias, dtype=self._torch.float32)
+            except (TypeError, ValueError, RuntimeError):
+                return f"layer {idx} holds non-numeric values"
+        return None
 
     def load_state_dict(self, state: dict[str, Any]) -> None:
         """Restore MLP weights from a ``state_dict()`` snapshot.

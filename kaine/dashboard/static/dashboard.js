@@ -752,10 +752,15 @@
         const label = document.getElementById("merge-label").value.trim();
         const worldModelSelect = document.getElementById("merge-world-model");
         const worldModelFrom = worldModelSelect ? worldModelSelect.value : "";
+        const moduleWeightsSelect = document.getElementById("merge-module-weights");
+        const moduleWeightsFrom = moduleWeightsSelect ? moduleWeightsSelect.value : "";
         if (!a || !b) { setStatus("merge-status", "both snapshot ids required", false); return; }
         let confirmText = "Merge snapshots " + a + " + " + b + "?";
         if (worldModelFrom === "a" || worldModelFrom === "b") {
           confirmText += " (world model from " + worldModelFrom.toUpperCase() + ")";
+        }
+        if (moduleWeightsFrom === "a" || moduleWeightsFrom === "b") {
+          confirmText += " (module weights from " + moduleWeightsFrom.toUpperCase() + ")";
         }
         if (!confirm(confirmText)) return;
         function mergeErrorDetail(data) {
@@ -772,6 +777,9 @@
         if (worldModelFrom === "a" || worldModelFrom === "b") {
           body.world_model_from = worldModelFrom;
         }
+        if (moduleWeightsFrom === "a" || moduleWeightsFrom === "b") {
+          body.module_weights_from = moduleWeightsFrom;
+        }
         const res = await postJson("/diagnostics/merges", body);
         if (res.ok) {
           setStatus("merge-status", "merged → " + (res.data && res.data.id), true);
@@ -782,6 +790,7 @@
           document.getElementById("merge-b").value = "";
           document.getElementById("merge-label").value = "";
           if (worldModelSelect) worldModelSelect.value = "";
+          if (moduleWeightsSelect) moduleWeightsSelect.value = "";
         } else {
           setStatus("merge-status", "failed: " + res.status + mergeErrorDetail(res.data), false);
         }

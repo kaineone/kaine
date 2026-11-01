@@ -194,6 +194,18 @@ class ForwardPredictionHead:
         torch = self._torch
         weight = torch.tensor(state["weight"], dtype=torch.float32)
         bias = torch.tensor(state["bias"], dtype=torch.float32)
+        # Check both shapes before copying either, so a refused state leaves
+        # the head as it was.
+        if tuple(weight.shape) != tuple(self._head.weight.shape):
+            raise ValueError(
+                f"expected weight shape {tuple(self._head.weight.shape)}, "
+                f"got {tuple(weight.shape)}"
+            )
+        if tuple(bias.shape) != tuple(self._head.bias.shape):
+            raise ValueError(
+                f"expected bias shape {tuple(self._head.bias.shape)}, "
+                f"got {tuple(bias.shape)}"
+            )
         with torch.no_grad():
             self._head.weight.copy_(weight)
             self._head.bias.copy_(bias)

@@ -150,7 +150,78 @@ function runScript(sandbox) {
   vm.runInNewContext(source, sandbox, { filename: "dashboard.js" });
 }
 
+function mergeElements(sandbox, worldModel, moduleWeights) {
+  var els = sandbox._elements;
+  els["merge-form"] = makeElement("merge-form");
+  els["merge-a"] = makeElement("merge-a", { value: "aaaa" });
+  els["merge-b"] = makeElement("merge-b", { value: "bbbb" });
+  els["merge-label"] = makeElement("merge-label", { value: "" });
+  els["merge-world-model"] = makeElement("merge-world-model", { value: worldModel });
+  els["merge-module-weights"] = makeElement("merge-module-weights", { value: moduleWeights });
+  els["merge-status"] = makeElement("merge-status");
+}
+
 var scenarios = [
+  {
+    name: "merge with module weights from B sends choice and resets select",
+    setup: function (sandbox) {
+      mergeElements(sandbox, "", "b");
+      sandbox._setResponse({
+        status: 200,
+        json: async function () { return { id: "m3", parent_id: "aaaa", label: "" }; }
+      });
+    },
+    run: function (sandbox) {
+      var calls = sandbox._fetchCalls;
+      if (calls.length !== 1) throw new Error("expected 1 fetch, got " + calls.length);
+      if (calls[0].url !== "/diagnostics/merges") throw new Error("unexpected url: " + calls[0].url);
+      var body = JSON.parse(calls[0].init.body);
+      if (body.module_weights_from !== "b") {
+        throw new Error("expected module_weights_from === 'b', got " + body.module_weights_from);
+      }
+      if ("world_model_from" in body) {
+        throw new Error("world_model_from should be left out: " + JSON.stringify(body));
+      }
+      var select = sandbox.document.getElementById("merge-module-weights");
+      if (select.value !== "") throw new Error("select should reset to '', got " + select.value);
+    }
+  },
+  {
+    name: "merge without module weights omits key from body",
+    setup: function (sandbox) {
+      mergeElements(sandbox, "a", "");
+      sandbox._setResponse({
+        status: 200,
+        json: async function () { return { id: "m4", parent_id: "aaaa", label: "" }; }
+      });
+    },
+    run: function (sandbox) {
+      var body = JSON.parse(sandbox._fetchCalls[0].init.body);
+      if ("module_weights_from" in body) {
+        throw new Error("body should not contain module_weights_from: " + JSON.stringify(body));
+      }
+      if (body.world_model_from !== "a") throw new Error("world_model_from lost: " + JSON.stringify(body));
+    }
+  },
+  {
+    name: "409 for missing module weights choice shows status and the modules",
+    setup: function (sandbox) {
+      mergeElements(sandbox, "", "");
+      sandbox._setResponse({
+        status: 409,
+        json: async function () {
+          return { detail: "the parents' learned weights differ for vision; pass module_weights_from" };
+        }
+      });
+    },
+    run: function (sandbox) {
+      var text = sandbox.document.getElementById("merge-status").textContent;
+      if (text.indexOf("409") === -1) throw new Error("expected 409 in status, got " + JSON.stringify(text));
+      if (text.indexOf("differ for vision") === -1) {
+        throw new Error("expected the modules in status, got " + JSON.stringify(text));
+      }
+    }
+  },
   {
     name: "merge with world model from B sends choice and resets select",
     worldModel: "b",

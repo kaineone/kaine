@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import functools
 import logging
 import math
@@ -215,6 +216,9 @@ class Vision(BaseModule):
         # when forward_prediction=False (the legacy change_score/habituation
         # path is always used for the alert threshold check).
         self._forward_prediction: bool = bool(forward_prediction)
+        # A forward-model state restored before initialize() builds the model;
+        # initialize() loads it, through the same structure guard.
+        self._pending_forward_model_state: Optional[dict[str, Any]] = None
         self._forward_model_units: int = int(forward_model_units)
         self._prediction_error_window: int = int(prediction_error_window)
         self._visual_buffer_size: int = int(visual_buffer_size)
@@ -336,6 +340,11 @@ class Vision(BaseModule):
                 context_dim=CONTEXT_DIM,
             )
             self._ensure_feedback_wrap()
+        # getattr: a module built without __init__ (object.__new__) has no pending state.
+        pending = getattr(self, "_pending_forward_model_state", None)
+        if pending is not None and self._forward_model is not None:
+            self._pending_forward_model_state = None
+            self._load_forward_model_state(pending)
 
         # Seed the sleep module's cursor from the stream tail before starting the loop,
         # otherwise a literal "$" under a non-blocking XREAD never advances.
@@ -994,9 +1003,16 @@ class Vision(BaseModule):
             state["forward_model"] = self._forward_model.state_dict()
             # Buffer summary: statistical descriptor only — no raw latents.
             state["buffer_summary"] = self._forward_model.buffer_summary()
+        elif getattr(self, "_pending_forward_model_state", None) is not None:
+            # Restored but not yet loaded (initialize() has not run): carried
+            # forward so a snapshot taken meanwhile does not lose it.
+            state["forward_model"] = copy.deepcopy(self._pending_forward_model_state)
         return state
 
     def deserialize(self, state: dict[str, Any]) -> None:
+        # A restore replaces whatever an earlier restore left pending: weights
+        # from another snapshot are never loaded with this one's state.
+        self._pending_forward_model_state = None
         # Encoder identity is immutable per vision module instance; just note any
         # divergence in the log for forensic value.
         recorded = state.get("encoder_model_id")
@@ -1006,20 +1022,44 @@ class Vision(BaseModule):
                 recorded,
                 self._encoder.model_id,
             )
-        if "forward_model" in state and self._forward_model is not None:
+        if "forward_model" in state:
             fm_state = state["forward_model"]
-            # Dim-cascade guard (topos-temporal-video-encoder §3, task 4.2): a
-            # checkpoint sized to a different encoder latent_dim (e.g. an old
-            # 384-dim DINOv2 snapshot loaded under the 768-dim InternVideo-Next
-            # encoder) must NOT be forced into the running model. Discard it with
-            # a warning; the online forward model re-learns from scratch (it is an
-            # online adapter — safe) rather than raising a shape error.
-            if not self._forward_model.matches_state_shape(fm_state):
-                log.warning(
-                    "vision: discarding forward-model checkpoint — its tensor "
-                    "shapes do not match the running encoder latent_dim %d; the "
-                    "online forward model will re-learn from scratch",
-                    self._forward_model.latent_dim,
-                )
+            if self._forward_model is not None:
+                self._load_forward_model_state(fm_state)
+            elif self._forward_prediction:
+                # initialize() builds the model once the encoder has loaded and
+                # then loads this state.
+                self._pending_forward_model_state = copy.deepcopy(fm_state)
             else:
-                self._forward_model.load_state_dict(fm_state)
+                log.warning(
+                    "vision: the snapshot carries a forward model but forward "
+                    "prediction is off in this configuration; it is not loaded, "
+                    "and snapshots taken from now on do not carry it"
+                )
+
+    def _load_forward_model_state(self, fm_state: Any) -> None:
+        """Load a restored forward-model state, or discard it with a warning."""
+        # Structure guard: a checkpoint sized to a different encoder
+        # latent_dim (e.g. an old 384-dim DINOv2 snapshot loaded under the
+        # 768-dim InternVideo-Next encoder, topos-temporal-video-encoder §3)
+        # or holding more layers than the network (two parents' layer lists
+        # concatenated by a merge) must NOT be forced into the running model,
+        # not even in part. Discard it with a warning; the online forward
+        # model re-learns from scratch rather than raising a shape error.
+        explain = getattr(self._forward_model, "state_shape_mismatch", None)
+        if callable(explain):
+            mismatch = explain(fm_state)
+        elif self._forward_model.matches_state_shape(fm_state):
+            mismatch = None
+        else:
+            mismatch = "its tensor shapes do not match the running model"
+        if mismatch is not None:
+            log.warning(
+                "vision: discarding forward-model checkpoint — %s (running "
+                "encoder latent_dim %d); the online forward model will "
+                "re-learn from scratch",
+                mismatch,
+                self._forward_model.latent_dim,
+            )
+        else:
+            self._forward_model.load_state_dict(fm_state)

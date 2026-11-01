@@ -11,6 +11,7 @@ import pytest
 from kaine.lifecycle.manager import (
     FakeAdapterMerger,
     ForkManager,
+    ModuleWeightsChoiceRequiredError,
     merger_from_name,
 )
 
@@ -157,12 +158,15 @@ def test_merge_invokes_per_module_strategies(tmp_path):
             ]
         )
     )
-    merged = mgr.merge(a.id, b.id, label="merge")
+    # The planning posterior is part of planning's weight group: two differing
+    # beliefs are never picked between automatically.
+    with pytest.raises(ModuleWeightsChoiceRequiredError):
+        mgr.merge(a.id, b.id, label="merge")
+    merged = mgr.merge(a.id, b.id, label="merge", module_weights_from={"planning": "b"})
     assert merged.parent_id == f"{a.id}+{b.id}"
     assert merged.modules["episodic_memory"]["short_term_size"] == 12
-    # One-sided selection keeps the more certain (lower-entropy) fork.
-    assert merged.modules["planning"]["posterior"] == [[0.9, 0.1]]
-    assert merged.modules["planning"].get("planning.merge_warning") is True
+    assert merged.modules["planning"]["posterior"] == [[0.5, 0.5]]
+    assert "planning.merge_warning" not in merged.modules["planning"]
     assert merged.metadata["merged_from"] == [a.id, b.id]
 
 

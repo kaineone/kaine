@@ -508,45 +508,60 @@ class AuditoryForwardModel:
                 layer_idx += 1
 
     def matches_state_shape(self, state: dict[str, Any]) -> bool:
-        """Whether a ``state_dict()`` snapshot's tensor shapes fit this model.
+        """Whether a ``state_dict()`` snapshot's structure fits this model.
 
-        A checkpoint sized to a different encoder ``feature_dim`` (input
-        ``2*feature_dim`` → hidden ``units`` → output ``feature_dim``) must be
-        detected BEFORE any ``copy_``.  Also accepts legacy checkpoints saved
-        before the context input was added (input length ``2*feature_dim``).
-        Returns False on any malformed/short layer list too.
+        True when :meth:`state_shape_mismatch` finds nothing wrong."""
+        return self.state_shape_mismatch(state) is None
+
+    def state_shape_mismatch(self, state: Any) -> Optional[str]:
+        """Why a ``state_dict()`` snapshot does not fit this model, or None.
+
+        Checked BEFORE any ``copy_``: the number of layers must equal the
+        network's number of linear layers, and every layer's weight and bias
+        shapes must match. This refuses a checkpoint sized to a different
+        encoder ``feature_dim`` (input ``2*feature_dim`` → hidden ``units`` →
+        output ``feature_dim``) and a state whose layer list holds more layers
+        than the network (two parents' lists concatenated by a merge). A legacy
+        first layer saved before the context input was added (input length
+        ``2*feature_dim``) fits.
         """
-        torch = self._torch
         import torch.nn as nn
 
-        layers = state.get("layers")
         linears = [m for m in self._net if isinstance(m, nn.Linear)]
-        if not isinstance(layers, list) or len(layers) != len(linears):
-            return False
-
-        expected_in_dim = 2 * self._feature_dim + self._context_dim
+        layers = state.get("layers") if isinstance(state, dict) else None
+        if not isinstance(layers, list):
+            return "the state holds no layer list"
+        if len(layers) != len(linears):
+            return f"{len(layers)} layers for a {len(linears)}-layer network"
         legacy_in_dim = 2 * self._feature_dim
         for idx, (layer, module) in enumerate(zip(layers, linears)):
             try:
-                weight = torch.tensor(layer["weight"], dtype=torch.float32)
-                bias = torch.tensor(layer["bias"], dtype=torch.float32)
-            except (KeyError, TypeError, ValueError, RuntimeError):
-                return False
-
-            if weight.shape[0] != module.weight.shape[0] or bias.shape != module.bias.shape:
-                return False
-
-            if idx == 0:
-                if not (
-                    weight.shape[1] == expected_in_dim
-                    or (self._context_dim > 0 and weight.shape[1] == legacy_in_dim)
-                ):
-                    return False
-            else:
-                if weight.shape != module.weight.shape:
-                    return False
-
-        return True
+                weight = layer["weight"]
+                bias = layer["bias"]
+                rows = len(weight)
+                widths = {len(row) for row in weight}
+                bias_len = len(bias)
+            except (KeyError, TypeError):
+                return f"layer {idx} is malformed"
+            want_rows, want_cols = (int(d) for d in module.weight.shape)
+            if rows != want_rows or len(widths) != 1:
+                return (
+                    f"layer {idx} weight has {rows} rows of widths {sorted(widths)}, "
+                    f"expected {want_rows} rows of width {want_cols}"
+                )
+            (cols,) = widths
+            if cols != want_cols and not (
+                idx == 0 and self._context_dim > 0 and cols == legacy_in_dim
+            ):
+                return f"layer {idx} weight width {cols}, expected {want_cols}"
+            if bias_len != want_rows:
+                return f"layer {idx} bias length {bias_len}, expected {want_rows}"
+            try:
+                self._torch.tensor(weight, dtype=self._torch.float32)
+                self._torch.tensor(bias, dtype=self._torch.float32)
+            except (TypeError, ValueError, RuntimeError):
+                return f"layer {idx} holds non-numeric values"
+        return None
 
     def buffer_summary(self) -> dict[str, Any]:
         """Return a statistical descriptor of the auditory buffer.
