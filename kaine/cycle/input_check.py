@@ -13,12 +13,10 @@ import asyncio
 import logging
 import threading
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
+from kaine.cycle.gate_conditions import CONDITION_NAMES, Condition
 from kaine.cycle.unfrozen_clock import UnfrozenClock
-
-if TYPE_CHECKING:
-    from kaine.cycle.unattended_gate import Condition
 
 log = logging.getLogger(__name__)
 
@@ -36,7 +34,6 @@ def check_input_condition(
     The probe is intentionally stateless: raw frames and audio blocks are
     dropped immediately and nothing is written to disk.
     """
-    from kaine.cycle.unattended_gate import CONDITION_NAMES, Condition
 
     try:
         feed = dict(config.get("perception_feed") or {})

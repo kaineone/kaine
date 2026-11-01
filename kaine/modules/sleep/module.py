@@ -895,18 +895,25 @@ class Sleep(BaseModule):
             await self.enter_sleep(trigger=WELFARE_REST_TRIGGER)
         except SleepBusyError:
             await self._publish_rest_request(False, "busy", WELFARE_REST_ORIGIN, request_id)
-        except BaseException as exc:
-            if isinstance(exc, Exception):
-                log.exception("sleep: welfare rest failed")
-            reason = "aborted" if self._requested_rest_accepted else "failed"
-            await self._publish_rest_request(False, reason, WELFARE_REST_ORIGIN, request_id)
-            if not isinstance(exc, Exception):
-                raise
+        except asyncio.CancelledError:
+            # Cut short (the module stops or the task is cancelled): the welfare
+            # net is told the rest did not happen, and the cancellation goes on.
+            await self._publish_welfare_rest_cut(request_id)
+            raise
+        except Exception:
+            log.exception("sleep: welfare rest failed")
+            await self._publish_welfare_rest_cut(request_id)
         finally:
             self._sleep_pending = False
             self._pending_rest = None
             self._requested_rest_accepted = False
             self._welfare_rest_held = False
+
+    async def _publish_welfare_rest_cut(self, request_id: Optional[str]) -> None:
+        """Answer a welfare rest that did not run to its end: ``aborted`` once it
+        began, ``failed`` before."""
+        reason = "aborted" if self._requested_rest_accepted else "failed"
+        await self._publish_rest_request(False, reason, WELFARE_REST_ORIGIN, request_id)
 
     async def enter_sleep(self, trigger: Optional[str] = None) -> dict[str, Any]:
         """Run the five-phase sleep pipeline. Perception is suspended for the whole sleep."""

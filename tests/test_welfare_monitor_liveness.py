@@ -22,6 +22,8 @@ import kaine.cycle.__main__ as cyc
 from kaine.cycle import control_state
 from kaine.cycle.incident_log import IncidentLog
 from kaine.cycle.preservation_monitor import (
+    _INTEROCEPTION_STREAM,
+    _WELFARE_STREAM,
     PreservationConfig,
     WelfareBusReadFailing,
     WelfareBusTimeout,
@@ -288,9 +290,7 @@ async def test_the_monitor_never_reads_the_bus_unbounded():
     """Every bus read in the welfare monitor goes through its bounded helper."""
     import inspect
 
-    import kaine.cycle.preservation_monitor as pm
-
-    source = inspect.getsource(pm.WelfareProtectiveMonitor)
+    source = inspect.getsource(WelfareProtectiveMonitor)
     for call in ("self._bus.read_entries(", "self._bus.last_entry_id("):
         for line in source.splitlines():
             if call in line:
@@ -427,11 +427,8 @@ class _OneStreamRaisingBus(_RaisingBus):
 
 
 @pytest.mark.parametrize("warmup_s", [0.0, 120.0])
-@pytest.mark.parametrize("stream_attr", ["_INTEROCEPTION_STREAM", "_WELFARE_STREAM"])
-async def test_each_distress_stream_alone_fails_the_poll_when_unreadable(stream_attr, warmup_s):
-    import kaine.cycle.preservation_monitor as pm
-
-    stream = getattr(pm, stream_attr)
+@pytest.mark.parametrize("stream", [_INTEROCEPTION_STREAM, _WELFARE_STREAM])
+async def test_each_distress_stream_alone_fails_the_poll_when_unreadable(stream, warmup_s):
     monitor = _monitor(_Clock(), _distress_only(warmup_s), bus=_OneStreamRaisingBus(stream))
     stop = asyncio.Event()
     await monitor._poll_once(stop)

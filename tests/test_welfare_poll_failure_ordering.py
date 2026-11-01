@@ -24,6 +24,7 @@ from kaine.bus.schema import validate_event
 from kaine.cycle import control_state
 from kaine.cycle.incident_log import IncidentLog
 from kaine.cycle.preservation_monitor import (
+    _WELFARE_BUS_TIMEOUT_S,
     WelfareBusReadFailing,
     WelfareBusTimeout,
     WelfareIndicatorConfig,
@@ -216,8 +217,6 @@ async def test_q09_a_hung_interoception_read_fails_its_first_poll():
 
 
 def test_q10_a_monitor_built_without_init_has_the_bound():
-    import kaine.cycle.preservation_monitor as pm
-
     monitor = object.__new__(WelfareProtectiveMonitor)
-    assert monitor._bus_timeout_s == pm._WELFARE_BUS_TIMEOUT_S
-    assert 0.0 < pm._WELFARE_BUS_TIMEOUT_S < 30.0
+    assert monitor._bus_timeout_s == _WELFARE_BUS_TIMEOUT_S
+    assert 0.0 < _WELFARE_BUS_TIMEOUT_S < 30.0

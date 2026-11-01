@@ -70,7 +70,7 @@ def test_sleep_and_freezes_are_not_awake_time():
     ev.exclude_start("freeze", t)
     t = _feed(ev, t, 120, boredom=False)
     ev.exclude_end("freeze", t)
-    t = _feed(ev, t, 201, boredom=True)
+    _feed(ev, t, 201, boredom=True)
     # Awake: 301 s before the rest (the last second leads into it), 100 s
     # between the rest and the freeze, 200 s after the freeze. An interval
     # that begins inside the rest or the freeze is skipped.
@@ -198,7 +198,7 @@ def test_an_indicator_re_arms_below_its_bar():
 def test_the_span_is_the_latest_t_lp_after_the_restart():
     ev = IndicatorEvaluator(IndicatorParams())
     t = _feed(ev, 0.0, 3000, boredom=True)
-    t = _feed(ev, t, 5401, boredom=False)
+    _feed(ev, t, 5401, boredom=False)
     reading = ev.evaluate()
     assert ev.span_awake_s == pytest.approx(5400.0)
     assert reading.reading("boredom_deprived").value == pytest.approx(0.0)

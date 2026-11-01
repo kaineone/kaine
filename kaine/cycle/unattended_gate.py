@@ -17,6 +17,10 @@ import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+# Condition and CONDITION_NAMES live in gate_conditions, which imports no
+# gate, so the condition builders (the supervisor self-test, the caretaker
+# and the input check) can use them without importing this module.
+from kaine.cycle.gate_conditions import CONDITION_NAMES, Condition
 from kaine.cycle.research_gate import GateResult, research_mode_requested
 
 UNATTENDED_GATE_EXIT_CODE = 6
@@ -84,19 +88,6 @@ def resolve_supervision_mode(
     return "operator"
 
 
-CONDITION_NAMES: dict[int, str] = {
-    1: "preservation enabled",
-    2: "welfare and indicator responses wired",
-    3: "logging active",
-    4: "preserve-revive round-trip",
-    5: "encryption satisfied",
-    6: "Supervisor armed and self-tested",
-    7: "caretaker told",
-    8: "continuous input",
-    9: "individuation wired",
-}
-
-
 # every check the research net returns must appear here, so the unattended gate covers the whole net
 SAFETY_NET_CONDITIONS: dict[str, int] = {
     "preservation_enabled": 1,
@@ -113,16 +104,6 @@ SAFETY_NET_CONDITIONS: dict[str, int] = {
 
 #: Conditions supplied outside the research net.
 BUILT_CONDITIONS: tuple[int, ...] = (7, 8)
-
-
-@dataclass(frozen=True)
-class Condition:
-    """One gate condition result."""
-
-    number: int
-    name: str
-    ok: bool
-    reason: str = ""
 
 
 NOT_BUILT_REASON = (

@@ -134,8 +134,10 @@ def _cmd_run(args: argparse.Namespace) -> int:
                     ),
                     file=sys.stderr,
                 )
-        except StudyError:
-            pass
+        except StudyError as err:
+            # The halt itself is already reported; say that its welfare hold
+            # could not be checked rather than imply there is none.
+            print(f"Welfare hold not checked: {err}", file=sys.stderr)
         return 1
     except StudyWelfareHold as exc:
         rec = exc.record

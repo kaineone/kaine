@@ -39,6 +39,7 @@ from kaine.cycle.caretaker_state import (
     read_start,
     write_ack,
 )
+from kaine.cycle.gate_conditions import CONDITION_NAMES, Condition
 from kaine.lifecycle.welfare_indicators import INDICATOR_NAMES
 from kaine.secrets_file import read_toml_field
 from kaine.storage import set_data_root
@@ -586,12 +587,7 @@ def check_caretaker_condition(
     notify_fn=notify,
     secrets_path: Path = Path("config/secrets.toml"),
 ):
-    """Evaluate unattended gate condition 7: the caretaker must be told.
-
-    This function imports ``Condition`` and ``CONDITION_NAMES`` from
-    ``kaine.cycle.unattended_gate`` locally to avoid an import cycle.
-    """
-    from kaine.cycle.unattended_gate import CONDITION_NAMES, Condition
+    """Evaluate unattended gate condition 7: the caretaker must be told."""
 
     if caretaker_section is None:
         caretaker_section = {}

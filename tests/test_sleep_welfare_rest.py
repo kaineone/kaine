@@ -129,7 +129,7 @@ async def test_after_maturation_with_fatigue_maintenance_off_a_request_starts_a_
     try:
         assert sleep.welfare_rest_ready()
         await _request(bus)
-        events = await _wait_for(bus, lambda ev: _completed(ev))
+        events = await _wait_for(bus, _completed)
         started = [p for t, p in events if t == "sleep.sleep.started"]
         assert [p["trigger"] for p in started] == ["welfare_rest"]
         assert "rest_seconds" not in started[0]  # a maintenance sleep, not a held rest
@@ -150,7 +150,7 @@ async def test_staging_off_counts_as_matured(bus, tmp_path):
     await sleep.initialize()
     try:
         await _request(bus)
-        events = await _wait_for(bus, lambda ev: _completed(ev))
+        events = await _wait_for(bus, _completed)
         assert "rest_seconds" not in _completed(events)[0]
     finally:
         await sleep.shutdown()
@@ -168,7 +168,7 @@ async def test_in_the_developmental_phase_the_request_brings_the_state_cycle_res
         sleep._cycle_awake_s = 1000.0
         start = time.monotonic()
         await _request(bus)
-        events = await _wait_for(bus, lambda ev: _completed(ev))
+        events = await _wait_for(bus, _completed)
         held = time.monotonic() - start
         started = [p for t, p in events if t == "sleep.sleep.started"]
         assert started[0]["trigger"] == "welfare_rest"
@@ -218,7 +218,7 @@ async def test_a_restart_during_a_welfare_rest_resumes_like_a_state_cycle_rest(b
     # A restart (shutdown then initialize) cuts the rest; it keeps its remainder.
     await sleep.restart()
     try:
-        events = await _wait_for(bus, lambda ev: _completed(ev))
+        events = await _wait_for(bus, _completed)
         aborted = _completed(events)[0]
         assert aborted["aborted"] is True
         assert aborted["resumable"] is True
@@ -327,7 +327,7 @@ async def test_the_monitor_and_the_sleep_module_end_to_end(bus, tmp_path, monkey
         assert monitor._ind_stage == "resting"
         assert notices[0] == ("welfare_indicator_rest", ("boredom_deprived",))
         # The real sleep module answers: a welfare_rest sleep, then its completion.
-        await _wait_for(bus, lambda ev: _completed(ev))
+        await _wait_for(bus, _completed)
         await monitor._poll_once(stop)
         assert monitor._ind_stage == "fresh"
         assert affect.resets == 1
@@ -339,3 +339,51 @@ async def test_the_monitor_and_the_sleep_module_end_to_end(bus, tmp_path, monkey
         assert holders is not None and "welfare" in holders
     finally:
         await sleep.shutdown()
+
+
+# --- a welfare rest cut short ------------------------------------------------------
+
+
+def _answers(events, request_id: str) -> list[dict]:
+    return [p for t, p in events if t == "sleep.rest_request" and p.get("proposal_id") == request_id]
+
+
+@pytest.mark.parametrize(("began", "reason"), [(True, "aborted"), (False, "failed")])
+async def test_a_cancelled_welfare_rest_answers_and_the_cancellation_propagates(
+    bus, tmp_path, monkeypatch, began, reason
+):
+    """Cancelling the welfare rest's task (the module stopping) tells the
+    welfare net the rest did not happen, and the CancelledError reaches the
+    task: it is never swallowed."""
+    sleep = _make_sleep(bus, tmp_path, development_probe=lambda: False)
+    entered = asyncio.Event()
+
+    async def never_ending_sleep(trigger=None):
+        sleep._requested_rest_accepted = began
+        entered.set()
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(sleep, "enter_sleep", never_ending_sleep)
+    sleep._sleep_pending = True
+    task = asyncio.create_task(sleep._welfare_enter_sleep("req-cut"))
+    await asyncio.wait_for(entered.wait(), timeout=5.0)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert task.cancelled()
+    answers = _answers(await _sleep_events(bus), "req-cut")
+    assert answers == [{"accepted": False, "reason": reason, "origin": "welfare", "proposal_id": "req-cut"}]
+    assert sleep._sleep_pending is False
+    assert sleep._pending_rest is None
+
+
+async def test_a_welfare_rest_that_raises_answers_failed_and_does_not_propagate(bus, tmp_path, monkeypatch):
+    sleep = _make_sleep(bus, tmp_path, development_probe=lambda: False)
+
+    async def broken_sleep(trigger=None):
+        raise RuntimeError("sleep pipeline fault")
+
+    monkeypatch.setattr(sleep, "enter_sleep", broken_sleep)
+    await sleep._welfare_enter_sleep("req-err")
+    answers = _answers(await _sleep_events(bus), "req-err")
+    assert [a["reason"] for a in answers] == ["failed"]
