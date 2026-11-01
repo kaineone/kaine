@@ -112,7 +112,13 @@ class VolatileBus:
         set it lower than the bound; the boot refuses one set higher)."""
         return int(self.per_stream_maxlen.get(stream, self.companion_stream_maxlen))
 
-    async def add(self, stream: str, values: Mapping[str, Any]) -> str:
+    async def add(
+        self, stream: str, values: Mapping[str, Any], *, max_age_s: Optional[float] = None
+    ) -> str:
+        """Write one companion entry, capped by count and, when ``max_age_s`` is
+        given, by age: every entry older than the bound (measured from this
+        entry's id, which is the instance's wall-clock time in milliseconds) is
+        trimmed exactly with ``XTRIM MINID``."""
         entry_id = await self.client.xadd(
             stream,
             {"values": json.dumps(values, separators=(",", ":"))},
@@ -121,10 +127,31 @@ class VolatileBus:
         )
         if isinstance(entry_id, bytes):
             entry_id = entry_id.decode()
-        return str(entry_id)
+        entry_id = str(entry_id)
+        if max_age_s is not None:
+            await self.trim_older_than(stream, _entry_ms(entry_id) - int(max_age_s * 1000))
+        return entry_id
 
-    async def get(self, stream: str, entry_id: str) -> Optional[dict[str, Any]]:
-        """The values of one companion entry, or None when it is gone."""
+    async def trim_older_than(self, stream: str, min_ms: int) -> None:
+        """Remove every entry of ``stream`` written before ``min_ms``."""
+        await self.client.xtrim(stream, minid=f"{max(0, int(min_ms))}-0", approximate=False)
+
+    async def now_ms(self) -> int:
+        """The instance's clock in milliseconds (the time entry ids are made of)."""
+        raw = await self.client.time()
+        seconds, micros = raw
+        return int(seconds) * 1000 + int(micros) // 1000
+
+    async def get(
+        self, stream: str, entry_id: str, *, max_age_s: Optional[float] = None
+    ) -> Optional[dict[str, Any]]:
+        """The values of one companion entry, or None when it is gone, or older
+        than ``max_age_s`` (it is trimmed then, and treated as missing)."""
+        if max_age_s is not None:
+            cutoff = await self.now_ms() - int(max_age_s * 1000)
+            if _entry_ms(entry_id) < cutoff:
+                await self.trim_older_than(stream, cutoff)
+                return None
         entries = await self.client.xrange(stream, min=entry_id, max=entry_id, count=1)
         if not entries:
             return None
@@ -182,6 +209,18 @@ class VolatileBus:
             await self.client.close()
 
 
+def _entry_ms(entry_id: str) -> int:
+    ms, _sep, _seq = str(entry_id).partition("-")
+    try:
+        return int(ms)
+    except ValueError:
+        return 0
+
+
+#: A key never written: the age-bound probe trims it, which needs XTRIM MINID.
+_AGE_PROBE_KEY = "kaine:companion-age-probe"
+
+
 async def companion_refusals(
     registry: CompanionRegistry,
     volatile: Optional[VolatileBus],
@@ -198,6 +237,16 @@ async def companion_refusals(
             f"configured ({VOLATILE_URL_ENV})"
         ]
     reasons = await volatile.persistence_refusals()
+    if not reasons and registry.has_age_bounds():
+        # A declared age bound must be enforceable: XTRIM MINID and TIME.
+        try:
+            await volatile.trim_older_than(_AGE_PROBE_KEY, 0)
+            await volatile.now_ms()
+        except Exception as exc:
+            reasons.append(
+                f"the volatile bus cannot apply a declared companion age bound "
+                f"(XTRIM MINID or TIME: {type(exc).__name__})"
+            )
     for stream in registry.companion_streams():
         cap = volatile.cap_for(stream)
         if cap > settings.companion_stream_maxlen:

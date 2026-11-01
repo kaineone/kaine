@@ -271,6 +271,7 @@ class AsyncBus:
                 cstream,
                 {name: [[list(path), value, index] for path, value, index in diverted]
                  for name, diverted in to_companion.items()},
+                max_age_s=self._companions.max_age_s(stream),
             )
         except asyncio.CancelledError:
             raise
@@ -298,8 +299,11 @@ class AsyncBus:
         if parsed is None or self._volatile is None:
             return None
         cstream, entry_id = parsed
+        main_stream = cstream[: -len(".companion")]
         try:
-            return await self._volatile.get(cstream, entry_id)
+            return await self._volatile.get(
+                cstream, entry_id, max_age_s=self._companions.max_age_s(main_stream)
+            )
         except asyncio.CancelledError:
             raise
         except Exception as exc:

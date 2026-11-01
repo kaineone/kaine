@@ -1096,9 +1096,9 @@ async def test_companion_written_before_main_entry(main_bus):
     real_add = volatile.add
     real_xadd = main_bus.client.xadd
 
-    async def add(stream, values):
+    async def add(stream, values, **kw):
         order.append("companion")
-        return await real_add(stream, values)
+        return await real_add(stream, values, **kw)
 
     async def xadd(stream, fields, **kw):
         order.append(f"main:{'companion' in fields}")
@@ -1120,7 +1120,7 @@ async def test_failed_companion_write_loses_value_not_privacy(main_bus, caplog):
 
     volatile = attach_test_volatile(main_bus, ("vision.out", "latent"))
 
-    async def refuse(stream, values):
+    async def refuse(stream, values, **kw):
         raise ConnectionError("volatile down")
 
     volatile.add = refuse
@@ -1475,3 +1475,118 @@ async def test_language_mode_stream_record_holds_no_latent_field(main_bus):
     (fields,) = await _raw_entries(main_bus, "language.internal")
     assert json.loads(fields["payload"]) == {"mode": "internal"}
     assert fields["source"] == "language" and fields["type"] == "internal_speech"
+
+
+# ---------------------------------------------------------------------------
+# Declared age bounds and declared field-set extensions (PR 3)
+# ---------------------------------------------------------------------------
+
+
+def _attach(bus, *declarations):
+    import fakeredis.aioredis
+
+    from kaine.bus.volatile import VolatileBus
+
+    volatile = VolatileBus(client=fakeredis.aioredis.FakeRedis(decode_responses=True))
+    bus.attach_volatile(volatile)
+    bus.declare_companions(list(declarations))
+    return volatile
+
+
+def _decl(stream, field_set="latent", **kw):
+    from kaine.bus.companion import CompanionDeclaration
+
+    return CompanionDeclaration("producer", stream, field_set, **kw)
+
+
+@pytest.mark.asyncio
+async def test_companion_entries_older_than_the_bound_are_gone(main_bus):
+    volatile = _attach(main_bus, _decl("vision.out", max_age_s=1.0))
+    await main_bus.publish(_vision_event())
+    ((_eid, old),) = await main_bus.read("vision.out")
+    await asyncio.sleep(1.2)
+    # Read side: past the bound the entry is missing, even before any new write.
+    joined, ok = await main_bus.join_companion(old)
+    assert ok is False and "latent" not in joined.payload
+    assert await volatile.client.xlen("vision.out.companion") == 0
+    # Write side: a new write trims everything older than the bound.
+    await main_bus.publish(_vision_event())
+    await asyncio.sleep(1.2)
+    await main_bus.publish(_vision_event(change_score=0.5))
+    assert await volatile.client.xlen("vision.out.companion") == 1
+    newest = (await main_bus.read("vision.out"))[-1][1]
+    assert (await main_bus.join_companion(newest))[1] is True
+
+
+@pytest.mark.asyncio
+async def test_age_bound_applies_only_to_declaring_producers(main_bus):
+    volatile = _attach(
+        main_bus, _decl("vision.out", max_age_s=1.0), _decl("interoception.out")
+    )
+    await main_bus.publish(_ev("interoception", "interoception.report", {"latent": [0.5, 0.6]}))
+    await main_bus.publish(_vision_event())
+    await asyncio.sleep(1.2)
+    await main_bus.publish(_vision_event())
+    ((_eid, intero),) = await main_bus.read("interoception.out")
+    joined, ok = await main_bus.join_companion(intero)
+    assert ok and joined.payload["latent"] == [0.5, 0.6]
+    assert await volatile.client.xlen("vision.out.companion") == 1
+    assert main_bus.companions.max_age_s("interoception.out") is None
+    assert main_bus.companions.max_age_s("vision.out") == 1.0
+
+
+@pytest.mark.asyncio
+async def test_no_age_bound_means_no_trim_and_no_clock(main_bus):
+    volatile = _attach(main_bus, _decl("vision.out"))
+    calls = []
+    real_xtrim, real_time = volatile.client.xtrim, volatile.client.time
+
+    async def xtrim(*a, **k):
+        calls.append("xtrim")
+        return await real_xtrim(*a, **k)
+
+    async def time_():
+        calls.append("time")
+        return await real_time()
+
+    volatile.client.xtrim, volatile.client.time = xtrim, time_
+    await main_bus.publish(_vision_event())
+    ((_eid, ev),) = await main_bus.read("vision.out")
+    assert (await main_bus.join_companion(ev))[1] is True
+    assert calls == []
+
+
+def test_age_bound_must_be_positive():
+    from kaine.bus.companion import CompanionRegistry
+
+    for bad in (0, -1.0, float("inf"), True, "120"):
+        with pytest.raises(ValueError):
+            CompanionRegistry(declarations=[_decl("vision.out", max_age_s=bad)])
+
+
+@pytest.mark.asyncio
+async def test_boot_refuses_an_age_bound_it_cannot_apply():
+    from kaine.bus.companion import CompanionRegistry
+    from kaine.bus.volatile import PrivacySettings, VolatileBus, companion_refusals
+
+    registry = CompanionRegistry(declarations=[_decl("vision.out", max_age_s=120)])
+    (reason,) = await companion_refusals(registry, VolatileBus(client=_ConfigClient()), PrivacySettings())
+    assert "age bound" in reason
+    # The same instance is fine when no producer declares a bound.
+    assert await companion_refusals(_registry("vision.out"), VolatileBus(client=_ConfigClient()), PrivacySettings()) == []
+
+
+@pytest.mark.asyncio
+async def test_declared_extra_fields_extend_a_field_set(main_bus):
+    payload = {"x": 1, "deep": [{"gist": [0.25, 0.75]}]}
+    await main_bus.publish(_ev("planning", "planning.belief", payload))
+    (fields,) = await _raw_entries(main_bus, "planning.out")
+    assert json.loads(fields["payload"]) == payload  # not declared: untouched
+    _attach(main_bus, _decl("planning.out", extra_fields=frozenset({"gist"})))
+    assert main_bus.companions.extra_fields("latent") == {"gist"}
+    await main_bus.publish(_ev("planning", "planning.belief", payload))
+    fields = (await _raw_entries(main_bus, "planning.out"))[-1]
+    assert json.loads(fields["payload"]) == {"x": 1, "deep": [{}]}
+    ev = (await main_bus.read("planning.out"))[-1][1]
+    joined, ok = await main_bus.join_companion(ev)
+    assert ok and joined.payload == payload

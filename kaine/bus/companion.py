@@ -27,6 +27,7 @@ the producer declarations.
 from __future__ import annotations
 
 import copy
+import math
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable, Mapping, Optional
 
@@ -69,15 +70,18 @@ def parse_companion_ref(ref: str) -> Optional[tuple[str, str]]:
 class FieldSet:
     """A named rule that diverts some values of a payload off the persisted bus.
 
-    ``split(event_type, payload)`` returns ``(main_payload, diverted)``: the
-    payload without the diverted values, and each diverted value with its path.
+    ``split(event_type, payload, extra_keys)`` returns ``(main_payload,
+    diverted)``: the payload without the diverted values, and each diverted
+    value with its path. ``extra_keys`` are field names producers declared into
+    this field set (``CompanionDeclaration.extra_fields``), diverted at any
+    depth on every event in addition to the set's own rule.
     It returns the very same payload object and an empty list when there is
     nothing to divert. Diverting removes a mapping key; list lengths never
     change, so the paths stay valid in the main payload.
     """
 
     name: str
-    split: Callable[[str, Mapping[str, Any]], tuple[dict[str, Any], Diverted]]
+    split: Callable[[str, Mapping[str, Any], frozenset[str]], tuple[dict[str, Any], Diverted]]
     #: Undoes what the split added beside the removed values (for example the
     #: spoken-text counts) once they are back; None when it added nothing.
     after_merge: Optional[Callable[[dict[str, Any], Diverted], dict[str, Any]]] = None
@@ -111,12 +115,14 @@ def _split_keys(node: Any, keys: frozenset[str], path: Path, diverted: Diverted)
     return node
 
 
-def _latent_split(event_type: str, payload: Mapping[str, Any]) -> tuple[dict[str, Any], Diverted]:
+def _latent_split(
+    event_type: str, payload: Mapping[str, Any], extra_keys: frozenset[str] = frozenset()
+) -> tuple[dict[str, Any], Diverted]:
     # Imported here: kaine.privacy_filter imports kaine.bus.schema, whose package
     # imports this module.
     from kaine.privacy_filter import LATENT_FIELDS
 
-    return split_keys(payload, LATENT_FIELDS)
+    return split_keys(payload, LATENT_FIELDS | extra_keys)
 
 
 #: The latent field set: every key in ``LATENT_FIELDS`` at any depth.
@@ -180,6 +186,14 @@ class CompanionDeclaration:
     producer: str
     stream: str
     field_set: str
+    #: Optional age bound, in wall-clock seconds: entries of this companion
+    #: stream older than it are trimmed (``XTRIM MINID``) on every write and read
+    #: as missing. A bound declared by any producer of a stream bounds the whole
+    #: companion stream. None: the stream is bounded by its cap alone.
+    max_age_s: Optional[float] = None
+    #: Field names this producer adds to ``field_set``: diverted at any depth on
+    #: every event, on every stream, while the producer is enabled.
+    extra_fields: frozenset[str] = frozenset()
 
 
 class CompanionRegistry:
@@ -213,12 +227,38 @@ class CompanionRegistry:
                 raise ValueError(
                     f"{decl.producer} declares {decl.stream} for unknown field set {decl.field_set!r}"
                 )
+            if decl.max_age_s is not None and (
+                isinstance(decl.max_age_s, bool)
+                or not isinstance(decl.max_age_s, (int, float))
+                or not math.isfinite(decl.max_age_s)
+                or decl.max_age_s <= 0
+            ):
+                raise ValueError(
+                    f"{decl.producer} declares {decl.stream} with an invalid age bound {decl.max_age_s!r}"
+                )
             if decl not in added:
                 added.append(decl)
         self._declarations = tuple(added)
 
     def declared(self, stream: str, field_set: str) -> bool:
         return any(d.stream == stream and d.field_set == field_set for d in self._declarations)
+
+    def extra_fields(self, field_set: str) -> frozenset[str]:
+        """The field names declarations add to ``field_set``."""
+        out: set[str] = set()
+        for d in self._declarations:
+            if d.field_set == field_set:
+                out |= set(d.extra_fields)
+        return frozenset(out)
+
+    def max_age_s(self, stream: str) -> Optional[float]:
+        """The age bound of ``stream``'s companion stream: the smallest any of its
+        declarations sets, or None when none sets one (off means absent)."""
+        ages = [float(d.max_age_s) for d in self._declarations if d.stream == stream and d.max_age_s is not None]
+        return min(ages) if ages else None
+
+    def has_age_bounds(self) -> bool:
+        return any(d.max_age_s is not None for d in self._declarations)
 
     def companion_streams(self) -> list[str]:
         """Every declared companion stream, sorted."""
@@ -242,7 +282,7 @@ class CompanionRegistry:
         to_companion: dict[str, Diverted] = {}
         diverted_any = False
         for fs in self._field_sets:
-            main, diverted = fs.split(event_type, main)
+            main, diverted = fs.split(event_type, main, self.extra_fields(fs.name))
             if diverted:
                 diverted_any = True
                 if self.declared(stream, fs.name):
