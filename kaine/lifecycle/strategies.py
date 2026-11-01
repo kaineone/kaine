@@ -174,6 +174,11 @@ class PlanningMergeStrategy:
         one = _one_sided(state_a, state_b)
         if one is not None:
             return one
+        if "posterior" not in state_a and "posterior" not in state_b:
+            # ForkManager.merge takes the posterior with the learned prior it
+            # was inferred under (planning's weight group) and hands this
+            # strategy only the rest; there is no certainty to compare.
+            return copy.deepcopy(state_a)
         ent_a = _mean_posterior_entropy(state_a)
         ent_b = _mean_posterior_entropy(state_b)
         # Lower entropy (more certain) wins; tie → keep A (deterministic).
@@ -449,7 +454,8 @@ def _merge_profiles(
 #               reservoir_seed rebuilds; featurizer_layout: the input layout
 #               both were trained on.
 # planning      learned: the learned transition prior (pB) and the belief
-#               carried with it.
+#               carried with it; posterior and last_action: the belief and the
+#               action inferred under that prior.
 #
 # The inventory is pinned by tests/test_fork_merge_module_weights.py, which also
 # fails when a stock module serializes a weight-like list outside its group.
@@ -464,7 +470,21 @@ MODULE_WEIGHT_GROUPS: dict[str, tuple[str, ...]] = {
         "self_rhythm",
     ),
     "sequence": ("pred_head", "reservoir_seed", "featurizer_layout"),
-    "planning": ("learned",),
+    "planning": ("learned", "posterior", "last_action"),
+}
+
+# The keys of each weight group that hold the learned parameters themselves; the
+# group's other keys are the bindings (seeds, layouts, encoder ids) those
+# parameters were trained against. A parent whose group holds bindings only (for
+# example vision with forward prediction switched off) has no learned weights to
+# offer: when its bindings agree with the other parent's, the other parent's
+# group is copied as one-sided.
+MODULE_WEIGHT_PARAMETERS: dict[str, tuple[str, ...]] = {
+    "vision": ("forward_model",),
+    "audition": ("forward_model", "acoustic_forward_models"),
+    "interoception": ("forward_model", "expected_error", "self_rhythm"),
+    "sequence": ("pred_head",),
+    "planning": ("learned", "posterior", "last_action"),
 }
 
 

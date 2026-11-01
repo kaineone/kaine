@@ -52,13 +52,15 @@ Module shedding lets KAINE degrade gracefully under resource constraints: forkin
 
 `ForkManager.restore(snapshot_id, registry)` loads a snapshot, calls `module.deserialize(state)` on each module present in the snapshot, and then installs each module's artifacts from `<snapshot root>/<id>/artifacts/<module>/` into the live instance. Modules not present in the snapshot are unchanged. The world model module writes restored weights to its own `checkpoint_path` and logs a warning that a fresh world-model start is beginning when the snapshot carries no world-model weights. Symlinked artifact directories are never followed.
 
-A processor refuses a forward-model state whose structure differs from its running model before copying any of it. Vision and audition check the number of layers against the network's linear layers and every layer's weight and bias shapes; interoception's readout and sequence's prediction head check their weight and bias shapes; the self-rhythm checks its per-unit arrays against its population size. A refused state is discarded with a warning naming the module and the mismatch, that model re-learns from scratch, and the rest of the module's restored state is kept.
+A processor refuses a forward-model state whose structure differs from its running model before copying any of it. Vision and audition check the number of layers against the network's linear layers and every layer's weight and bias shapes; interoception's readout and sequence's prediction head check their weight and bias shapes; the self-rhythm checks its per-unit arrays against its population size. A refused state is discarded with a warning naming the module and the mismatch, that model re-learns from scratch, and the rest of the module's restored state is kept; interoception discards its expected-error statistics with a refused readout, and a refused self-rhythm state leaves the rhythm as it was. Vision's forward model and sequence's prediction head are built in `initialize()`: weights restored before that are kept and loaded there, and a snapshot taken meanwhile carries them. With forward prediction switched off in the configuration, a restored forward model or head is not loaded, and a warning says so.
 
 ### merge(snapshot_a_id, snapshot_b_id, world_model_from=None, module_weights_from=None)
 
 `ForkManager.merge(snapshot_a_id, snapshot_b_id, world_model_from=None, module_weights_from=None)` loads both snapshots, applies a per-module merge strategy, merges any adapters, and saves a new `ForkSnapshot` with `parent_id = "<a_id>+<b_id>"`. It records each module's artifact source in `metadata["artifact_sources"]`. For non-world-model modules, when both parents have artifacts, the merged snapshot always takes parent A's copy.
 
 If both parents carry a world model, `merge()` requires `world_model_from="a"` or `world_model_from="b"` to name which parent's world model continues; two independently trained world models cannot be averaged. If the parameter is missing, `merge()` raises `WorldModelChoiceRequiredError` (a `ValueError`). The dashboard `POST …/merges` endpoint validates `world_model_from` as `Literal["a", "b"] | None`, so an invalid value returns HTTP 422 before `merge()` runs. The dashboard returns HTTP 409 for `WorldModelChoiceRequiredError`, `ModuleWeightsChoiceRequiredError`, `ModuleMergeStrategyError` and `UnmergedAdaptersError`. If only one parent has a world model, that parent's copy is used automatically.
+
+The world model module's own state (its backend, engine, observation size and checkpoint metadata) comes whole from the same parent as its weights, never merged; when neither parent carries world-model weights it comes from parent A. `metadata["module_weights_from"]["world_model"]` records the parent and why (`chosen`, `one-sided` or `no world-model weights`). On restore the world model keeps its configured checkpoint path and never adopts one from snapshot data; it writes the pass-count sidecar only beside that configured checkpoint, and only when weight persistence is on.
 
 #### Learned module weights
 
@@ -70,17 +72,19 @@ The processors' forward models and the planning module's learned transition prio
 | `audition` | `forward_model`, `forward_model_features`, `acoustic_forward_models` |
 | `interoception` | `forward_model`, `reservoir_seed`, `feature_layout`, `expected_error`, `self_rhythm` |
 | `sequence` | `pred_head`, `reservoir_seed`, `featurizer_layout` |
-| `planning` | `learned` |
+| `planning` | `learned`, `posterior`, `last_action` |
 
 For each such module, merge takes the group whole from one parent:
 
 - a group that is equal in both parents (for example, two forks of one snapshot that have not trained since) is copied without a choice;
-- a group held by one parent only is copied from that parent;
-- otherwise `module_weights_from` names the parent: `"a"` or `"b"` for every module that needs a choice, or a mapping such as `{"vision": "a", "interoception": "b"}` that names each of them. Without a sufficient choice merge raises `ModuleWeightsChoiceRequiredError` (a `ValueError`) naming the modules, and writes no snapshot. A mapping that names a module without a weight group, or a parent other than `"a"` or `"b"`, raises `ValueError`.
+- a group held by one parent only is copied from that parent. So is a group whose learned parameters only one parent holds (for example vision with forward prediction off in the other parent, so its group holds only `encoder_model_id`), when the bindings both parents hold agree;
+- otherwise `module_weights_from` names the parent: `"a"` or `"b"` for every module that needs a choice, or a mapping such as `{"vision": "a", "interoception": "b"}` that names each of them. Without a sufficient choice merge raises `ModuleWeightsChoiceRequiredError` (a `ValueError`) naming the modules and, for each, which parents hold learned weights, and writes no snapshot. A mapping that names a module without a weight group, names one module under both an old and a current name, or names a parent other than `"a"` or `"b"`, raises `ValueError`.
 
 The group's keys are removed from both parents' states before the module's strategy runs, so the strategy only merges the rest, and the chosen group is set on the result afterwards. `metadata["module_weights_from"]` records, per module with a group, the parent it came from and why: `{"vision": {"from": "b", "reason": "chosen"}, "interoception": {"from": "a", "reason": "equal"}}` (reasons `chosen`, `equal`, `one-sided`).
 
-If the merge strategy of a module with a weight group raises, merge raises `ModuleMergeStrategyError` naming the module and writes no snapshot; it never takes either parent's state in its place. For any other module, a strategy that raises makes the merge keep state A for that module.
+If the merge strategy of a module with a weight group raises, merge raises `ModuleMergeStrategyError` naming the module and the exception type (the message is in the log only) and writes no snapshot; it never takes either parent's state in its place. For any other module, a strategy that raises makes the merge keep state A for that module.
+
+A parent's serialize-error marker (`{"_serialize_error": ...}`, written when a module's `serialize()` raised) never reaches the merged state: the merge uses what the other parent captured, and `metadata["serialize_errors_dropped"]` names the module and the parent.
 
 `tests/test_fork_merge_module_weights.py` pins the inventory and fails when a stock module serializes a weight-like list (a list of numeric lists, or a list of 16 or more numbers) outside its weight group and outside the reviewed non-weight keys.
 
@@ -129,6 +133,8 @@ Lower entropy wins. Ties go to state A. The merged planning module state records
 - `selected_fork_entropy`, the entropy of the kept state;
 - `discarded_fork_entropy`, the entropy of the dropped state;
 - `planning.merge_warning = True` when `|discarded - kept| > warning_threshold` (default 0.2)
+
+Under `ForkManager.merge` the posterior, the last action and the learned prior are planning's weight group, taken whole from one parent (see [Learned module weights](#learned-module-weights)), so the strategy receives no posterior and keeps state A's remaining counters without the entropy fields.
 
 ### SelfModelMergeStrategy
 

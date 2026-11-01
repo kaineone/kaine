@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import logging
 import time
 from collections import deque
@@ -112,6 +113,9 @@ class Sequence(BaseModule):
 
         # Forward-prediction head (lazy — created alongside the network)
         self._forward_prediction: bool = bool(forward_prediction)
+        # A head state restored before initialize() builds the head; initialize()
+        # loads it, as the reservoir seed restored early is kept for it.
+        self._pending_pred_head_state: Optional[dict[str, Any]] = None
         self._prediction_error_window: int = int(prediction_error_window)
         # Workspace feedback (paper §3.2) reads the predicted next broadcast
         # featurization from the report; off by default, so the report is unchanged.
@@ -181,6 +185,10 @@ class Sequence(BaseModule):
                 backend=self._cfc_backend,
                 seed=getattr(self._network, "reservoir_seed", None),
             )
+        pending = getattr(self, "_pending_pred_head_state", None)
+        if pending is not None and self._pred_head is not None:
+            self._pending_pred_head_state = None
+            self._load_pred_head_state(pending)
 
         # Resolve cursors before starting tasks so initial events aren't missed
         for stream in self._user_input_streams:
@@ -378,6 +386,10 @@ class Sequence(BaseModule):
             state["reservoir_seed"] = self._network.reservoir_seed
         if self._pred_head is not None:
             state["pred_head"] = self._pred_head.state_dict()
+        elif getattr(self, "_pending_pred_head_state", None) is not None:
+            # Restored but not yet loaded (initialize() has not run): carried
+            # forward so a snapshot taken meanwhile does not lose it.
+            state["pred_head"] = copy.deepcopy(self._pending_pred_head_state)
         return state
 
     def deserialize(self, state: dict[str, Any]) -> None:
@@ -424,16 +436,31 @@ class Sequence(BaseModule):
                     "sequence: snapshot has no reservoir seed; the reservoir is new"
                 )
 
-        if "pred_head" in state and self._pred_head is not None:
-            # A head whose structure differs from the running one (two parents'
-            # rows concatenated by a merge, or another feature layout) is
-            # refused before any weight is copied; the head starts fresh and
-            # the rest of the restored state is kept.
-            try:
-                self._pred_head.load_state_dict(state["pred_head"])
-            except Exception as exc:
+        if "pred_head" in state:
+            if self._pred_head is not None:
+                self._load_pred_head_state(state["pred_head"])
+            elif self._forward_prediction:
+                # initialize() builds the head and then loads this state.
+                self._pending_pred_head_state = copy.deepcopy(state["pred_head"])
+            else:
                 log.warning(
-                    "sequence: discarding prediction-head weights — %s; the head "
-                    "re-learns from scratch",
-                    exc,
+                    "sequence: the snapshot carries a prediction head but forward "
+                    "prediction is off in this configuration; it is not loaded, "
+                    "and snapshots taken from now on do not carry it"
                 )
+
+    def _load_pred_head_state(self, head_state: Any) -> None:
+        """Load restored head weights, or discard them with a warning.
+
+        A head whose structure differs from the running one (two parents' rows
+        concatenated by a merge, or another feature layout) is refused before
+        any weight is copied; the head starts fresh and the rest of the
+        restored state is kept."""
+        try:
+            self._pred_head.load_state_dict(head_state)
+        except Exception as exc:
+            log.warning(
+                "sequence: discarding prediction-head weights — %s; the head "
+                "re-learns from scratch",
+                exc,
+            )

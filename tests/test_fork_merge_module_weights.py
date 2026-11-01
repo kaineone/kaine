@@ -422,7 +422,7 @@ EXPECTED_WEIGHT_GROUPS: dict[str, tuple[str, ...]] = {
         "self_rhythm",
     ),
     "sequence": ("pred_head", "reservoir_seed", "featurizer_layout"),
-    "planning": ("learned",),
+    "planning": ("learned", "posterior", "last_action"),
 }
 
 # Numeric lists in stock module states that are reviewed as not learned
@@ -510,10 +510,40 @@ def _materialise_lazy_weights(registry: Any) -> None:
         )
 
 
+def _live_a_little(registry: Any) -> None:
+    """Drive the learned parts through some experience, so the walk sees the
+    shapes a lived state has (filled statistics, grown histories), not only a
+    freshly built one."""
+    import random
+
+    rng = random.Random(7)
+    vision = registry.get("vision")._forward_model
+    for _ in range(4):
+        vision.step([rng.random() for _ in range(vision.latent_dim)])
+    audition = registry.get("audition")
+    for _ in range(4):
+        fm = audition._forward_model
+        fm.step([rng.random() for _ in range(fm.feature_dim)])
+    acoustic = getattr(audition, "_acoustic_forward_model", None)
+    if acoustic is not None:
+        for _ in range(4):
+            acoustic.step([rng.random() for _ in range(acoustic.feature_dim)])
+    interoception = registry.get("interoception")
+    for _ in range(4):
+        interoception._forward_model.step([rng.random() for _ in range(8)])
+        interoception._expected_error.unexpected([rng.random() for _ in range(8)], 1.0)
+        if interoception._self_rhythm is not None:
+            interoception._self_rhythm.step(rng.random())
+    sequence = registry.get("sequence")
+    dim = sequence._featurizer.feature_dim
+    for _ in range(4):
+        sequence._pred_head.adapt([rng.random() for _ in range(4)], [rng.random() for _ in range(dim)])
+
+
 def test_every_weight_like_list_is_declared_or_reviewed(monkeypatch):
     registry = _stock_registry(monkeypatch)
     _materialise_lazy_weights(registry)
-    specialised = set(default_strategies())
+    _live_a_little(registry)
     states = {m.name: m.serialize() for m in registry.all_modules()}
 
     # Each declared group is really serialized, so the walk below sees the
@@ -522,11 +552,14 @@ def test_every_weight_like_list_is_declared_or_reviewed(monkeypatch):
     assert "pred_head" in states["sequence"]
     assert "self_rhythm" in states["interoception"]
     assert states["audition"]["acoustic_forward_models"]
+    # ... and the walk sees a lived state, not only a freshly built one.
+    assert states["interoception"]["expected_error"]["expected"]
 
+    # Every module is walked, the ones with a specialised strategy too: a
+    # learned key added to one of them must be declared like any other.
+    assert set(default_strategies()) <= set(states)
     undeclared: list[tuple[str, str]] = []
     for name, state in states.items():
-        if name in specialised:
-            continue
         group = set(MODULE_WEIGHT_GROUPS.get(name, ()))
         for key, value in state.items():
             if key in group or (name, key) in NON_WEIGHT_LIST_KEYS:
@@ -602,3 +635,304 @@ def test_self_rhythm_refuses_concatenated_population():
     after = fresh.serialize()
     assert len(after["mem"]) == fresh.population_size
     assert after["weights"] == before["weights"]
+
+
+# ---------------------------------------------------------------------------
+# The world model's module state follows world_model_from (second review R1)
+# ---------------------------------------------------------------------------
+
+
+def _wm_bus() -> AsyncBus:
+    from unittest.mock import AsyncMock
+
+    bus = MagicMock(spec=AsyncBus)
+    bus.client = MagicMock()
+    bus.client.xrevrange = AsyncMock(return_value=[])
+    return bus
+
+
+def _world_model(path: Path, *, persist: bool = True, seed: int = 0):
+    from kaine.modules.world_model.module import WorldModel
+
+    return WorldModel(
+        _wm_bus(),
+        backend="dreamerv3",
+        engine="numpy",
+        persist_weights=persist,
+        checkpoint_path=str(path),
+        world_model_kwargs={
+            "seed": seed,
+            "deter_dim": 8,
+            "stoch_dim": 4,
+            "stoch_classes": 4,
+            "hidden_dim": 8,
+        },
+    )
+
+
+def _sidecar(path: Path) -> dict[str, Any]:
+    import json
+
+    return json.loads(Path(str(path) + ".passes.json").read_text())
+
+
+def test_world_model_state_follows_world_model_from(tmp_path: Path):
+    """The reviewer's reproduction: a persist-off restore of a merge made with
+    world_model_from='a' rewrote parent b's pass-count sidecar from 7 to 3."""
+    mgr = ForkManager(tmp_path / "forks")
+    pa = tmp_path / "entity_a" / "world_model.ckpt"
+    pb = tmp_path / "entity_b" / "world_model.ckpt"
+    pa.parent.mkdir()
+    pb.parent.mkdir()
+    a_model, b_model = _world_model(pa, seed=1), _world_model(pb, seed=2)
+    a_model._successful_training_passes = 3
+    b_model._successful_training_passes = 7
+    a_model._save_weights(reason="test")
+    b_model._save_weights(reason="test")
+    a = mgr.snapshot(_Registry([a_model])).id
+    b = mgr.snapshot(_Registry([b_model])).id
+
+    merged = mgr.merge(a, b, world_model_from="a")
+    assert merged.metadata["artifact_sources"]["world_model"] == "a"
+    assert merged.modules["world_model"] == a_model.serialize()
+    assert merged.metadata["module_weights_from"]["world_model"] == {
+        "from": "a",
+        "reason": "chosen",
+    }
+
+    # Persistence on: the instance keeps its own path and gets a's weights and count.
+    pc = tmp_path / "entity_c" / "world_model.ckpt"
+    pc.parent.mkdir()
+    c_model = _world_model(pc, seed=9)
+    mgr.restore(merged.id, _Registry([c_model]))
+    assert c_model._checkpoint_path == str(pc.resolve())
+    assert c_model._wm.export_params(extra={}) == a_model._wm.export_params(extra={})
+    assert c_model.successful_training_passes == 3
+
+    # Persistence off: nothing is adopted from snapshot data, nothing is written.
+    d_model = _world_model(tmp_path / "unused.ckpt", persist=False, seed=9)
+    mgr.restore(merged.id, _Registry([d_model]))
+    assert d_model._checkpoint_path is None
+    assert d_model.successful_training_passes == 3
+    assert _sidecar(pb) == {"successful_training_passes": 7}
+    assert _sidecar(pa) == {"successful_training_passes": 3}
+    assert not (tmp_path / "unused.ckpt.passes.json").exists()
+
+
+def test_world_model_deserialize_never_adopts_a_snapshot_path(tmp_path: Path):
+    model = _world_model(tmp_path / "unused.ckpt", persist=False)
+    model.deserialize({"checkpoint_path": str(tmp_path / "other.ckpt")})
+    assert model._checkpoint_path is None
+    model.restore_training_pass_count(5)
+    assert model.successful_training_passes == 5
+    assert not (tmp_path / "other.ckpt.passes.json").exists()
+
+
+def test_pass_count_sidecar_written_only_with_persistence_on(tmp_path: Path):
+    model = _world_model(tmp_path / "unused.ckpt", persist=False)
+    # Even a path that reached the instance some other way is never written to
+    # while persistence is off.
+    model._checkpoint_path = str(tmp_path / "stray.ckpt")
+    model.restore_training_pass_count(4)
+    assert model.successful_training_passes == 4
+    assert not (tmp_path / "stray.ckpt.passes.json").exists()
+
+
+def test_one_sided_world_model_state_comes_with_its_weights(tmp_path: Path):
+    mgr = ForkManager(tmp_path / "forks")
+    pa = tmp_path / "entity_a" / "world_model.ckpt"
+    pa.parent.mkdir()
+    a_model = _world_model(pa, seed=1)
+    a_model._save_weights(reason="test")
+    b_model = _world_model(tmp_path / "unused.ckpt", persist=False, seed=2)
+    a = mgr.snapshot(_Registry([a_model])).id
+    b = mgr.snapshot(_Registry([b_model])).id
+    merged = mgr.merge(b, a)
+    assert merged.modules["world_model"] == a_model.serialize()
+    assert merged.metadata["module_weights_from"]["world_model"] == {
+        "from": "b",
+        "reason": "one-sided",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Second review S1-S3 and the minor findings
+# ---------------------------------------------------------------------------
+
+
+def _planning(pb: float, posterior: list[float], action: str) -> _Captured:
+    return _Captured(
+        "planning",
+        {
+            "posterior": [posterior],
+            "last_action": action,
+            "step_counter": 4,
+            "learned": {"pB": [[[pb, 1.0]]], "carried_prior": [[0.5, 0.5]], "last_action_index": 1},
+        },
+    )
+
+
+def test_planning_belief_travels_with_its_learned_prior(mgr: ForkManager):
+    # b is far more certain; the certainty pick must not pair b's belief with a's prior.
+    a = mgr.snapshot(_Registry([_planning(1.0, [0.5, 0.5], "act1")])).id
+    b = mgr.snapshot(_Registry([_planning(2.0, [0.99, 0.01], "act2")])).id
+    merged = mgr.merge(a, b, module_weights_from="a").modules["planning"]
+    assert merged["posterior"] == [[0.5, 0.5]]
+    assert merged["last_action"] == "act1"
+    assert merged["learned"]["pB"] == [[[1.0, 1.0]]]
+    assert "selected_fork_entropy" not in merged
+
+
+def _vision_without_forward_model(model_id: str = _Encoder.model_id) -> _Captured:
+    return _Captured("vision", {"encoder_model_id": model_id})
+
+
+def test_bindings_only_side_is_one_sided(mgr: ForkManager):
+    trained = _vision(1)
+    a = _snapshot(mgr, [trained])
+    b = mgr.snapshot(_Registry([_vision_without_forward_model()])).id
+    merged = mgr.merge(a, b)
+    assert merged.modules["vision"]["forward_model"] == trained.serialize()["forward_model"]
+    assert merged.metadata["module_weights_from"]["vision"] == {"from": "a", "reason": "one-sided"}
+
+
+def test_bindings_only_side_with_other_bindings_needs_a_choice_naming_the_holder(mgr: ForkManager):
+    a = _snapshot(mgr, [_vision(1)])
+    b = mgr.snapshot(_Registry([_vision_without_forward_model("other/encoder")])).id
+    with pytest.raises(ModuleWeightsChoiceRequiredError) as exc:
+        mgr.merge(a, b)
+    assert exc.value.holders == {"vision": ("a",)}
+    assert "only a holds learned weights" in str(exc.value)
+
+
+def test_strategy_error_carries_the_type_only(mgr: ForkManager):
+    class _Leaky:
+        def merge(self, state_a, state_b):
+            raise ValueError("cursor 1714-0 and the secret value 0.4242")
+
+    a = _snapshot(mgr, [_interoception(11)])
+    b = _snapshot(mgr, [_interoception(22)])
+    with pytest.raises(ModuleMergeStrategyError) as exc:
+        mgr.merge(a, b, module_weights_from="a", strategies={"interoception": _Leaky()})
+    assert "ValueError" in str(exc.value)
+    assert "0.4242" not in str(exc.value)
+
+
+def test_mapping_naming_an_old_and_a_current_name_refused(mgr: ForkManager):
+    a = _snapshot(mgr, [_vision(1)])
+    b = _snapshot(mgr, [_vision(2)])
+    with pytest.raises(ValueError, match="twice"):
+        mgr.merge(a, b, module_weights_from={"topos": "a", "vision": "b"})
+
+
+def test_serialize_error_marker_not_carried_into_the_merge(mgr: ForkManager):
+    vision = _vision(1)
+    a = mgr.snapshot(
+        _Registry([_Captured("vision", vision.serialize()), _Captured("vocal", {"voice_mode": "a"})])
+    ).id
+    b = mgr.snapshot(
+        _Registry(
+            [
+                _Captured("vision", {"_serialize_error": "boom"}),
+                _Captured("vocal", {"_serialize_error": "boom"}),
+            ]
+        )
+    ).id
+    merged = mgr.merge(a, b)
+    assert "_serialize_error" not in merged.modules["vision"]
+    assert merged.modules["vocal"] == {"voice_mode": "a"}
+    assert merged.metadata["serialize_errors_dropped"] == {"vision": ["b"], "vocal": ["b"]}
+
+
+def test_refused_readout_drops_its_expected_error(caplog):
+    garbled = _union(_interoception(11), _interoception(22))
+    garbled["expected_error"] = {"expected": [0.5] * 8, "spread": [0.5] * 8}
+    fresh = _interoception(99)
+    fresh._expected_error.load_state_dict({"expected": [], "spread": []})
+    with caplog.at_level(logging.WARNING):
+        fresh.deserialize(garbled)
+    assert fresh._expected_error.state_dict() == {"expected": [], "spread": []}
+    assert "expected-error" in caplog.text
+
+
+def test_refused_self_rhythm_warns_and_restores_nothing(caplog):
+    from kaine.oscillator.module_oscillator import (
+        make_self_rhythm_oscillator,
+        snntorch_available,
+    )
+
+    if not snntorch_available():
+        pytest.skip("the oscillator extra (snnTorch) is not installed")
+    donor = make_self_rhythm_oscillator(seed=1)
+    for _ in range(5):
+        donor.step(0.7)
+    state = donor.serialize()
+    state["rng_state"] = {"not": "a bit generator state"}
+    fresh = make_self_rhythm_oscillator(seed=3)
+    before = fresh.serialize()
+    with caplog.at_level(logging.WARNING):
+        fresh.deserialize(state)
+    assert fresh.serialize() == before
+    warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert any("interoception self-rhythm" in r.getMessage() for r in warnings)
+
+
+# ---------------------------------------------------------------------------
+# Restored before initialize(): the weights wait for the model to be built
+# ---------------------------------------------------------------------------
+
+
+def _init_bus() -> AsyncBus:
+    from unittest.mock import AsyncMock
+
+    bus = MagicMock(spec=AsyncBus)
+    bus.client = MagicMock()
+    bus.client.xrevrange = AsyncMock(return_value=[])
+    bus.read = AsyncMock(return_value=[])
+    return bus
+
+
+@pytest.mark.asyncio
+async def test_vision_restored_before_initialize_keeps_its_forward_model():
+    parent = _vision(1)
+    state = copy.deepcopy(parent.serialize())
+    vision = Vision(_init_bus(), encoder=_Encoder(), forward_prediction=True, forward_model_units=3)
+    vision.deserialize(copy.deepcopy(state))
+    assert vision.serialize()["forward_model"] == state["forward_model"]
+    await vision.initialize()
+    try:
+        assert vision._forward_model.state_dict() == parent._forward_model.state_dict()
+    finally:
+        await vision.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_sequence_restored_before_initialize_keeps_its_head():
+    parent = _sequence(5)
+    head = parent._pred_head.state_dict()
+    parent._pred_head.load_state_dict(
+        {"weight": [[w + 0.5 for w in row] for row in head["weight"]], "bias": [b + 0.5 for b in head["bias"]]}
+    )
+    state = copy.deepcopy(parent.serialize())
+    sequence = Sequence(_init_bus(), reservoir_seed=9, cfc_units=4, forward_prediction=True)
+    sequence.deserialize(copy.deepcopy(state))
+    assert sequence.serialize()["pred_head"] == state["pred_head"]
+    await sequence.initialize()
+    try:
+        assert sequence._pred_head.state_dict() == parent._pred_head.state_dict()
+        assert sequence._network.reservoir_seed == 5
+    finally:
+        await sequence.shutdown()
+
+
+def test_forward_prediction_off_warns_when_a_forward_model_is_dropped(caplog):
+    state = _vision(1).serialize()
+    vision = Vision(_bus(), encoder=_Encoder(), forward_prediction=False)
+    with caplog.at_level(logging.WARNING):
+        vision.deserialize(state)
+    assert "forward prediction is off" in caplog.text
+    sequence = Sequence(_bus(), reservoir_seed=5, cfc_units=4, forward_prediction=False)
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        sequence.deserialize(_sequence(5).serialize())
+    assert "forward prediction is off" in caplog.text

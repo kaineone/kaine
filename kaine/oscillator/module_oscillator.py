@@ -757,6 +757,10 @@ class SelfRhythmOscillator(ModuleOscillator):
             )
             return
 
+        # All or nothing: every attribute the restore below assigns is
+        # reassigned, not mutated in place, so putting the attribute table back
+        # undoes a restore that fails part-way.
+        before = dict(self.__dict__)
         try:
             params = state.get("params", {})
             structural: dict[str, float] = {
@@ -776,9 +780,10 @@ class SelfRhythmOscillator(ModuleOscillator):
                 abs(structural[k] - getattr(self, f"_{k}")) > 1e-12
                 for k in structural
             ):
-                logger.info(
-                    "Ignoring v2 SelfRhythmOscillator state: structural "
-                    "generator parameters differ"
+                logger.warning(
+                    "interoception self-rhythm: discarding the restored state — "
+                    "its structural generator parameters differ from the running "
+                    "oscillator's; the rhythm starts fresh"
                 )
                 return
 
@@ -827,7 +832,13 @@ class SelfRhythmOscillator(ModuleOscillator):
                 self.identity_restored = True
 
         except Exception as exc:
-            logger.info("Ignoring invalid v2 SelfRhythmOscillator state: %s", exc)
+            self.__dict__.clear()
+            self.__dict__.update(before)
+            logger.warning(
+                "interoception self-rhythm: discarding the restored state — %s; "
+                "the rhythm keeps its state from before the restore",
+                exc,
+            )
             return
 
 

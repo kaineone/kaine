@@ -244,12 +244,14 @@ class WorldModel(BaseModule):
         return Path(self._checkpoint_path + ".passes.json")
 
     def restore_training_pass_count(self, n: int) -> None:
-        """Set the successful-training-pass counter to ``n`` and persist the
-        sidecar so ``successful_training_passes`` reports it."""
+        """Set the successful-training-pass counter to ``n`` and, when weight
+        persistence is on, persist the sidecar beside this entity's own
+        configured checkpoint so ``successful_training_passes`` reports it.
+        With persistence off nothing is written: the count lives in memory."""
         if not isinstance(n, int) or n < 0:
             raise ValueError(f"pass count must be a non-negative int, got {n!r}")
         self._successful_training_passes = n
-        sidecar = self._passes_sidecar_path()
+        sidecar = self._passes_sidecar_path() if self._persist_weights else None
         if sidecar is not None:
             from kaine.state_io import write_json_atomic
             try:
@@ -595,12 +597,19 @@ class WorldModel(BaseModule):
         }
 
     def deserialize(self, state: dict[str, Any]) -> None:
-        """Restore checkpoint metadata. The buffer is never part of any
-        snapshot. When weight persistence is configured, the CONFIGURED
-        checkpoint path wins — a restored instance must not adopt another
-        lineage's path (or lose its own to a stale snapshot)."""
-        if not self._persist_weights:
-            self._checkpoint_path = state.get("checkpoint_path") or None
+        """Nothing to restore from module state. The buffer is never part of
+        any snapshot, the weights travel as snapshot artifacts, and the
+        checkpoint path is this instance's CONFIGURED one: a path read from
+        snapshot data is another lineage's file (or a stale one) and never
+        becomes a read or write target."""
+        recorded = state.get("checkpoint_path")
+        if recorded and recorded != self._checkpoint_path:
+            log.info(
+                "world model: the snapshot recorded checkpoint %s; this instance "
+                "keeps its configured checkpoint %s",
+                recorded,
+                self._checkpoint_path,
+            )
 
     # ------------------------------------------------------------------
     # Preservation capture / revive (world-model weights into the bundle)
