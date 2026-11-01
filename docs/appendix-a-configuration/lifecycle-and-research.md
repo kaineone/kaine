@@ -183,7 +183,7 @@ The autonomous welfare safety net for unsupervised research. Two cycle-layer mon
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `require_encryption` | boolean | `true` | Fail-closed: the `preserve_live` write boundary refuses to write an unencrypted bundle and raises rather than persist a diverging or distressed individual in the clear. Requires `[security.state_encryption].enabled` with a key; a research boot is refused up-front if encryption is required here but state encryption is off. |
+| `require_encryption` | boolean | `true` | Fail-closed: the `preserve_live` write boundary refuses to write an unencrypted bundle and raises rather than persist a diverging or distressed individual in the clear. Requires `[security.state_encryption].enabled` with a key; a research boot is refused up-front if encryption is required here but state encryption is off. A module or component that produces latent-derived values refuses to start unless this is explicitly `true` (see [Latent-derived values](../13-security-and-privacy.md#latent-derived-values)). |
 | `incident_path` | string | `"state/cycle/preservation"` | Directory for the monitors' durable, append-only action log, joined by `run_id`. Never cleared at boot; encrypted at rest when state encryption is on. |
 
 ### `[preservation.divergence_monitor]`

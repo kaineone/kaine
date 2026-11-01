@@ -151,8 +151,12 @@ The strip points:
 | The organ's renderings (its prompt, the intent log's `numeric_rendering`) | `strip_latent()` on each payload inside `FaithfulRenderer.render_event`, `redact_heard_speech` and `fallback_template`, before any template or fallback, in both the felt and the numeric mode |
 | The workspace broadcast | Each selected member's `latent_derived` mapping is removed; a member without one is embedded unchanged |
 | The dashboard stream and record, the episodic store's text | The diagnostics filter and `strip_vectors` (the tag is a vector field) |
+| Module-state captures: fork snapshots, preservation bundles, the rolling resume checkpoint | `strip_module_states` (`kaine/lifecycle/latent_strip.py`): a latent field is removed, the module named under `latent_stripped` in the capture's metadata and an error logged; the capture is never refused. Learned parameters stay, and the vision and audition buffer summaries are three content-free scalars |
+| A snapshot's record of a module whose `serialize()` raised | The exception type and at most 200 characters of its message, in the record and in the log |
 
 The perceptual latents themselves still ride the bus in vision reports and broadcast members, which nothing on the bus reads; every record writer above removes them.
+
+A component that produces latent-derived values refuses to start, naming every failed condition, unless `kaine.privacy_filter.LATENT_RULE_VERSION` is present and at least the version it was reviewed against, state encryption is in effect with a key that round-trips, and `[preservation].require_encryption` is explicitly `true` (`kaine/security/latent_producer.py`). A module declares itself a producer with `produces_latent_derived = True`; the boot then runs the check and refuses with a configuration error. No shipped module declares it.
 
 ## Two-layer gates
 

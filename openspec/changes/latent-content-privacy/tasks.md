@@ -15,11 +15,11 @@
 
 ## 2. Module state and encryption (PR 2)
 
-- [ ] 2.1 `LatentForwardModel.buffer_summary()` and `AuditoryForwardModel.buffer_summary()` return `n_frames`, `mean_norm`, `mean_variance` (the auditory count renamed from `n_utterances`); update `tests/test_vision_forward.py`, `tests/test_vision_module.py`, `tests/test_vision_normalised_change.py`, `tests/test_vision_internvideo_next.py`, `tests/test_audition_forward.py`, `tests/test_audition_module.py`, `tests/test_audition_persistence.py`, `tests/test_revive_each_module.py`, `docs/09-modules/vision.md`, `docs/09-modules/audition.md`
-- [ ] 2.2 `Audition.deserialize`: rewrite each carried acoustic entry's `buffer_summary` into the three-scalar form; test `test_carried_acoustic_summary_rewritten_on_restore`
-- [ ] 2.3 `strip_module_states` helper: scan, strip, record `latent_stripped`, log an error, never refuse; called from `ForkManager.snapshot`, `preservation._capture_module_state` and `resume_checkpoint.capture_checkpoint`; tests `test_fork_snapshot_strips_and_records_latent`, `test_preservation_strips_and_is_never_refused`, `test_resume_checkpoint_strips_latent`, `test_snapshot_keeps_forward_model_weights`
-- [ ] 2.4 `ForkManager.snapshot` `_serialize_error` record: the exception type and a message cut to 200 characters; test
-- [ ] 2.5 Encryption boot check for latent producers (effective state encryption with a resolvable key, and `require_encryption = true`), shared with `workspace-content-code`; tests `test_latent_producer_refused_without_encryption`, `test_latent_producer_refused_without_require_encryption`
+- [x] 2.1 `LatentForwardModel.buffer_summary()` and `AuditoryForwardModel.buffer_summary()` return `n_frames`, `mean_norm`, `mean_variance` (the auditory count renamed from `n_utterances`); update `tests/test_vision_forward.py`, `tests/test_vision_module.py`, `tests/test_vision_normalised_change.py`, `tests/test_vision_internvideo_next.py`, `tests/test_audition_forward.py`, `tests/test_audition_module.py`, `tests/test_audition_persistence.py`, `tests/test_revive_each_module.py`, `docs/09-modules/vision.md`, `docs/09-modules/audition.md`
+- [x] 2.2 `Audition.deserialize`: rewrite each carried acoustic entry's `buffer_summary` into the three-scalar form; test `test_carried_acoustic_summary_rewritten_on_restore`
+- [x] 2.3 `strip_module_states` helper: scan, strip, record `latent_stripped`, log an error, never refuse; called from `ForkManager.snapshot`, `preservation._capture_module_state` and `resume_checkpoint.capture_checkpoint`; tests `test_fork_snapshot_strips_and_records_latent`, `test_preservation_strips_and_is_never_refused`, `test_resume_checkpoint_strips_latent`, `test_snapshot_keeps_forward_model_weights`
+- [x] 2.4 `ForkManager.snapshot` `_serialize_error` record: the exception type and a message cut to 200 characters; test
+- [x] 2.5 Encryption boot check for latent producers (effective state encryption with a resolvable key, and `require_encryption = true`), shared with `workspace-content-code`; tests `test_latent_producer_refused_without_encryption`, `test_latent_producer_refused_without_require_encryption`
 
 ## 3. The bus (PR 3; pending open question 1, option B)
 

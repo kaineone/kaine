@@ -117,17 +117,17 @@ During sleep the sleep module switches the perceptual locus off and pauses a pla
 
 - `stt_model` and `emotion_model_id`, identity strings only;
 - `forward_model`, the tone model's weight and bias tensors, with `forward_model_features = "utterance_duration_v2"`;
-- `auditory_buffer_summary`, the tone model's buffer as a count and per-feature mean and variance;
-- `acoustic_forward_models`, a map keyed by encoder `model_id`, each entry holding a `state_dict` and a `buffer_summary` for that encoder's acoustic forward model.
+- `auditory_buffer_summary`, the tone model's buffer as three content-free scalars: `n_frames` (how many feature vectors it holds), `mean_norm` (their mean L2 norm) and `mean_variance` (the mean over dimensions of their per-dimension variance);
+- `acoustic_forward_models`, a map keyed by encoder `model_id`, each entry holding a `state_dict` and a `buffer_summary` of the same three scalars for that encoder's acoustic forward model.
 
 On restore:
 
 - A tone checkpoint without the `utterance_duration_v2` tag, saved when that slot held a different feature, is discarded with a warning and the model learns again.
 - A checkpoint of either model saved before the context input existed (first-layer input `2·n`) is accepted and loaded with zero weights for the 24 context inputs, so it predicts exactly as before until those weights learn. Any other shape mismatch is discarded with a warning.
-- The acoustic checkpoint for the running encoder is loaded; checkpoints for other encoders are carried forward unchanged, so switching back to an encoder restores what it learned.
+- The acoustic checkpoint for the running encoder is loaded; checkpoints for other encoders are carried forward with their learned weights unchanged, so switching back to an encoder restores what it learned. A carried entry's `buffer_summary` is rewritten into the three-scalar form: an older snapshot's per-feature mean and variance of acoustic embeddings keeps only its count, with zero for `mean_norm` and `mean_variance`, and is never saved again.
 - The held context and the running statistics behind the null context are not persisted.
 
-The serialized form contains no raw audio, no embeddings, and no buffers beyond the mean and variance summaries.
+The serialized form contains no raw audio, no embeddings, no buffers and no per-dimension statistic of them (the latent rule; see [Latent-derived values](../13-security-and-privacy.md#latent-derived-values)). Nothing reads the buffer summaries back on restore.
 
 ## Configuration
 
