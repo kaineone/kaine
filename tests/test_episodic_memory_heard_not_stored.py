@@ -304,6 +304,13 @@ async def test_audited_own_content_persists_safe_fields_and_no_planted_text(
                 payload[field] = f"RuntimeError: {HEARD}"
             payload["message"] = HEARD
             coalitions.append([_ev(pair[0], pair[1], payload)])
+        # Declared types that carry the playlist media file name.
+        film = "Some-Film-Title-1987.mkv"
+        coalitions.append([
+            _ev("vision", "vision.report", {"change_score": 0.2, "item": film, "item_order": 1}),
+            _ev("audition", "audition.perception", {"change_score": 0.1, "item": film}),
+            _ev("language", "internal_speech", {"text": OWN, "faithful_rendering": f"item={film}"}),
+        ])
         for tick, events in enumerate(coalitions):
             await module.on_workspace(_snapshot(events, tick))
         await module.consolidate_now()
@@ -317,11 +324,14 @@ async def test_audited_own_content_persists_safe_fields_and_no_planted_text(
         assert any("'statement': 'salience_high'" in t for t in texts)
         assert any("'would_be_action': 'shed_module'" in t for t in texts)
         assert all(UNCLASSIFIED_OMITTED_MARKER not in t for t in texts)
+        assert any("'item_order': 1" in t and OWN in t for t in texts)
         for blob in (json.dumps(stored, default=str), json.dumps(exported, default=str)):
             assert "PURPLE-HERON" not in blob
             assert "hello there" not in blob
+            assert "Some-Film" not in blob
         await module.core.storage.shutdown()
         raw = _db_bytes(db_path)
+        assert b"Some-Film" not in raw
         assert b"salience_high" in raw
         assert b"PURPLE-HERON" not in raw
         assert b"hello there" not in raw

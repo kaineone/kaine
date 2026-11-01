@@ -98,6 +98,32 @@ def _sha(paths) -> dict[str, str]:
             f"active | planning:planning.belief={{'statement': '{SECRET}', 'kind': 'belief'}}",
             [("undeclared_text", "planning:planning.belief")],
         ),
+        # A legacy perception report or own-speech rendering that kept the
+        # playlist media file name.
+        (
+            "active | vision:vision.report={'change_score': 0.2, 'item': 'Film-1987.mkv', "
+            "'item_order': 1}",
+            [("media_item", "vision:vision.report")],
+        ),
+        (
+            "active | audition:audition.perception={'item': 'Film-1987.mkv'}",
+            [("media_item", "audition:audition.perception")],
+        ),
+        (
+            "active | language:external_speech={'text': 'hm', 'faithful_rendering': "
+            "'- audition emitted audition.perception carrying item=Film-1987.mkv, item_order=1.'}",
+            [("media_item", "language:external_speech")],
+        ),
+        (
+            "active | language:internal_speech={'text': 'hm', "
+            "'faithful_rendering': '- What I hear is changing.'}",
+            [],
+        ),
+        ("active | vision:vision.report={'change_score': 0.2, 'item_order': 1}", []),
+        (
+            "active | vision:vision.report={'x': <object>, 'item': 'Film-1987.mkv'}",
+            [("media_item", "vision:vision.report")],
+        ),
         (
             f"active | affect:affect.state={{'x': <object>, 'heard_text': '{SECRET}'}}",
             [("unparsed", "affect:affect.state")],

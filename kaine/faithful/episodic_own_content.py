@@ -18,6 +18,10 @@ pattern with no spaces, so a heard sentence cannot pass even if a producer
 started to copy one. The heard rule still runs first, so a member with a heard
 field is stored as ``<heard omitted>`` whatever its type.
 
+It also names fields of declared types that the store drops although the
+language module renders their payload (``EPISODIC_DECLARED_FIELD_DENYLISTS``):
+the playlist media file name and the speech events' ``faithful_rendering``.
+
 Nothing in the language module reads this module, so the organ's prompt layout
 (``layout_digest``) does not depend on it.
 """
@@ -404,9 +408,28 @@ EPISODIC_FIELD_ALLOWLISTS: Mapping[tuple[str, str], Mapping[str, FieldRule]] = {
     },
 }
 
-# Every pair whose member the episodic store keeps with a payload: the whole
-# stripped payload for ``INTERNAL_EVENT_TYPES``, the allowlisted fields for the
-# audited pairs. Any other pair is stored as ``<unclassified omitted>``.
+# Fields of ``INTERNAL_EVENT_TYPES`` pairs that the episodic store drops at any
+# depth, although the language module renders the rest of the payload. The
+# list is the store's alone, so the prompt layout does not change.
+#
+# * ``item``: the basename of the playlist media file (an operator-chosen file
+#   name, often a film title). The entity perceives the film, not its file
+#   name (the eyes-and-ears rule); ``item_order`` stays.
+# * ``faithful_rendering`` on the entity's own speech: a rendering of the same
+#   coalition the trace already holds as members. With the numeric awareness
+#   rendering, the fallback template writes every field of an untemplated type
+#   into it, ``audition.perception``'s ``item`` included.
+EPISODIC_DECLARED_FIELD_DENYLISTS: Mapping[tuple[str, str], frozenset[str]] = {
+    ("vision", "vision.report"): frozenset({"item"}),
+    ("audition", "audition.perception"): frozenset({"item"}),
+    ("language", "internal_speech"): frozenset({"faithful_rendering"}),
+    ("language", "external_speech"): frozenset({"faithful_rendering"}),
+}
+
+# Every pair whose member the episodic store keeps with a payload: the stripped
+# payload less its denied fields for ``INTERNAL_EVENT_TYPES``, the allowlisted
+# fields for the audited pairs. Any other pair is stored as
+# ``<unclassified omitted>``.
 EPISODIC_OWN_CONTENT: frozenset[tuple[str, str]] = INTERNAL_EVENT_TYPES | frozenset(
     EPISODIC_FIELD_ALLOWLISTS
 )
@@ -439,3 +462,21 @@ def allowlisted_payload(source: str, type_: str, payload: Any) -> dict[str, Any]
         if rule is not None and rule.admits(value):
             kept[key] = _plain(value)
     return kept
+
+
+def _without_keys(value: Any, keys: frozenset[str]) -> Any:
+    """A copy of ``value`` with every mapping key in ``keys`` removed at any depth."""
+    if isinstance(value, dict):
+        return {k: _without_keys(v, keys) for k, v in value.items() if k not in keys}
+    if isinstance(value, (list, tuple)):
+        return [_without_keys(v, keys) for v in value]
+    return value
+
+
+def declared_payload(source: str, type_: str, payload: Any) -> Any:
+    """The payload of an ``INTERNAL_EVENT_TYPES`` member as the store keeps it:
+    without the fields ``EPISODIC_DECLARED_FIELD_DENYLISTS`` names for its pair."""
+    denied = EPISODIC_DECLARED_FIELD_DENYLISTS.get((source, type_))
+    if not denied:
+        return payload
+    return _without_keys(payload, denied)

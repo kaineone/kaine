@@ -13,7 +13,7 @@ from kaine.bus.schema import Event
 from kaine.bus.streams import AFFECT_STREAM, SLEEP_STREAM
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
-from kaine.faithful.episodic_own_content import allowlisted_payload
+from kaine.faithful.episodic_own_content import allowlisted_payload, declared_payload
 from kaine.faithful.external_input import INTERNAL_EVENT_TYPES, is_heard_event
 from kaine.memory_kinds import EPISODIC_MEMORY_STORE_HEALTH_PATH
 from kaine.modules.base import BaseModule
@@ -627,7 +627,9 @@ def _serialize_snapshot(snapshot: WorkspaceSnapshot) -> str:
     embeddings; raw-perceptual payloads are not kept at all. A heard event,
     classified by the shared heard rule the language module uses
     (``kaine.faithful.external_input.is_heard_event``), is kept as its source
-    and type with ``<heard omitted>``, never its words. A pair audited field by
+    and type with ``<heard omitted>``, never its words. A declared type drops
+    the fields ``EPISODIC_DECLARED_FIELD_DENYLISTS`` names (the playlist media
+    file name, the speech events' ``faithful_rendering``). A pair audited field by
     field (``kaine.faithful.episodic_own_content``) keeps only its allowlisted
     fields whose values pass their rules; any other field is dropped. Any other
     type, known or not, is kept as its source and type with
@@ -638,7 +640,7 @@ def _serialize_snapshot(snapshot: WorkspaceSnapshot) -> str:
 
     The entity's own speech (``language`` ``external_speech`` and
     ``internal_speech``) is kept as spoken, so heard words the entity repeated
-    are stored as its own.
+    are stored as its own; its ``faithful_rendering`` is not kept.
     """
     pieces: list[str] = []
     pieces.append("inhibited" if snapshot.inhibited else "active")
@@ -660,7 +662,8 @@ def _serialize_snapshot(snapshot: WorkspaceSnapshot) -> str:
             pieces.append(f"{event.source}:{event.type}={HEARD_OMITTED_MARKER}")
             continue
         if (event.source, event.type) in INTERNAL_EVENT_TYPES:
-            pieces.append(f"{event.source}:{event.type}={strip_vectors(event.payload)}")
+            kept = declared_payload(event.source, event.type, event.payload)
+            pieces.append(f"{event.source}:{event.type}={strip_vectors(kept)}")
             continue
         kept = allowlisted_payload(event.source, event.type, event.payload)
         if kept is None:

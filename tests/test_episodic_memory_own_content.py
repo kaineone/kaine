@@ -561,3 +561,79 @@ def test_ignition_audit_payload_from_the_real_report_keeps_only_counts():
     assert kept is not None
     assert set(kept) == set(EPISODIC_FIELD_ALLOWLISTS[("sleep", "sleep.ignition_audit")])
     assert kept["sleep_index"] == 3
+
+
+# --- declared types: the playlist media file name never enters a trace -------
+
+FILM = "Some-Film-Title-1987.mkv"
+
+
+def test_denylisted_pairs_are_declared_and_list_no_heard_rule_bypass():
+    from kaine.faithful.episodic_own_content import EPISODIC_DECLARED_FIELD_DENYLISTS
+
+    assert set(EPISODIC_DECLARED_FIELD_DENYLISTS) <= INTERNAL_EVENT_TYPES
+    assert EPISODIC_DECLARED_FIELD_DENYLISTS[("vision", "vision.report")] == {"item"}
+    assert EPISODIC_DECLARED_FIELD_DENYLISTS[("audition", "audition.perception")] == {"item"}
+
+
+@pytest.mark.parametrize(
+    "pair", [("vision", "vision.report"), ("audition", "audition.perception")], ids=str
+)
+def test_declared_perception_report_drops_the_media_file_name(pair):
+    source, type_ = pair
+    payload = {
+        "change_score": 0.3,
+        "item": FILM,
+        "item_order": 2,
+        "workspace_feedback": {"gain": 1.0, "item": FILM},
+        "history": [{"item": FILM, "order": 1}],
+    }
+    text = _trace(source, type_, payload)
+    assert "Some-Film" not in text
+    assert "'item'" not in text
+    assert text == (
+        f"active | {source}:{type_}="
+        "{'change_score': 0.3, 'item_order': 2, 'workspace_feedback': {'gain': 1.0}, "
+        "'history': [{'order': 1}]}"
+    )
+
+
+@pytest.mark.parametrize("type_", ["internal_speech", "external_speech"])
+def test_own_speech_keeps_its_text_and_drops_its_rendering(type_):
+    payload = {
+        "text": "the light keeps changing",
+        "mode": type_.split("_")[0],
+        "faithful_rendering": (
+            "- audition emitted audition.perception carrying change_score=0.3, "
+            f"item={FILM}, item_order=2."
+        ),
+    }
+    text = _trace("language", type_, payload)
+    assert "Some-Film" not in text
+    assert "faithful_rendering" not in text
+    assert "the light keeps changing" in text
+
+
+def test_other_declared_types_keep_an_item_field():
+    """The denylist is per pair: only the producers that stamp the media name."""
+    text = _trace("sequence", "sequence.report", {"item": "slot-3", "x": 1})
+    assert "'item': 'slot-3'" in text
+
+
+def test_every_media_title_the_perception_producers_stamp_is_denylisted():
+    """Any payload key the vision or audition module fills from a playlist
+    position's ``title`` is on the store's denylist for that type."""
+    import re
+
+    from kaine.faithful.episodic_own_content import EPISODIC_DECLARED_FIELD_DENYLISTS
+    from kaine.modules.audition import module as audition_module
+    from kaine.modules.vision import module as vision_module
+
+    stamp = re.compile(r"\[\"(\w+)\"\]\s*=\s*\w+\.title\b")
+    for mod, pair in (
+        (vision_module, ("vision", "vision.report")),
+        (audition_module, ("audition", "audition.perception")),
+    ):
+        keys = set(stamp.findall(inspect.getsource(mod)))
+        assert keys, pair
+        assert keys <= EPISODIC_DECLARED_FIELD_DENYLISTS[pair], pair

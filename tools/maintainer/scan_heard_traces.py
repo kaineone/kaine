@@ -38,7 +38,11 @@ A member is flagged as:
   (``kaine.faithful.episodic_own_content``) and every field of the payload is
   allowlisted and passes its rule;
 * ``unparsed``: a member whose payload could not be read back and holds a
-  quoted string, counted on the safe side.
+  quoted string, counted on the safe side;
+* ``media_item``: a ``vision.report`` or ``audition.perception`` member that
+  kept ``item``, the playlist media file name, or an own-speech member whose
+  ``faithful_rendering`` holds a rendered ``item=`` (the store now drops both;
+  ``kaine.faithful.episodic_own_content``).
 
 A flagged member is reported by its ``source:type`` only when the code names
 that pair (the declared own-content types, the felt renderer's templates, the
@@ -76,6 +80,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from kaine.faithful.episodic_own_content import (  # noqa: E402
+    EPISODIC_DECLARED_FIELD_DENYLISTS,
     EPISODIC_FIELD_ALLOWLISTS,
     allowlisted_payload,
 )
@@ -99,7 +104,7 @@ _CONTENT_FREE_PREFIXES = (
 # after the " | " separator.
 _MEMBER_HEADER = re.compile(r"(?:^|(?<= \| ))([A-Za-z0-9_]+):([A-Za-z0-9_.]+)=")
 
-CATEGORIES = ("external_input", "heard_field", "undeclared_text", "unparsed")
+CATEGORIES = ("external_input", "heard_field", "undeclared_text", "unparsed", "media_item")
 
 
 @dataclass
@@ -153,6 +158,41 @@ _HEARD_FIELD_REPR = re.compile(
 )
 
 
+# A media file name a legacy trace kept: ``item`` with a non-empty string in a
+# payload repr, or ``item=`` in a fallback rendering inside faithful_rendering.
+_MEDIA_ITEM_REPR = re.compile(r"['\"]item['\"]\s*:\s*(?:'\s*[^'\s]|\"\s*[^\"\s])")
+_RENDERED_ITEM = re.compile(r"(?<![\w])item=(?!none\b)\S")
+
+
+def _has_media_item(source: str, type_: str, payload: Any) -> bool:
+    """True when a declared member kept a field the store now drops and that
+    field could name a media file: ``item`` itself, or an ``item=`` rendered
+    into an own-speech ``faithful_rendering``."""
+    denied = EPISODIC_DECLARED_FIELD_DENYLISTS.get((source, type_), frozenset())
+    if "item" in denied:
+        return any(
+            isinstance(v, str) and v.strip()
+            for v in _values_under(payload, "item")
+        )
+    if "faithful_rendering" in denied:
+        return any(
+            isinstance(v, str) and _RENDERED_ITEM.search(v)
+            for v in _values_under(payload, "faithful_rendering")
+        )
+    return False
+
+
+def _values_under(value: Any, key: str) -> Iterator[Any]:
+    if isinstance(value, dict):
+        for k, v in value.items():
+            if k == key:
+                yield v
+            yield from _values_under(v, key)
+    elif isinstance(value, (list, tuple)):
+        for v in value:
+            yield from _values_under(v, key)
+
+
 def classify_member(source: str, type_: str, value: str) -> str | None:
     """Return the flag category of one member, or None when it holds no heard text."""
     stripped = value.strip()
@@ -171,7 +211,7 @@ def classify_member(source: str, type_: str, value: str) -> str | None:
         if heard_texts(event):
             return "heard_field"
         if declared:
-            return None
+            return "media_item" if _has_media_item(source, type_, payload) else None
         if allowlisted_payload(source, type_, payload) == payload:
             # Every field is allowlisted for this type and passes its rule.
             return None
@@ -182,6 +222,11 @@ def classify_member(source: str, type_: str, value: str) -> str | None:
     if declared:
         if source != "language" and _HEARD_FIELD_REPR.search(stripped):
             return "unparsed"
+        denied = EPISODIC_DECLARED_FIELD_DENYLISTS.get((source, type_), frozenset())
+        if "item" in denied and _MEDIA_ITEM_REPR.search(stripped):
+            return "media_item"
+        if "faithful_rendering" in denied and _RENDERED_ITEM.search(stripped):
+            return "media_item"
         return None
     if "'" in stripped or '"' in stripped:
         return "unparsed"
