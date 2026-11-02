@@ -93,7 +93,11 @@ async def test_non_inhibited_disposed_snapshot_publishes_speak_intent():
         assert event.source == "action_selection"
         assert event.type == "intent.speak"
         assert event.payload["kind"] == "speak"
-        assert event.payload["about"] == "hello kaine"
+        # Heard words under a heard intent's ``about`` never reach the persisted
+        # intent stream (heard-text-volatile-bus): the intent keeps its kind.
+        assert event.payload["about_kind"] == "heard"
+        assert "about" not in event.payload
+        assert "hello kaine" not in str(await bus.client.xrange(ACTION_SELECTION_STREAM))
     finally:
         await bus.close()
 
