@@ -171,7 +171,7 @@ async def test_cancel_during_hold_runs_reset_but_not_housekeeping(bus, tmp_path)
     task.cancel()
 
     with pytest.raises(asyncio.CancelledError):
-        await task
+        _ = await task
 
     assert housekeeper.calls == 0
     assert [name for name, _ in events] == ["reset"]

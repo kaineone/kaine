@@ -243,7 +243,7 @@ async def test_is_asleep_after_first_volume_skips_others(monkeypatch) -> None:
 
 
 def test_data_volumes_includes_all_sinks_and_state(monkeypatch) -> None:
-    monkeypatch.setattr(kaine.storage, "resolve", lambda p: Path(p))
+    monkeypatch.setattr(kaine.storage, "resolve", Path)
     cfg = {
         "evaluation": {
             "paths": {
@@ -269,7 +269,7 @@ def test_data_volumes_includes_all_sinks_and_state(monkeypatch) -> None:
 
 
 def test_data_volumes_defaults_when_absent(monkeypatch) -> None:
-    monkeypatch.setattr(kaine.storage, "resolve", lambda p: Path(p))
+    monkeypatch.setattr(kaine.storage, "resolve", Path)
     vols = data_volumes({})
     assert vols["evaluation"] == Path("data/evaluation")
     assert vols["trajectory"] == Path("data/workspace_trajectory")

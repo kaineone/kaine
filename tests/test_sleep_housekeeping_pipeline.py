@@ -12,12 +12,12 @@ from typing import Optional
 
 import pytest
 
-import kaine.modules.sleep.housekeeping as housekeeping_module
 import kaine.storage
 from kaine.boot.factories.sleep import make_sleep
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.modules.sleep import FakeTrainer, Sleep, VoiceAlignmentConfig
+from kaine.modules.sleep import housekeeping as housekeeping_module
 from kaine.modules.sleep.housekeeping import (
     Housekeeper,
     HousekeepingConfig,

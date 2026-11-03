@@ -10,8 +10,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-import kaine.modules.sleep.housekeeping
 import kaine.storage
+from kaine.modules.sleep import housekeeping as housekeeping_module
 from kaine.modules.sleep.housekeeping import (
     Housekeeper,
     HousekeepingConfig,
@@ -131,8 +131,8 @@ def test_is_mounted_volume_false_same_device(monkeypatch, tmp_path):
             )
         return real_stat(path, *args, **kwargs)
 
-    monkeypatch.setattr(kaine.modules.sleep.housekeeping.os, "stat", fake_stat)
-    monkeypatch.setattr(kaine.modules.sleep.housekeeping.os.path, "ismount", lambda p: True)
+    monkeypatch.setattr(housekeeping_module.os, "stat", fake_stat)
+    monkeypatch.setattr(housekeeping_module.os.path, "ismount", lambda p: True)
     assert _is_mounted_volume(archive, roots) is False
 
 
@@ -155,8 +155,8 @@ def test_is_mounted_volume_true_different_device(monkeypatch, tmp_path):
             )
         return real_stat(path, *args, **kwargs)
 
-    monkeypatch.setattr(kaine.modules.sleep.housekeeping.os, "stat", fake_stat)
-    monkeypatch.setattr(kaine.modules.sleep.housekeeping.os.path, "ismount", lambda p: True)
+    monkeypatch.setattr(housekeeping_module.os, "stat", fake_stat)
+    monkeypatch.setattr(housekeeping_module.os.path, "ismount", lambda p: True)
     assert _is_mounted_volume(archive, roots) is True
 
 
@@ -175,8 +175,8 @@ def test_is_mounted_volume_false_different_device_not_a_mount(monkeypatch, tmp_p
             return SimpleNamespace(st_dev=root_dev + 1, st_ino=s.st_ino, st_mode=s.st_mode)
         return real_stat(path, *args, **kwargs)
 
-    monkeypatch.setattr(kaine.modules.sleep.housekeeping.os, "stat", fake_stat)
-    monkeypatch.setattr(kaine.modules.sleep.housekeeping.os.path, "ismount", lambda p: False)
+    monkeypatch.setattr(housekeeping_module.os, "stat", fake_stat)
+    monkeypatch.setattr(housekeeping_module.os.path, "ismount", lambda p: False)
     assert _is_mounted_volume(archive, roots) is False
 
 
@@ -294,7 +294,7 @@ def test_disk_excess_uses_effective_budget(monkeypatch, tmp_path):
 
 def test_make_sleep_logs_projection_notice(tmp_path, monkeypatch, caplog, bus):
     monkeypatch.setattr(
-        kaine.modules.sleep.housekeeping,
+        housekeeping_module,
         "bus_memory_bytes",
         lambda client: 0,
     )
@@ -304,7 +304,7 @@ def test_make_sleep_logs_projection_notice(tmp_path, monkeypatch, caplog, bus):
     yesterday = datetime.datetime.now(datetime.timezone.utc).date() - datetime.timedelta(days=1)
     (sink / f"record-{yesterday.isoformat()}.jsonl").write_text("x" * 1024)
     monkeypatch.setattr(
-        kaine.modules.sleep.housekeeping,
+        housekeeping_module,
         "study_record_roots",
         lambda cfg: [study_root],
     )
@@ -321,14 +321,14 @@ def test_make_sleep_logs_projection_notice(tmp_path, monkeypatch, caplog, bus):
 
 def test_make_sleep_logs_unknown_projection(tmp_path, monkeypatch, caplog, bus):
     monkeypatch.setattr(
-        kaine.modules.sleep.housekeeping,
+        housekeeping_module,
         "bus_memory_bytes",
         lambda client: 0,
     )
     study_root = tmp_path / "study"
     study_root.mkdir()
     monkeypatch.setattr(
-        kaine.modules.sleep.housekeeping,
+        housekeeping_module,
         "study_record_roots",
         lambda cfg: [study_root],
     )

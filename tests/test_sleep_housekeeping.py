@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-import kaine.modules.sleep.housekeeping as housekeeping_module
+from kaine.modules.sleep import housekeeping as housekeeping_module
 from kaine.modules.sleep.housekeeping import (
     FileSkipped,
     Housekeeper,

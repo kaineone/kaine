@@ -1073,10 +1073,7 @@ class Housekeeper:
                                 view = view[written:]
                         os.fsync(temp_fd)
                     except Exception:
-                        try:
-                            os.unlink(temp_name, dir_fd=dir_fd)
-                        except FileNotFoundError:
-                            pass
+                        _unlink_temp(temp_name, dir_fd)
                         raise
                     finally:
                         os.close(temp_fd)
@@ -1104,10 +1101,7 @@ class Housekeeper:
                     )
                     try:
                         if _sha256_fd(temp_fd) != src_digest:
-                            try:
-                                os.unlink(temp_name, dir_fd=dir_fd)
-                            except FileNotFoundError:
-                                pass
+                            _unlink_temp(temp_name, dir_fd)
                             raise OSError(
                                 f"checksum mismatch after copying {src} to {dest}"
                             )
@@ -1121,10 +1115,7 @@ class Housekeeper:
 
                     if dest_st is not None:
                         if not stat.S_ISREG(dest_st.st_mode):
-                            try:
-                                os.unlink(temp_name, dir_fd=dir_fd)
-                            except FileNotFoundError:
-                                pass
+                            _unlink_temp(temp_name, dir_fd)
                             raise ArchiveRefused(
                                 f"archive destination is not a regular file: {dest}"
                             )
@@ -1132,10 +1123,7 @@ class Housekeeper:
                             before.st_dev,
                             before.st_ino,
                         ):
-                            try:
-                                os.unlink(temp_name, dir_fd=dir_fd)
-                            except FileNotFoundError:
-                                pass
+                            _unlink_temp(temp_name, dir_fd)
                             raise ArchiveRefused(
                                 f"archive destination is the same file as the source: {dest}"
                             )
@@ -1170,16 +1158,10 @@ class Housekeeper:
                             if prefix_digest == dest_digest:
                                 action = "replace"
                             else:
-                                try:
-                                    os.unlink(temp_name, dir_fd=dir_fd)
-                                except FileNotFoundError:
-                                    pass
+                                _unlink_temp(temp_name, dir_fd)
                                 raise OSError(f"archive copy differs: {dest}")
                         else:
-                            try:
-                                os.unlink(temp_name, dir_fd=dir_fd)
-                            except FileNotFoundError:
-                                pass
+                            _unlink_temp(temp_name, dir_fd)
                             raise OSError(f"archive copy differs: {dest}")
                     else:
                         action = "replace"
@@ -1196,18 +1178,12 @@ class Housekeeper:
                         try:
                             dest_st = os.lstat(dest.name, dir_fd=dir_fd)
                         except OSError as exc:
-                            try:
-                                os.unlink(temp_name, dir_fd=dir_fd)
-                            except FileNotFoundError:
-                                pass
+                            _unlink_temp(temp_name, dir_fd)
                             raise ArchiveRefused(
                                 f"cannot re-verify archive destination: {dest}: {exc}"
                             ) from exc
                         if not stat.S_ISREG(dest_st.st_mode):
-                            try:
-                                os.unlink(temp_name, dir_fd=dir_fd)
-                            except FileNotFoundError:
-                                pass
+                            _unlink_temp(temp_name, dir_fd)
                             raise ArchiveRefused(
                                 f"archive destination is not a regular file after move: {dest}"
                             )
@@ -1215,10 +1191,7 @@ class Housekeeper:
                             before.st_dev,
                             before.st_ino,
                         ):
-                            try:
-                                os.unlink(temp_name, dir_fd=dir_fd)
-                            except FileNotFoundError:
-                                pass
+                            _unlink_temp(temp_name, dir_fd)
                             raise ArchiveRefused(
                                 f"archive destination is the same file as the source: {dest}"
                             )
@@ -1237,10 +1210,7 @@ class Housekeeper:
                             os.close(dest_fd)
                     else:
                         # Equal digest: the temporary file is not needed.
-                        try:
-                            os.unlink(temp_name, dir_fd=dir_fd)
-                        except FileNotFoundError:
-                            pass
+                        _unlink_temp(temp_name, dir_fd)
 
                     now_fd = os.fstat(src_fd)
                     try:
@@ -1258,10 +1228,7 @@ class Housekeeper:
                         )
 
                     if changed:
-                        try:
-                            os.unlink(temp_name, dir_fd=dir_fd)
-                        except FileNotFoundError:
-                            pass
+                        _unlink_temp(temp_name, dir_fd)
                         if attempt == 0:
                             os.close(src_fd)
                             src_fd = os.open(src, os.O_RDONLY | os.O_NOFOLLOW)
@@ -1270,6 +1237,7 @@ class Housekeeper:
                         raise OSError("source changed during export")
 
                     return _unlink_regular(src)
+                raise OSError("source changed during export")
             finally:
                 if src_fd >= 0:
                     os.close(src_fd)
@@ -1277,6 +1245,14 @@ class Housekeeper:
                     os.close(dir_fd)
 
         return await asyncio.to_thread(_copy_and_remove)
+
+
+def _unlink_temp(name: str, dir_fd: int) -> None:
+    """Remove a temporary archive file; a file already gone is fine."""
+    try:
+        os.unlink(name, dir_fd=dir_fd)
+    except FileNotFoundError:
+        logger.debug("temporary archive file already absent: %s", name)
 
 
 async def bus_memory_bytes(client) -> int | None:

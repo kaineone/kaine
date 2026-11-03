@@ -404,9 +404,9 @@ class StimulusSourceProceduralAudioStream:
         params: StimulusSourceParams,
         clock: StimulusSourceClock,
         callback: Callable[[bytes], None],
-        voice: "MaternalVoiceLayer | None" = None,
+        voice: MaternalVoiceLayer | None = None,
         awake: Callable[[], float] | None = None,
-        hearing: "HearingBandParams | None" = None,
+        hearing: HearingBandParams | None = None,
         hearing_stage: Callable[[], int] | None = None,
     ) -> None:
         self._schedule = schedule
