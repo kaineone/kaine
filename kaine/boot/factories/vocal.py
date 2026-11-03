@@ -211,7 +211,7 @@ def make_vocal(
         kw["applied_prosody"] = APPLIED_PROSODY
         kw["voice_label"] = f"{resolved_model_id} speaker {int(resolved['speaker_id'])}"
         kw["voice_note"] = resolved.get("note")
-    else:
+    elif backend == "qwen3_tts":
         from kaine.modules.vocal.qwen3_tts import APPLIED_PROSODY as QWEN3_PROSODY
 
         kw["tts_client"] = client

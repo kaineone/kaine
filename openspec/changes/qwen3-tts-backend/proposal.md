@@ -47,7 +47,7 @@ qwen3_speaker = ""       # auto-pick from model.get_supported_speakers()
 
 ### Dependency
 
-New pip extra `speech-qwen3`: `qwen-tts>=0.1`, `soundfile`. torch and
+New pip extra `speech-qwen3`: `qwen-tts>=0.1`. torch and
 torchaudio are already present.
 
 ### Unload/reload

@@ -236,4 +236,4 @@ class TestSpeakerResolution:
 
 class TestAppliedProsody:
     def test_applied_prosody_tuple(self) -> None:
-        assert APPLIED_PROSODY == ("instruct", "speed_factor", "language")
+        assert APPLIED_PROSODY == ("instruct", "language")

@@ -22,7 +22,7 @@ import numpy as np
 from kaine.modules.vocal.client import SynthesisResult, TTSRequest
 from kaine.residency.inflight import InflightGate, InflightTicket
 
-APPLIED_PROSODY = ("instruct", "speed_factor", "language")
+APPLIED_PROSODY = ("instruct", "language")
 
 logger = logging.getLogger(__name__)
 
@@ -192,7 +192,6 @@ class Qwen3TTS:
         try:
             text = request.text
             if not text or not text.strip():
-                ticket.release()
                 raise ValueError("empty text")
 
             resolved_speaker = self._resolved_speaker or ""
