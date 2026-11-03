@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 import json,sys,numpy as np
-d=json.load(open(sys.argv[1])); C=d['spec']['conds']; M=d['markers']
+with open(sys.argv[1]) as _f: d=json.load(_f)
+C=d['spec']['conds']; M=d['markers']
 for i,c in enumerate(C):
     ms=[(t,row[i],ta) for t,row,ta in M if row[i] is not None]
     run=0;first=None;firsta=None;singles=0;n=0;pulls=[]
