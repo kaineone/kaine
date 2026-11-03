@@ -1,0 +1,31 @@
+valF_v:70 seed0            None
+valF_v:70 seed1            None
+valF_v:70 seed2            None
+valF_v:70 seed3            None
+valF_v:70 seed4            None
+valC_t:70 seed5            None
+valC_t:70 seed6            None
+valC_t:70 seed7            None
+valC_t:70 seed8            None
+valC_t:70 seed9            None
+valC_t:60 seed7            None
+valC_t:80 seed8            None
+valF_v:60 seed0            None
+valF_v:60 seed1            None
+valF_v:66 seed0            None
+valF_v:66 seed1            None
+valF_v:72 seed0            None
+valF_v:72 seed1            None
+valF_v:80 seed0            None
+valF_v:80 seed1            None
+valF_v:no drive            (24.102, 'R1 pull 0.00 slope -0.004/h')
+valF_v:foreign 0->1        None
+valF_v:foreign 2->3        None
+valF_v:jittered beat       (29.602, 'R1 pull 0.11 slope +0.001/h')
+valF_v:eta 0               (24.102, 'R1 pull 0.01 slope +0.002/h')
+valC_c:foreign 5->6        None
+valC_c:foreign 7->8        None
+valC_c:foreign 9->10       None
+valC_c:foreign 11->12      None
+valC_c:eta0 s11            (24.102, 'R1 pull 0.10 slope +0.001/h')
+valC_c:eta0 scale1 s12     (26.602, 'R1 pull 0.04 slope +0.001/h')

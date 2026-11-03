@@ -1,0 +1,8 @@
+valF_v:70 seed0            None
+valF_v:60 seed0            None
+valF_v:80 seed0            None
+valF_v:no drive            (26.997, 'R1 pull 0.01 slope +0.002/h')
+valF_v:foreign 0->1        None
+valF_v:foreign 2->3        None
+valF_v:jittered beat       (26.497, 'R1 pull 0.11 slope +0.002/h')
+valC_c:foreign 5->6        None
