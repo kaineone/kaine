@@ -18,7 +18,7 @@ import os
 
 import pytest
 
-import kaine.modules.sleep.housekeeping as hk
+from kaine.modules.sleep import housekeeping as hk
 import kaine.storage
 from kaine.modules.sleep.housekeeping import (
     FileSkipped,

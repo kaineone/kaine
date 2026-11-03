@@ -11,7 +11,7 @@ from pathlib import PurePath
 
 import pytest
 
-import kaine.modules.sleep.housekeeping as housekeeping_module
+from kaine.modules.sleep import housekeeping as housekeeping_module
 from kaine.modules.sleep.housekeeping import (
     ArchiveRefused,
     Housekeeper,
