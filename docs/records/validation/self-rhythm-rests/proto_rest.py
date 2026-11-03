@@ -62,8 +62,8 @@ def run(conds, hours, *, w=2.0, k=0.1, tau_a=0.05, U=4.0, margin=-0.3, own_gain=
     def is_rest(t): return (t % cyc) >= ACT
     # withdrawal intervals: first at awake 1770 s, then 1800 s after each start, deferred until >=360 s since the
     # last rest ended (300 s driven window + 60 s settling) and >=30 s before the next rest begins.
-    wd_flags = np.zeros(n_steps, dtype=bool); awake_t = np.zeros(n_steps)
-    ta = 0.0; due_ta = 1770.0; t = 0.0; wd_end_t = -1.0
+    wd_flags = np.zeros(n_steps, dtype=bool)
+    ta = 0.0
     ta_arr = np.empty(n_steps)
     for i in range(n_steps):
         tt = i * dt_step
@@ -82,7 +82,7 @@ def run(conds, hours, *, w=2.0, k=0.1, tau_a=0.05, U=4.0, margin=-0.3, own_gain=
     sos = butter(2, [0.3, 2.0], btype="band", fs=20.0, output="sos")
     buf_a = np.empty((win, B)); buf_t = np.empty(win)
     rows = []
-    wd_n = int(withdraw_s * 20); wd_buf = np.empty((wd_n + 400, B)); wd_rows = []
+
     hist_n = int((win_s + withdraw_s + 30.0) * 20); hist_a = np.zeros((hist_n, B)); hist_t = np.zeros(hist_n); hist_w = np.zeros(hist_n, dtype=bool); hp = 0
     markers = []; base = [[] for _ in range(B)]
     sos_w = butter(2, [0.3, 2.0], btype="band", fs=20.0, output="sos")
