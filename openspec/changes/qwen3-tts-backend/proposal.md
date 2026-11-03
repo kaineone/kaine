@@ -30,8 +30,7 @@ vocal module passes the instruct through a new optional `instruct` field on
 
 ### Applied prosody
 
-The Qwen3 backend reports `APPLIED_PROSODY = ("instruct", "speed_factor",
-"language")`. Speed factor maps to `generate_custom_voice` kwargs if supported,
+The Qwen3 backend reports `APPLIED_PROSODY = ("instruct", "language")`. Speed factor maps to `generate_custom_voice` kwargs if supported,
 otherwise a post-process resample.
 
 ### Config keys (under `[vocal]`)
