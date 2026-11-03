@@ -27,3 +27,8 @@ mode = "ladder"
 # Set to the preliminary run's id before the pilots; the boot fails while it is
 # empty.
 principal_components_run = ""
+
+[supervisor]
+# A research run has no person present, so the research gate requires the
+# module supervisor armed and self-tested.
+enabled = true

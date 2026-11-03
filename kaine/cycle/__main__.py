@@ -634,13 +634,43 @@ def _wire_development(ctx: BootContext) -> None:
     )
 
 
+def _welfare_indicator_params(kaine_config: dict[str, Any], preservation_cfg: Any) -> Any:
+    """The A.4 indicator parameters: the affect section's values and the configured bars.
+
+    ``T_lp``, ``Delta_stall``, ``P_Aff`` and ``theta_E`` come from the affect
+    module's own configuration (one source each); the bars from
+    ``[preservation.welfare_response.indicators]``. Raises ``ValueError`` on
+    an invalid value.
+    """
+    from kaine.boot.factories.affect import affect_indicator_parameters
+    from kaine.lifecycle.welfare_indicators import IndicatorParams
+
+    affect = affect_indicator_parameters(kaine_config.get("affect") or {})
+    indicators = preservation_cfg.welfare_response.indicators
+    return IndicatorParams(
+        span_s=affect["learning_progress_span_s"],
+        min_span_s=affect["goal_stall_s"],
+        valence_bar=affect["regulation_set_point"],
+        publish_interval_s=affect["publish_interval_s"],
+        share_bar=indicators.share_bar,
+        posterior_bar=indicators.posterior_bar,
+    )
+
+
 async def _start_welfare_producer(
-    bus, eval_cfg, preservation_cfg, development_probe=None, supplementary_records=None
+    bus,
+    eval_cfg,
+    preservation_cfg,
+    development_probe=None,
+    kaine_config=None,
+    supplementary_records=None,
 ) -> tuple[Any, Any] | None:
     """Start the welfare-net gray-zone producer when the welfare response is on.
 
     The gray-zone producer belongs to the welfare net, so it runs whenever the
-    welfare response is enabled, independent of ``[evaluation]``.
+    welfare response is enabled, independent of ``[evaluation]``. It also
+    writes the A.4 indicators into its ``affect_welfare`` record, from its own
+    instance of the evaluator the welfare monitor uses.
     """
     if not preservation_cfg.welfare_response.enabled:
         return None
@@ -649,8 +679,13 @@ async def _start_welfare_producer(
     observer = None
     sink = None
     try:
+        indicator_params = _welfare_indicator_params(kaine_config or {}, preservation_cfg)
         observer, sink = build_welfare_producer(
-            bus, eval_cfg, development_probe, supplementary_records=supplementary_records
+            bus,
+            eval_cfg,
+            development_probe,
+            indicator_params=indicator_params,
+            supplementary_records=supplementary_records,
         )
         await sink.start()
         await observer.start()
@@ -1993,6 +2028,7 @@ async def _phase_bus(ctx: BootContext) -> int | None:
                 if ctx.stimulus_control is not None
                 else None
             ),
+            kaine_config=ctx.kaine_config,
         )
     except RuntimeError:
         log.error(
@@ -2783,8 +2819,21 @@ async def _phase_supervisor(ctx: BootContext) -> int | None:
         # Best-effort tick<->poll bridge: lets a supervisor.incident annotation be
         # located within the run by cycle tick, not just the supervisor's poll index.
         tick_index_provider=lambda: ctx.cycle.tick_index,
-        escalate_on_crash=(ctx.supervision_mode == "unattended"),
+        # A crashed poll loop preserves the entity and writes escalation.json
+        # before the halt in every mode whose gate requires the supervisor.
+        escalate_on_crash=_supervision_loss_escalates(ctx.supervision_mode),
     )
+
+
+def _supervision_loss_escalates(supervision_mode: str | None) -> bool:
+    """True in the modes whose boot gate requires the supervisor.
+
+    An unattended and a research boot both refuse to start without the
+    supervisor armed and self-tested, so both escalate when supervision is lost:
+    final snapshot, shutdown of every module, ``escalation.json`` and a
+    caretaker notice. An operator-present boot does not.
+    """
+    return supervision_mode in ("unattended", "research")
 
 
 def _caretaker_config_error(config: dict) -> str | None:
@@ -2882,11 +2931,37 @@ async def _phase_safety_net(ctx: BootContext) -> int | None:
         ctx._caretaker_tasks.add(task)
         task.add_done_callback(ctx._caretaker_tasks.discard)
 
+    def _on_welfare_notice(event: str, indicators: tuple[str, ...]) -> None:
+        # The indicator response's notices name the crossed indicators from
+        # the fixed table and nothing else from the entity.
+        if ctx.caretaker is None:
+            return
+        try:
+            task = asyncio.get_running_loop().create_task(
+                ctx.caretaker.send_event(event, indicators=indicators)
+            )
+        except RuntimeError:
+            return
+        ctx._caretaker_tasks.add(task)
+        task.add_done_callback(ctx._caretaker_tasks.discard)
+
     # One unfrozen clock shared by every welfare timer in this process.
     from kaine.cycle.unfrozen_clock import UnfrozenClock
     ctx.unfrozen_clock = UnfrozenClock.for_welfare()
 
     if ctx.preservation_cfg.welfare_response.enabled:
+        cycle = getattr(ctx, "cycle", None)
+        awake_clock = None
+        entity_scale = None
+        if cycle is not None:
+            # The indicator spans are awake entity time: subjective time minus
+            # the time the cycle spent frozen or asleep.
+            def awake_clock() -> float:
+                return cycle.entity_clock.now() - cycle.unawake_subjective_seconds()
+
+            def entity_scale() -> float:
+                return cycle.entity_clock.scale
+
         ctx.welfare_monitor = WelfareProtectiveMonitor(
             registry=ctx.registry,
             fork_manager=ctx.fork_manager,
@@ -2901,6 +2976,11 @@ async def _phase_safety_net(ctx: BootContext) -> int | None:
             require_encryption=ctx.preservation_cfg.require_encryption,
             on_response=_on_welfare_response,
             unfrozen_clock=ctx.unfrozen_clock,
+            indicator_params=_welfare_indicator_params(ctx.kaine_config, ctx.preservation_cfg),
+            awake_clock=awake_clock,
+            entity_scale=entity_scale,
+            is_developing=_development_probe(ctx),
+            on_notice=_on_welfare_notice,
         )
 
 
@@ -3258,16 +3338,49 @@ _BOOT_PHASES = (
 )
 
 
+def _welfare_monitor_lost_reason(ctx: BootContext) -> str | None:
+    """Why the welfare monitor is no longer watching, or ``None`` while it is.
+
+    Checked by the run loop in research and unattended mode, whose boot gates
+    require the welfare response. The monitor is lost when it was never built
+    or started, when its task ended (a stop that ends the run sets the stop
+    event first and is not a loss), or when its poll loop keeps raising: at
+    least three polls in a row and no poll returned for one
+    ``distress_duration_s`` (30 s by default) of wall time. A poll loop down for
+    that long could let a whole sustained-distress episode pass unanswered.
+    """
+    welfare_cfg = getattr(ctx.preservation_cfg, "welfare_response", None)
+    monitor = ctx.welfare_monitor
+    if monitor is None:
+        if welfare_cfg is not None and getattr(welfare_cfg, "enabled", False):
+            return "welfare monitor never built"
+        return None
+    if ctx.welfare_task is None:
+        return "welfare monitor task never started"
+    if ctx.welfare_task.done():
+        return "welfare monitor task ended"
+    bound = float(getattr(welfare_cfg, "distress_duration_s", 30.0))
+    try:
+        failing = monitor.poll_loop_failing(bound)
+    except Exception:
+        log.error("welfare monitor liveness unreadable", exc_info=True)
+        return "welfare monitor liveness unreadable"
+    if failing:
+        return "welfare monitor polls keep failing"
+    return None
+
+
 async def _run_until_stopped(ctx: BootContext) -> None:
     """Supervise the running cycle until a stop is requested or the cycle ends."""
-    _welfare_supervision: dict = {}
+    # The producer's restarts are kept on the context for the exposure record.
+    ctx.welfare_supervision = {}
     # Periodically update runtime.json so the dashboard has fresh metrics
     # even before any tick happens.
     while not ctx.stop_event.is_set() and not ctx.cycle_task.done():
         await _supervise_welfare_producer(
-            ctx.welfare_producer, _welfare_supervision, time.monotonic()
+            ctx.welfare_producer, ctx.welfare_supervision, time.monotonic()
         )
-        if ctx.supervision_mode == "unattended":
+        if _supervision_loss_escalates(ctx.supervision_mode):
             if ctx.supervisor_task is None:
                 log.critical(
                     "Supervisor supervision task was never started; escalating"
@@ -3284,6 +3397,12 @@ async def _run_until_stopped(ctx: BootContext) -> None:
                 await ctx.supervisor.escalate_supervision_lost(
                     "supervision task ended"
                 )
+                ctx.stop_event.set()
+                break
+            lost = _welfare_monitor_lost_reason(ctx)
+            if lost is not None and not ctx.stop_event.is_set() and not ctx.supervisor.escalated:
+                log.critical("The welfare monitor stopped watching (%s); escalating", lost)
+                await ctx.supervisor.escalate_welfare_monitor_lost(lost)
                 ctx.stop_event.set()
                 break
         await _write_runtime_state(
@@ -3352,8 +3471,12 @@ async def _shutdown(ctx: BootContext) -> None:
                 from kaine.cycle.escalation_state import read_escalation
 
                 rec = read_escalation()
+                from kaine.cycle.supervisor import WELFARE_MONITOR_ESCALATION_MODULE
+
                 await ctx.caretaker.send_event(
-                    "supervision_lost" if rec.module == "supervisor" else "supervisor_escalation"
+                    "supervision_lost"
+                    if rec.module in ("supervisor", WELFARE_MONITOR_ESCALATION_MODULE)
+                    else "supervisor_escalation"
                 )
         except Exception:
             log.warning("caretaker escalation notice failed", exc_info=True)
@@ -3445,6 +3568,15 @@ async def _shutdown(ctx: BootContext) -> None:
         except Exception:
             log.warning("stimulus control close failed", exc_info=True)
     await _stop_welfare_producer(ctx.welfare_producer)
+    if ctx.supervision_mode == "research":
+        # After the producer's final affect_welfare record, before the modules stop.
+        _write_exposure_record(
+            run_ctx=ctx.run_ctx,
+            welfare_monitor=ctx.welfare_monitor,
+            welfare_producer=ctx.welfare_producer,
+            welfare_supervision=ctx.welfare_supervision,
+            eval_cfg=ctx.eval_cfg,
+        )
     try:
         il = ctx.ignition_log
     except NameError:
@@ -3581,29 +3713,116 @@ def _evaluate_research_safety_net(config: dict[str, Any]) -> "Any":
 def _evaluate_unattended_gate(config: dict[str, Any]) -> "Any":
     """Run the nine-condition unattended gate over the resolved config.
 
-    Reuses the research safety net for conditions 1–5 and 9.  Condition 6
-    comes from the supervisor's selftest.  Condition 8 requires a continuous perception
-    input.  Condition 7 runs last and needs the outcome of conditions 1–6,
-    8 and 9 as prerequisites.
+    Reuses the research safety net for conditions 1–6 and 9; condition 6 is
+    the supervisor's self-test, which the net runs once.  Condition 8 requires a
+    continuous perception input.  Condition 7 runs last and needs the outcome of
+    conditions 1–6, 8 and 9 as prerequisites.
     """
     net = _evaluate_research_safety_net(config)
     from kaine.cycle.caretaker import check_caretaker_condition
     from kaine.cycle.input_check import check_input_condition
-    from kaine.cycle.supervisor_selftest import check_supervisor_condition
     from kaine.cycle.unattended_gate import evaluate_unattended_gate
 
-    supervisor = check_supervisor_condition(config.get("supervisor") or {})
     eight = check_input_condition(config)
 
     # Condition 7 must report on 1–6 and 8, but must not include itself.
-    checks = dict(evaluate_unattended_gate(net, built={6: supervisor, 8: eight}).checks)
+    checks = dict(evaluate_unattended_gate(net, built={8: eight}).checks)
     checks.pop("7_caretaker_told", None)
     prerequisites_ok = all(checks.values())
 
     seven = check_caretaker_condition(
         config.get("caretaker"), prerequisites_ok=prerequisites_ok, conditions=checks
     )
-    return evaluate_unattended_gate(net, built={6: supervisor, 7: seven, 8: eight})
+    return evaluate_unattended_gate(net, built={7: seven, 8: eight})
+
+
+#: The boot's content-free welfare exposure record (welfare-exposure-report).
+EXPOSURE_PATH = Path("state/welfare/exposure.json")
+EXPOSURE_SCHEMA = 1
+
+
+def _remove_stale_exposure_record() -> None:
+    """Delete any exposure record before the gates, so an earlier boot's (or a
+    restored bundle's) record can never stand for this one."""
+    path = resolve(EXPOSURE_PATH)
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        log.error(
+            "could not remove a stale welfare exposure record; the study runner's "
+            "run binding still refuses it",
+            exc_info=True,
+        )
+
+
+def _exposure_shares(welfare_producer: Any) -> dict[str, Any] | None:
+    """The producer tally's shares, content-free, or None without a producer."""
+    if welfare_producer is None:
+        return None
+    observer, _sink = welfare_producer
+    tally = getattr(observer, "_affect_tally", None)
+    if tally is None:
+        return None
+    current = tally.current()
+    deficits = {}
+    for drive in ("boredom", "social_drive", "restlessness"):
+        deficits[drive] = {
+            "deprivation_share": current.get(f"{drive}_deprivation_share"),
+            "uncontrolled_share": current.get(f"{drive}_uncontrolled_share"),
+            "open_crossings": current.get(f"{drive}_open_crossings"),
+            "sleep_reset_ends": current.get(f"{drive}_sleep_reset_ends"),
+        }
+    return {
+        "awake_seconds": current.get("awake_seconds"),
+        "negative_valence_share": current.get("negative_valence_share"),
+        "curiosity_interest_share": current.get("curiosity_interest_share"),
+        "deficits": deficits,
+    }
+
+
+def _exposure_record(
+    *,
+    run_ctx: Any,
+    welfare_monitor: Any,
+    welfare_producer: Any,
+    welfare_supervision: Any,
+    eval_cfg: Any,
+) -> dict[str, Any]:
+    """Build the content-free exposure record: numbers, booleans, the run id,
+    timestamps and labels from the fixed indicator, reason and drive tables."""
+    monitor = welfare_monitor.exposure_summary() if welfare_monitor is not None else None
+    shares = _exposure_shares(welfare_producer)
+    restarts = None
+    if isinstance(welfare_supervision, dict) and welfare_producer is not None:
+        restarts = int(welfare_supervision.get("restarts", 0))
+    interval = None
+    welfare_cfg = getattr(eval_cfg, "welfare", None)
+    if welfare_cfg is not None:
+        interval = float(welfare_cfg.affect_summary_interval_s)
+    return {
+        "schema": EXPOSURE_SCHEMA,
+        "run_id": getattr(run_ctx, "run_id", None),
+        "boot_started_at": getattr(run_ctx, "started_at", None),
+        "written_at": datetime.now(timezone.utc).isoformat(),
+        "monitor": monitor,
+        "shares": shares,
+        "producer_restarts": restarts,
+        "covered_awake_seconds": shares.get("awake_seconds") if shares is not None else None,
+        "affect_summary_interval_s": interval,
+    }
+
+
+def _write_exposure_record(**kwargs: Any) -> None:
+    """Write the exposure record as plain JSON, atomically, mode 0600.
+
+    A failed write is logged at error level and does not change the exit
+    code; the study runner holds the next step when the record is missing.
+    """
+    try:
+        record = _exposure_record(**kwargs)
+        write_json_atomic(resolve(EXPOSURE_PATH), record)
+    except Exception:
+        log.error("could not write the welfare exposure record", exc_info=True)
 
 
 def _record_unattended_gate(
@@ -3779,6 +3998,9 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError as exc:
         sys.stderr.write(f"kaine.cycle: configuration error: {exc}\n")
         return 1
+
+    # A stale exposure record never stands for this boot, whatever happens next.
+    _remove_stale_exposure_record()
 
     # Exactly one mode per boot. Conflicting selectors refuse before any gate.
     try:

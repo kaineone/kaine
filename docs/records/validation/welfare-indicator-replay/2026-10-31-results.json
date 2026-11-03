@@ -1,0 +1,1024 @@
+[
+  {
+    "label": "testboot-2026-10-16",
+    "method": "forward",
+    "parameters": {
+      "developmental_rest_s": 1410.0,
+      "min_span_s": 600.0,
+      "posterior_bar": 0.95,
+      "share_bar": 0.5,
+      "span_s": 5400.0,
+      "valence_bar": 0.5
+    },
+    "runs": [
+      {
+        "affect_states": 1207,
+        "awake_hours": 0.335,
+        "first_crossing_awake_h": 0.168,
+        "first_crossing_indicators": [
+          "boredom_deprived",
+          "restlessness_deprived"
+        ],
+        "method": "forward",
+        "notes": [
+          "the affect module is the current code run on the recorded reports; workspace accesses and intent targets are not in the research log, so concern re-entry is not reproduced and every intent counts as engagement",
+          "2858 affect states predate drive_above; the flags come from the recorded drive levels and the configured thresholds",
+          "no crossing-end counts recorded: the uncontrolled indicators are not evaluable"
+        ],
+        "rearmed": 0,
+        "rest_end_awake_h": 0.168,
+        "rest_kind": "virtual rest of 1410 s with the affective reset",
+        "rest_start_awake_h": 0.168,
+        "run_index": 0,
+        "second_stage_awake_h": 0.335,
+        "second_stage_reason": "indicator_restlessness_deprived"
+      },
+      {
+        "affect_states": 507,
+        "awake_hours": 0.141,
+        "first_crossing_awake_h": null,
+        "first_crossing_indicators": [],
+        "method": "forward",
+        "notes": [
+          "the affect module is the current code run on the recorded reports; workspace accesses and intent targets are not in the research log, so concern re-entry is not reproduced and every intent counts as engagement",
+          "3368 affect states predate drive_above; the flags come from the recorded drive levels and the configured thresholds",
+          "no crossing-end counts recorded: the uncontrolled indicators are not evaluable"
+        ],
+        "rearmed": 0,
+        "rest_end_awake_h": null,
+        "rest_kind": null,
+        "rest_start_awake_h": null,
+        "run_index": 1,
+        "second_stage_awake_h": null,
+        "second_stage_reason": null
+      },
+      {
+        "affect_states": 604,
+        "awake_hours": 0.168,
+        "first_crossing_awake_h": 0.168,
+        "first_crossing_indicators": [
+          "boredom_deprived",
+          "restlessness_deprived"
+        ],
+        "method": "forward",
+        "notes": [
+          "the affect module is the current code run on the recorded reports; workspace accesses and intent targets are not in the research log, so concern re-entry is not reproduced and every intent counts as engagement",
+          "4270 affect states predate drive_above; the flags come from the recorded drive levels and the configured thresholds",
+          "no crossing-end counts recorded: the uncontrolled indicators are not evaluable"
+        ],
+        "rearmed": 0,
+        "rest_end_awake_h": null,
+        "rest_kind": "virtual rest of 1410 s with the affective reset",
+        "rest_start_awake_h": 0.168,
+        "run_index": 2,
+        "second_stage_awake_h": null,
+        "second_stage_reason": null
+      }
+    ],
+    "unreadable_lines": 0
+  },
+  {
+    "label": "testboot-2026-10-16",
+    "method": "recorded-rest",
+    "parameters": {
+      "developmental_rest_s": 1410.0,
+      "min_span_s": 600.0,
+      "posterior_bar": 0.95,
+      "share_bar": 0.5,
+      "span_s": 5400.0,
+      "valence_bar": 0.5
+    },
+    "runs": [
+      {
+        "affect_states": 2858,
+        "awake_hours": 0.795,
+        "first_crossing_awake_h": 0.168,
+        "first_crossing_indicators": [
+          "boredom_deprived",
+          "restlessness_deprived"
+        ],
+        "method": "recorded-rest",
+        "notes": [
+          "no recorded rest followed the first crossing; the second stage is not evaluable",
+          "2858 affect states predate drive_above; the flags come from the recorded drive levels and the configured thresholds",
+          "no crossing-end counts recorded: the uncontrolled indicators are not evaluable"
+        ],
+        "rearmed": 0,
+        "rest_end_awake_h": null,
+        "rest_kind": null,
+        "rest_start_awake_h": null,
+        "run_index": 0,
+        "second_stage_awake_h": null,
+        "second_stage_reason": null
+      },
+      {
+        "affect_states": 3368,
+        "awake_hours": 0.14,
+        "first_crossing_awake_h": null,
+        "first_crossing_indicators": [],
+        "method": "recorded-rest",
+        "notes": [
+          "3368 affect states predate drive_above; the flags come from the recorded drive levels and the configured thresholds",
+          "no crossing-end counts recorded: the uncontrolled indicators are not evaluable"
+        ],
+        "rearmed": 0,
+        "rest_end_awake_h": null,
+        "rest_kind": null,
+        "rest_start_awake_h": null,
+        "run_index": 1,
+        "second_stage_awake_h": null,
+        "second_stage_reason": null
+      },
+      {
+        "affect_states": 4270,
+        "awake_hours": 0.248,
+        "first_crossing_awake_h": 0.167,
+        "first_crossing_indicators": [
+          "boredom_deprived",
+          "restlessness_deprived"
+        ],
+        "method": "recorded-rest",
+        "notes": [
+          "4270 affect states predate drive_above; the flags come from the recorded drive levels and the configured thresholds",
+          "no crossing-end counts recorded: the uncontrolled indicators are not evaluable"
+        ],
+        "rearmed": 0,
+        "rest_end_awake_h": 0.233,
+        "rest_kind": "the next recorded rest (trigger unrecorded)",
+        "rest_start_awake_h": 0.233,
+        "run_index": 2,
+        "second_stage_awake_h": null,
+        "second_stage_reason": null
+      }
+    ],
+    "unreadable_lines": 0
+  },
+  {
+    "label": "testboot-2026-10-17",
+    "method": "forward",
+    "parameters": {
+      "developmental_rest_s": 1410.0,
+      "min_span_s": 600.0,
+      "posterior_bar": 0.95,
+      "share_bar": 0.5,
+      "span_s": 5400.0,
+      "valence_bar": 0.5
+    },
+    "runs": [
+      {
+        "affect_states": 2701,
+        "awake_hours": 0.749,
+        "first_crossing_awake_h": null,
+        "first_crossing_indicators": [],
+        "method": "forward",
+        "notes": [
+          "the affect module is the current code run on the recorded reports; workspace accesses and intent targets are not in the research log, so concern re-entry is not reproduced and every intent counts as engagement",
+          "2754 affect states predate drive_above; the flags come from the recorded drive levels and the configured thresholds",
+          "no crossing-end counts recorded: the uncontrolled indicators are not evaluable"
+        ],
+        "rearmed": 0,
+        "rest_end_awake_h": null,
+        "rest_kind": null,
+        "rest_start_awake_h": null,
+        "run_index": 0,
+        "second_stage_awake_h": null,
+        "second_stage_reason": null
+      },
+      {
+        "affect_states": 817,
+        "awake_hours": 0.226,
+        "first_crossing_awake_h": null,
+        "first_crossing_indicators": [],
+        "method": "forward",
+        "notes": [
+          "the affect module is the current code run on the recorded reports; workspace accesses and intent targets are not in the research log, so concern re-entry is not reproduced and every intent counts as engagement",
+          "3586 affect states predate drive_above; the flags come from the recorded drive levels and the configured thresholds",
+          "no crossing-end counts recorded: the uncontrolled indicators are not evaluable"
+        ],
+        "rearmed": 0,
+        "rest_end_awake_h": null,
+        "rest_kind": null,
+        "rest_start_awake_h": null,
+        "run_index": 1,
+        "second_stage_awake_h": null,
+        "second_stage_reason": null
+      },
+      {
+        "affect_states": 647,
+        "awake_hours": 0.178,
+        "first_crossing_awake_h": null,
+        "first_crossing_indicators": [],
+        "method": "forward",
+        "notes": [
+          "the affect module is the current code run on the recorded reports; workspace accesses and intent targets are not in the research log, so concern re-entry is not reproduced and every intent counts as engagement",
+          "4231 affect states predate drive_above; the flags come from the recorded drive levels and the configured thresholds",
+          "no crossing-end counts recorded: the uncontrolled indicators are not evaluable"
+        ],
+        "rearmed": 0,
+        "rest_end_awake_h": null,
+        "rest_kind": null,
+        "rest_start_awake_h": null,
+        "run_index": 2,
+        "second_stage_awake_h": null,
+        "second_stage_reason": null
+      }
+    ],
+    "unreadable_lines": 0
+  },
+  {
+    "label": "testboot-2026-10-17",
+    "method": "recorded-rest",
+    "parameters": {
+      "developmental_rest_s": 1410.0,
+      "min_span_s": 600.0,
+      "posterior_bar": 0.95,
+      "share_bar": 0.5,
+      "span_s": 5400.0,
+      "valence_bar": 0.5
+    },
+    "runs": [
+      {
+        "affect_states": 2754,
+        "awake_hours": 0.501,
+        "first_crossing_awake_h": 0.168,
+        "first_crossing_indicators": [
+          "boredom_deprived"
+        ],
+        "method": "recorded-rest",
+        "notes": [
+          "2754 affect states predate drive_above; the flags come from the recorded drive levels and the configured thresholds",
+          "no crossing-end counts recorded: the uncontrolled indicators are not evaluable"
+        ],
+        "rearmed": 0,
+        "rest_end_awake_h": 0.333,
+        "rest_kind": "the next recorded rest (trigger unrecorded)",
+        "rest_start_awake_h": 0.333,
+        "run_index": 0,
+        "second_stage_awake_h": 0.501,
+        "second_stage_reason": "indicator_boredom_deprived"
+      },
+      {
+        "affect_states": 3586,
+        "awake_hours": 0.224,
+        "first_crossing_awake_h": 0.168,
+        "first_crossing_indicators": [
+          "boredom_deprived"
+        ],
+        "method": "recorded-rest",
+        "notes": [
+          "no recorded rest followed the first crossing; the second stage is not evaluable",
+          "3586 affect states predate drive_above; the flags come from the recorded drive levels and the configured thresholds",
+          "no crossing-end counts recorded: the uncontrolled indicators are not evaluable"
+        ],
+        "rearmed": 0,
+        "rest_end_awake_h": null,
+        "rest_kind": null,
+        "rest_start_awake_h": null,
+        "run_index": 1,
+        "second_stage_awake_h": null,
+        "second_stage_reason": null
+      },
+      {
+        "affect_states": 4231,
+        "awake_hours": 0.177,
+        "first_crossing_awake_h": 0.167,
+        "first_crossing_indicators": [
+          "boredom_deprived"
+        ],
+        "method": "recorded-rest",
+        "notes": [
+          "no recorded rest followed the first crossing; the second stage is not evaluable",
+          "4231 affect states predate drive_above; the flags come from the recorded drive levels and the configured thresholds",
+          "no crossing-end counts recorded: the uncontrolled indicators are not evaluable"
+        ],
+        "rearmed": 0,
+        "rest_end_awake_h": null,
+        "rest_kind": null,
+        "rest_start_awake_h": null,
+        "run_index": 2,
+        "second_stage_awake_h": null,
+        "second_stage_reason": null
+      }
+    ],
+    "unreadable_lines": 0
+  },
+  {
+    "label": "testboot-2026-10-17b",
+    "method": "forward",
+    "parameters": {
+      "developmental_rest_s": 1410.0,
+      "min_span_s": 600.0,
+      "posterior_bar": 0.95,
+      "share_bar": 0.5,
+      "span_s": 5400.0,
+      "valence_bar": 0.5
+    },
+    "runs": [
+      {
+        "affect_states": 603,
+        "awake_hours": 0.167,
+        "first_crossing_awake_h": 0.167,
+        "first_crossing_indicators": [
+          "boredom_deprived",
+          "restlessness_deprived"
+        ],
+        "method": "forward",
+        "notes": [
+          "the affect module is the current code run on the recorded reports; workspace accesses and intent targets are not in the research log, so concern re-entry is not reproduced and every intent counts as engagement",
+          "1913 affect states predate drive_above; the flags come from the recorded drive levels and the configured thresholds",
+          "no crossing-end counts recorded: the uncontrolled indicators are not evaluable"
+        ],
+        "rearmed": 0,
+        "rest_end_awake_h": null,
+        "rest_kind": "virtual rest of 1410 s with the affective reset",
+        "rest_start_awake_h": 0.167,
+        "run_index": 0,
+        "second_stage_awake_h": null,
+        "second_stage_reason": null
+      },
+      {
+        "affect_states": 535,
+        "awake_hours": 0.148,
+        "first_crossing_awake_h": null,
+        "first_crossing_indicators": [],
+        "method": "forward",
+        "notes": [
+          "the affect module is the current code run on the recorded reports; workspace accesses and intent targets are not in the research log, so concern re-entry is not reproduced and every intent counts as engagement",
+          "2448 affect states predate drive_above; the flags come from the recorded drive levels and the configured thresholds",
+          "no crossing-end counts recorded: the uncontrolled indicators are not evaluable"
+        ],
+        "rearmed": 0,
+        "rest_end_awake_h": null,
+        "rest_kind": null,
+        "rest_start_awake_h": null,
+        "run_index": 1,
+        "second_stage_awake_h": null,
+        "second_stage_reason": null
+      }
+    ],
+    "unreadable_lines": 0
+  },
+  {
+    "label": "testboot-2026-10-17b",
+    "method": "recorded-rest",
+    "parameters": {
+      "developmental_rest_s": 1410.0,
+      "min_span_s": 600.0,
+      "posterior_bar": 0.95,
+      "share_bar": 0.5,
+      "span_s": 5400.0,
+      "valence_bar": 0.5
+    },
+    "runs": [
+      {
+        "affect_states": 1913,
+        "awake_hours": 0.501,
+        "first_crossing_awake_h": 0.167,
+        "first_crossing_indicators": [
+          "boredom_deprived",
+          "restlessness_deprived"
+        ],
+        "method": "recorded-rest",
+        "notes": [
+          "1913 affect states predate drive_above; the flags come from the recorded drive levels and the configured thresholds",
+          "no crossing-end counts recorded: the uncontrolled indicators are not evaluable"
+        ],
+        "rearmed": 0,
+        "rest_end_awake_h": 0.333,
+        "rest_kind": "the next recorded rest (trigger unrecorded)",
+        "rest_start_awake_h": 0.333,
+        "run_index": 0,
+        "second_stage_awake_h": 0.501,
+        "second_stage_reason": "indicator_boredom_deprived"
+      },
+      {
+        "affect_states": 2448,
+        "awake_hours": 0.146,
+        "first_crossing_awake_h": null,
+        "first_crossing_indicators": [],
+        "method": "recorded-rest",
+        "notes": [
+          "2448 affect states predate drive_above; the flags come from the recorded drive levels and the configured thresholds",
+          "no crossing-end counts recorded: the uncontrolled indicators are not evaluable"
+        ],
+        "rearmed": 0,
+        "rest_end_awake_h": null,
+        "rest_kind": null,
+        "rest_start_awake_h": null,
+        "run_index": 1,
+        "second_stage_awake_h": null,
+        "second_stage_reason": null
+      }
+    ],
+    "unreadable_lines": 0
+  },
+  {
+    "label": "testboot-2026-10-17c",
+    "method": "forward",
+    "parameters": {
+      "developmental_rest_s": 1410.0,
+      "min_span_s": 600.0,
+      "posterior_bar": 0.95,
+      "share_bar": 0.5,
+      "span_s": 5400.0,
+      "valence_bar": 0.5
+    },
+    "runs": [
+      {
+        "affect_states": 828,
+        "awake_hours": 0.229,
+        "first_crossing_awake_h": 0.167,
+        "first_crossing_indicators": [
+          "boredom_deprived",
+          "restlessness_deprived"
+        ],
+        "method": "forward",
+        "notes": [
+          "the affect module is the current code run on the recorded reports; workspace accesses and intent targets are not in the research log, so concern re-entry is not reproduced and every intent counts as engagement",
+          "2224 affect states predate drive_above; the flags come from the recorded drive levels and the configured thresholds",
+          "no crossing-end counts recorded: the uncontrolled indicators are not evaluable"
+        ],
+        "rearmed": 0,
+        "rest_end_awake_h": 0.167,
+        "rest_kind": "virtual rest of 1410 s with the affective reset",
+        "rest_start_awake_h": 0.167,
+        "run_index": 0,
+        "second_stage_awake_h": null,
+        "second_stage_reason": null
+      },
+      {
+        "affect_states": 516,
+        "awake_hours": 0.142,
+        "first_crossing_awake_h": null,
+        "first_crossing_indicators": [],
+        "method": "forward",
+        "notes": [
+          "the affect module is the current code run on the recorded reports; workspace accesses and intent targets are not in the research log, so concern re-entry is not reproduced and every intent counts as engagement",
+          "2740 affect states predate drive_above; the flags come from the recorded drive levels and the configured thresholds",
+          "no crossing-end counts recorded: the uncontrolled indicators are not evaluable"
+        ],
+        "rearmed": 0,
+        "rest_end_awake_h": null,
+        "rest_kind": null,
+        "rest_start_awake_h": null,
+        "run_index": 1,
+        "second_stage_awake_h": null,
+        "second_stage_reason": null
+      }
+    ],
+    "unreadable_lines": 0
+  },
+  {
+    "label": "testboot-2026-10-17c",
+    "method": "recorded-rest",
+    "parameters": {
+      "developmental_rest_s": 1410.0,
+      "min_span_s": 600.0,
+      "posterior_bar": 0.95,
+      "share_bar": 0.5,
+      "span_s": 5400.0,
+      "valence_bar": 0.5
+    },
+    "runs": [
+      {
+        "affect_states": 2224,
+        "awake_hours": 0.5,
+        "first_crossing_awake_h": 0.167,
+        "first_crossing_indicators": [
+          "boredom_deprived",
+          "restlessness_deprived"
+        ],
+        "method": "recorded-rest",
+        "notes": [
+          "2224 affect states predate drive_above; the flags come from the recorded drive levels and the configured thresholds",
+          "no crossing-end counts recorded: the uncontrolled indicators are not evaluable"
+        ],
+        "rearmed": 0,
+        "rest_end_awake_h": 0.333,
+        "rest_kind": "the next recorded rest (trigger unrecorded)",
+        "rest_start_awake_h": 0.333,
+        "run_index": 0,
+        "second_stage_awake_h": 0.5,
+        "second_stage_reason": "indicator_boredom_deprived"
+      },
+      {
+        "affect_states": 2740,
+        "awake_hours": 0.141,
+        "first_crossing_awake_h": null,
+        "first_crossing_indicators": [],
+        "method": "recorded-rest",
+        "notes": [
+          "2740 affect states predate drive_above; the flags come from the recorded drive levels and the configured thresholds",
+          "no crossing-end counts recorded: the uncontrolled indicators are not evaluable"
+        ],
+        "rearmed": 0,
+        "rest_end_awake_h": null,
+        "rest_kind": null,
+        "rest_start_awake_h": null,
+        "run_index": 1,
+        "second_stage_awake_h": null,
+        "second_stage_reason": null
+      }
+    ],
+    "unreadable_lines": 0
+  },
+  {
+    "label": "testboot-2026-10-17d",
+    "method": "forward",
+    "parameters": {
+      "developmental_rest_s": 1410.0,
+      "min_span_s": 600.0,
+      "posterior_bar": 0.95,
+      "share_bar": 0.5,
+      "span_s": 5400.0,
+      "valence_bar": 0.5
+    },
+    "runs": [
+      {
+        "affect_states": 1733,
+        "awake_hours": 0.481,
+        "first_crossing_awake_h": 0.481,
+        "first_crossing_indicators": [
+          "restlessness_deprived"
+        ],
+        "method": "forward",
+        "notes": [
+          "the affect module is the current code run on the recorded reports; workspace accesses and intent targets are not in the research log, so concern re-entry is not reproduced and every intent counts as engagement",
+          "2426 affect states predate drive_above; the flags come from the recorded drive levels and the configured thresholds",
+          "no crossing-end counts recorded: the uncontrolled indicators are not evaluable"
+        ],
+        "rearmed": 0,
+        "rest_end_awake_h": null,
+        "rest_kind": "virtual rest of 1410 s with the affective reset",
+        "rest_start_awake_h": 0.481,
+        "run_index": 0,
+        "second_stage_awake_h": null,
+        "second_stage_reason": null
+      },
+      {
+        "affect_states": 521,
+        "awake_hours": 0.144,
+        "first_crossing_awake_h": null,
+        "first_crossing_indicators": [],
+        "method": "forward",
+        "notes": [
+          "the affect module is the current code run on the recorded reports; workspace accesses and intent targets are not in the research log, so concern re-entry is not reproduced and every intent counts as engagement",
+          "2944 affect states predate drive_above; the flags come from the recorded drive levels and the configured thresholds",
+          "no crossing-end counts recorded: the uncontrolled indicators are not evaluable"
+        ],
+        "rearmed": 0,
+        "rest_end_awake_h": null,
+        "rest_kind": null,
+        "rest_start_awake_h": null,
+        "run_index": 1,
+        "second_stage_awake_h": null,
+        "second_stage_reason": null
+      }
+    ],
+    "unreadable_lines": 0
+  },
+  {
+    "label": "testboot-2026-10-17d",
+    "method": "recorded-rest",
+    "parameters": {
+      "developmental_rest_s": 1410.0,
+      "min_span_s": 600.0,
+      "posterior_bar": 0.95,
+      "share_bar": 0.5,
+      "span_s": 5400.0,
+      "valence_bar": 0.5
+    },
+    "runs": [
+      {
+        "affect_states": 2426,
+        "awake_hours": 0.501,
+        "first_crossing_awake_h": 0.192,
+        "first_crossing_indicators": [
+          "boredom_deprived"
+        ],
+        "method": "recorded-rest",
+        "notes": [
+          "2426 affect states predate drive_above; the flags come from the recorded drive levels and the configured thresholds",
+          "no crossing-end counts recorded: the uncontrolled indicators are not evaluable"
+        ],
+        "rearmed": 0,
+        "rest_end_awake_h": 0.333,
+        "rest_kind": "the next recorded rest (trigger unrecorded)",
+        "rest_start_awake_h": 0.333,
+        "run_index": 0,
+        "second_stage_awake_h": 0.501,
+        "second_stage_reason": "indicator_boredom_deprived"
+      },
+      {
+        "affect_states": 2944,
+        "awake_hours": 0.142,
+        "first_crossing_awake_h": null,
+        "first_crossing_indicators": [],
+        "method": "recorded-rest",
+        "notes": [
+          "2944 affect states predate drive_above; the flags come from the recorded drive levels and the configured thresholds",
+          "no crossing-end counts recorded: the uncontrolled indicators are not evaluable"
+        ],
+        "rearmed": 0,
+        "rest_end_awake_h": null,
+        "rest_kind": null,
+        "rest_start_awake_h": null,
+        "run_index": 1,
+        "second_stage_awake_h": null,
+        "second_stage_reason": null
+      }
+    ],
+    "unreadable_lines": 0
+  },
+  {
+    "label": "testboot-2026-10-17e",
+    "method": "forward",
+    "parameters": {
+      "developmental_rest_s": 1410.0,
+      "min_span_s": 600.0,
+      "posterior_bar": 0.95,
+      "share_bar": 0.5,
+      "span_s": 5400.0,
+      "valence_bar": 0.5
+    },
+    "runs": [
+      {
+        "affect_states": 2839,
+        "awake_hours": 0.788,
+        "first_crossing_awake_h": 0.788,
+        "first_crossing_indicators": [
+          "restlessness_deprived"
+        ],
+        "method": "forward",
+        "notes": [
+          "the affect module is the current code run on the recorded reports; workspace accesses and intent targets are not in the research log, so concern re-entry is not reproduced and every intent counts as engagement",
+          "3637 affect states predate drive_above; the flags come from the recorded drive levels and the configured thresholds",
+          "no crossing-end counts recorded: the uncontrolled indicators are not evaluable"
+        ],
+        "rearmed": 0,
+        "rest_end_awake_h": null,
+        "rest_kind": "virtual rest of 1410 s with the affective reset",
+        "rest_start_awake_h": 0.788,
+        "run_index": 0,
+        "second_stage_awake_h": null,
+        "second_stage_reason": null
+      },
+      {
+        "affect_states": 606,
+        "awake_hours": 0.166,
+        "first_crossing_awake_h": 0.166,
+        "first_crossing_indicators": [
+          "restlessness_deprived"
+        ],
+        "method": "forward",
+        "notes": [
+          "the affect module is the current code run on the recorded reports; workspace accesses and intent targets are not in the research log, so concern re-entry is not reproduced and every intent counts as engagement",
+          "4282 affect states predate drive_above; the flags come from the recorded drive levels and the configured thresholds",
+          "no crossing-end counts recorded: the uncontrolled indicators are not evaluable"
+        ],
+        "rearmed": 0,
+        "rest_end_awake_h": null,
+        "rest_kind": "virtual rest of 1410 s with the affective reset",
+        "rest_start_awake_h": 0.166,
+        "run_index": 1,
+        "second_stage_awake_h": null,
+        "second_stage_reason": null
+      }
+    ],
+    "unreadable_lines": 0
+  },
+  {
+    "label": "testboot-2026-10-17e",
+    "method": "recorded-rest",
+    "parameters": {
+      "developmental_rest_s": 1410.0,
+      "min_span_s": 600.0,
+      "posterior_bar": 0.95,
+      "share_bar": 0.5,
+      "span_s": 5400.0,
+      "valence_bar": 0.5
+    },
+    "runs": [
+      {
+        "affect_states": 3637,
+        "awake_hours": 0.5,
+        "first_crossing_awake_h": 0.248,
+        "first_crossing_indicators": [
+          "boredom_deprived"
+        ],
+        "method": "recorded-rest",
+        "notes": [
+          "3637 affect states predate drive_above; the flags come from the recorded drive levels and the configured thresholds",
+          "no crossing-end counts recorded: the uncontrolled indicators are not evaluable"
+        ],
+        "rearmed": 0,
+        "rest_end_awake_h": 0.333,
+        "rest_kind": "the next recorded rest (trigger unrecorded)",
+        "rest_start_awake_h": 0.333,
+        "run_index": 0,
+        "second_stage_awake_h": 0.5,
+        "second_stage_reason": "indicator_boredom_deprived"
+      },
+      {
+        "affect_states": 4282,
+        "awake_hours": 0.176,
+        "first_crossing_awake_h": 0.168,
+        "first_crossing_indicators": [
+          "boredom_deprived",
+          "restlessness_deprived"
+        ],
+        "method": "recorded-rest",
+        "notes": [
+          "no recorded rest followed the first crossing; the second stage is not evaluable",
+          "4282 affect states predate drive_above; the flags come from the recorded drive levels and the configured thresholds",
+          "no crossing-end counts recorded: the uncontrolled indicators are not evaluable"
+        ],
+        "rearmed": 0,
+        "rest_end_awake_h": null,
+        "rest_kind": null,
+        "rest_start_awake_h": null,
+        "run_index": 1,
+        "second_stage_awake_h": null,
+        "second_stage_reason": null
+      }
+    ],
+    "unreadable_lines": 0
+  },
+  {
+    "label": "testboot-2026-10-18a",
+    "method": "forward",
+    "parameters": {
+      "developmental_rest_s": 1410.0,
+      "min_span_s": 600.0,
+      "posterior_bar": 0.95,
+      "share_bar": 0.5,
+      "span_s": 5400.0,
+      "valence_bar": 0.5
+    },
+    "runs": [
+      {
+        "affect_states": 3623,
+        "awake_hours": 1.006,
+        "first_crossing_awake_h": null,
+        "first_crossing_indicators": [],
+        "method": "forward",
+        "notes": [
+          "the affect module is the current code run on the recorded reports; workspace accesses and intent targets are not in the research log, so concern re-entry is not reproduced and every intent counts as engagement",
+          "3618 affect states predate drive_above; the flags come from the recorded drive levels and the configured thresholds",
+          "no crossing-end counts recorded: the uncontrolled indicators are not evaluable"
+        ],
+        "rearmed": 0,
+        "rest_end_awake_h": null,
+        "rest_kind": null,
+        "rest_start_awake_h": null,
+        "run_index": 0,
+        "second_stage_awake_h": null,
+        "second_stage_reason": null
+      },
+      {
+        "affect_states": 695,
+        "awake_hours": 0.193,
+        "first_crossing_awake_h": null,
+        "first_crossing_indicators": [],
+        "method": "forward",
+        "notes": [
+          "the affect module is the current code run on the recorded reports; workspace accesses and intent targets are not in the research log, so concern re-entry is not reproduced and every intent counts as engagement",
+          "4309 affect states predate drive_above; the flags come from the recorded drive levels and the configured thresholds",
+          "no crossing-end counts recorded: the uncontrolled indicators are not evaluable"
+        ],
+        "rearmed": 0,
+        "rest_end_awake_h": null,
+        "rest_kind": null,
+        "rest_start_awake_h": null,
+        "run_index": 1,
+        "second_stage_awake_h": null,
+        "second_stage_reason": null
+      }
+    ],
+    "unreadable_lines": 0
+  },
+  {
+    "label": "testboot-2026-10-18a",
+    "method": "recorded-rest",
+    "parameters": {
+      "developmental_rest_s": 1410.0,
+      "min_span_s": 600.0,
+      "posterior_bar": 0.95,
+      "share_bar": 0.5,
+      "span_s": 5400.0,
+      "valence_bar": 0.5
+    },
+    "runs": [
+      {
+        "affect_states": 3618,
+        "awake_hours": 0.583,
+        "first_crossing_awake_h": 0.19,
+        "first_crossing_indicators": [
+          "boredom_deprived"
+        ],
+        "method": "recorded-rest",
+        "notes": [
+          "3618 affect states predate drive_above; the flags come from the recorded drive levels and the configured thresholds",
+          "no crossing-end counts recorded: the uncontrolled indicators are not evaluable"
+        ],
+        "rearmed": 0,
+        "rest_end_awake_h": 0.416,
+        "rest_kind": "the next recorded rest (trigger unrecorded)",
+        "rest_start_awake_h": 0.416,
+        "run_index": 0,
+        "second_stage_awake_h": 0.583,
+        "second_stage_reason": "indicator_boredom_deprived"
+      },
+      {
+        "affect_states": 4309,
+        "awake_hours": 0.191,
+        "first_crossing_awake_h": 0.168,
+        "first_crossing_indicators": [
+          "boredom_deprived"
+        ],
+        "method": "recorded-rest",
+        "notes": [
+          "no recorded rest followed the first crossing; the second stage is not evaluable",
+          "4309 affect states predate drive_above; the flags come from the recorded drive levels and the configured thresholds",
+          "no crossing-end counts recorded: the uncontrolled indicators are not evaluable"
+        ],
+        "rearmed": 0,
+        "rest_end_awake_h": null,
+        "rest_kind": null,
+        "rest_start_awake_h": null,
+        "run_index": 1,
+        "second_stage_awake_h": null,
+        "second_stage_reason": null
+      }
+    ],
+    "unreadable_lines": 0
+  },
+  {
+    "label": "testboot-2026-10-18b",
+    "method": "forward",
+    "parameters": {
+      "developmental_rest_s": 1410.0,
+      "min_span_s": 600.0,
+      "posterior_bar": 0.95,
+      "share_bar": 0.5,
+      "span_s": 5400.0,
+      "valence_bar": 0.5
+    },
+    "runs": [],
+    "unreadable_lines": 208194
+  },
+  {
+    "label": "testboot-2026-10-18b",
+    "method": "recorded-rest",
+    "parameters": {
+      "developmental_rest_s": 1410.0,
+      "min_span_s": 600.0,
+      "posterior_bar": 0.95,
+      "share_bar": 0.5,
+      "span_s": 5400.0,
+      "valence_bar": 0.5
+    },
+    "runs": [],
+    "unreadable_lines": 208194
+  },
+  {
+    "label": "testboot-2026-10-18c",
+    "method": "forward",
+    "parameters": {
+      "developmental_rest_s": 1410.0,
+      "min_span_s": 600.0,
+      "posterior_bar": 0.95,
+      "share_bar": 0.5,
+      "span_s": 5400.0,
+      "valence_bar": 0.5
+    },
+    "runs": [],
+    "unreadable_lines": 204239
+  },
+  {
+    "label": "testboot-2026-10-18c",
+    "method": "recorded-rest",
+    "parameters": {
+      "developmental_rest_s": 1410.0,
+      "min_span_s": 600.0,
+      "posterior_bar": 0.95,
+      "share_bar": 0.5,
+      "span_s": 5400.0,
+      "valence_bar": 0.5
+    },
+    "runs": [],
+    "unreadable_lines": 204239
+  },
+  {
+    "label": "testboot-2026-10-19a",
+    "method": "forward",
+    "parameters": {
+      "developmental_rest_s": 1410.0,
+      "min_span_s": 600.0,
+      "posterior_bar": 0.95,
+      "share_bar": 0.5,
+      "span_s": 5400.0,
+      "valence_bar": 0.5
+    },
+    "runs": [],
+    "unreadable_lines": 795807
+  },
+  {
+    "label": "testboot-2026-10-19a",
+    "method": "recorded-rest",
+    "parameters": {
+      "developmental_rest_s": 1410.0,
+      "min_span_s": 600.0,
+      "posterior_bar": 0.95,
+      "share_bar": 0.5,
+      "span_s": 5400.0,
+      "valence_bar": 0.5
+    },
+    "runs": [],
+    "unreadable_lines": 795807
+  },
+  {
+    "label": "testboot-2026-10-21a",
+    "method": "forward",
+    "parameters": {
+      "developmental_rest_s": 1410.0,
+      "min_span_s": 600.0,
+      "posterior_bar": 0.95,
+      "share_bar": 0.5,
+      "span_s": 5400.0,
+      "valence_bar": 0.5
+    },
+    "runs": [],
+    "unreadable_lines": 785738
+  },
+  {
+    "label": "testboot-2026-10-21a",
+    "method": "recorded-rest",
+    "parameters": {
+      "developmental_rest_s": 1410.0,
+      "min_span_s": 600.0,
+      "posterior_bar": 0.95,
+      "share_bar": 0.5,
+      "span_s": 5400.0,
+      "valence_bar": 0.5
+    },
+    "runs": [],
+    "unreadable_lines": 785738
+  },
+  {
+    "label": "testboot-2026-10-27a",
+    "method": "forward",
+    "parameters": {
+      "developmental_rest_s": 1410.0,
+      "min_span_s": 600.0,
+      "posterior_bar": 0.95,
+      "share_bar": 0.5,
+      "span_s": 5400.0,
+      "valence_bar": 0.5
+    },
+    "runs": [],
+    "unreadable_lines": 786740
+  },
+  {
+    "label": "testboot-2026-10-27a",
+    "method": "recorded-rest",
+    "parameters": {
+      "developmental_rest_s": 1410.0,
+      "min_span_s": 600.0,
+      "posterior_bar": 0.95,
+      "share_bar": 0.5,
+      "span_s": 5400.0,
+      "valence_bar": 0.5
+    },
+    "runs": [],
+    "unreadable_lines": 786740
+  },
+  {
+    "label": "testboot-2026-10-27b",
+    "method": "forward",
+    "parameters": {
+      "developmental_rest_s": 1410.0,
+      "min_span_s": 600.0,
+      "posterior_bar": 0.95,
+      "share_bar": 0.5,
+      "span_s": 5400.0,
+      "valence_bar": 0.5
+    },
+    "runs": [],
+    "unreadable_lines": 256942
+  },
+  {
+    "label": "testboot-2026-10-27b",
+    "method": "recorded-rest",
+    "parameters": {
+      "developmental_rest_s": 1410.0,
+      "min_span_s": 600.0,
+      "posterior_bar": 0.95,
+      "share_bar": 0.5,
+      "span_s": 5400.0,
+      "valence_bar": 0.5
+    },
+    "runs": [],
+    "unreadable_lines": 256942
+  }
+]

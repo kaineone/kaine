@@ -121,18 +121,19 @@ KAINE is released under the Cognitive Architecture License (CAL) version 0.5, an
 - **Welfare-protective response.** An autonomous monitor watches the entity's interoceptive welfare signal and preserves and pauses the entity on a sustained threat, without waiting for a human.
 - **Welfare-gated decommission.** Deliberate deletion is a separate, operator-present, backup-first, divergence-gated path. See [Security and privacy](13-security-and-privacy.md).
 
-### The unsupervised research gate (six conditions)
+### The unsupervised research gate (seven conditions)
 
-An unsupervised research run (selected by `KAINE_RESEARCH_MODE=1` or `[research].enabled = true`) replaces the human supervisor with the autonomous safety net. The cycle refuses to boot (exit code `5`) unless all six of these hold on your install:
+An unsupervised research run (selected by `KAINE_RESEARCH_MODE=1` or `[research].enabled = true`) replaces the human supervisor with the autonomous safety net. The cycle refuses to boot (exit code `5`) unless all seven of these hold on your install:
 
 1. **Preservation enabled**: `[preservation.divergence_monitor].enabled = true`.
-2. **Welfare response wired**: `[preservation.welfare_response].enabled = true`.
+2. **Welfare response wired**: `[preservation.welfare_response].enabled = true`, and its response to the welfare indicators is wired: `[preservation.welfare_response.indicators].enabled = true`, the `affect` and `sleep` modules are enabled (the indicators read the affect state, and the rest is the sleep module's), and `[preservation.welfare_response].action` is `pause` or `end` (with `notify` a crossing over a fresh span would not freeze). The refusal names the part that failed.
 3. **Logging active**: `[evaluation]` or `[research_event_log]` enabled.
 4. **Dry self-check passed**: a real preflight preserve-and-revive round trip succeeds on this install. The check builds a minimal synthetic individual in a throwaway temporary directory and leaves no persistent state.
 5. **Individuation wired**: `[individuation].enabled = true`, its configuration is valid, and the `language` module is enabled.
 6. **Encryption satisfied**: if `[preservation].require_encryption = true`, `[security.state_encryption]` must be enabled.
+7. **Supervisor armed and self-tested**: `[supervisor].enabled = true` with at least one restart attempt, writable escalation and incident-log directories, and a passing supervisor self-test on a synthetic module in a scratch directory. The shipped `config/kaine.toml` keeps the supervisor off for operator-present boots; the study files and the study overlay switch it on.
 
-The gate is implemented in `kaine/cycle/research_gate.py`. If any condition fails, the cycle prints which one and refuses. There is no override that skips the net.
+The gate is implemented in `kaine/cycle/research_gate.py`. If any condition fails, the cycle prints which one and its reason, and refuses. There is no override that skips the net. A research run that loses its supervisor (its task never starts, ends early, or its poll loop raises) escalates as an unattended run does: a final snapshot, shutdown, `state/cycle/escalation.json`, a caretaker notice and exit code `70`. A research run whose welfare monitor stops watching (never started, its task ended, or its poll loop keeps raising for `distress_duration_s`) escalates the same way, with module `welfare_monitor` in the escalation record. The module-addition study records such a step as `failed:supervisor`.
 
 ### Boot refusal exit codes
 
@@ -144,7 +145,7 @@ The cycle entrypoint fails closed with a distinct exit code per gate:
 | `2` | Operator-present gate: none of `KAINE_CYCLE_OPERATOR_PRESENT=1`, research mode or unattended mode |
 | `3` | Evaluation A/B baseline does not match the configured `[language].model_id` |
 | `4` | GPU pre-flight: insufficient VRAM headroom (when `[gpu_preflight].enabled`) |
-| `5` | Research safety net not live and verified (one or more of the six conditions failed) |
+| `5` | Research safety net not live and verified (one or more of the seven conditions failed) |
 | `6` | Unattended gate: one or more of its nine conditions failed |
 | `7` | Revive refused |
 | `8` | The welfare response is enabled but its gray-zone producer (the welfare observer) could not start |

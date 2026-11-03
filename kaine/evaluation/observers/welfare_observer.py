@@ -98,6 +98,10 @@ from kaine.bus.streams import (
 from kaine.cycle.unfrozen_clock import UnfrozenClock
 from kaine.evaluation._base import BusReader, StreamSubscriberObserver
 from kaine.evaluation.sink import AsyncJsonlSink
+from kaine.lifecycle.welfare_indicators import (
+    IndicatorEvaluator,
+    IndicatorParams,
+)
 
 # The sustained-distress detection logic is shared core-side so the autonomous
 # welfare-protective monitor (kaine.cycle.preservation_monitor) applies the
@@ -352,6 +356,10 @@ class AffectWelfareTally:
     def snapshot(self) -> dict[str, float | int | None]:
         """Return a content-free snapshot and clear the ``changed`` flag."""
         self._changed = False
+        return self.current()
+
+    def current(self) -> dict[str, float | int | None]:
+        """Return the same content-free snapshot without touching the ``changed`` flag."""
         result: dict[str, float | int | None] = {
             "awake_seconds": self._awake_seconds,
             "negative_valence_bar": self._negative_valence_bar,
@@ -434,6 +442,7 @@ class WelfareObserver(StreamSubscriberObserver):
         unfrozen_clock: UnfrozenClock | None = None,
         development_probe: Callable[[], bool] | None = None,
         supplementary_records: Callable[[], list[dict[str, Any]]] | None = None,
+        indicator_params: IndicatorParams | None = None,
     ) -> None:
         super().__init__(bus, poll_interval_s=poll_interval_s)
         # Content-free records another welfare component keeps (the
@@ -501,6 +510,14 @@ class WelfareObserver(StreamSubscriberObserver):
             max_gap_s=_AFFECT_SAMPLE_GAP_CAP_S,
         )
         self._affect_summary_at: float | None = None
+        # The live A.4 indicators, from this observer's own instance of the
+        # evaluator the cycle-layer welfare monitor runs, so the record shows
+        # what the monitor saw. The span is never restarted here: the record is
+        # the latest span of the run.
+        self._indicators = IndicatorEvaluator(
+            indicator_params or IndicatorParams(max_gap_s=_AFFECT_SAMPLE_GAP_CAP_S)
+        )
+        self._indicators_frozen = False
 
     # --- Public counters for dashboard diagnostics ---------------------------
 
@@ -855,18 +872,32 @@ class WelfareObserver(StreamSubscriberObserver):
                 self._sensor_silent_count += 1
                 await self._emit_sensor_silent(SENSOR_SILENT_TYPE, processor, change)
 
+    def _indicator_fields(self) -> dict[str, float | int | None]:
+        """Each A.4 indicator's value, bar and over-bar flag (1 or 0), and the span's awake seconds."""
+        ev = self._indicators.peek()
+        out: dict[str, float | int | None] = {
+            "indicator_span_awake_seconds": ev.span_awake_s,
+        }
+        for reading in ev.readings:
+            out[f"indicator_{reading.name}_value"] = reading.value
+            out[f"indicator_{reading.name}_bar"] = reading.bar
+            out[f"indicator_{reading.name}_over"] = 1 if reading.over else 0
+        return out
+
     async def _write_affect_summary(self) -> None:
         """Write an ``affect_welfare`` record to the JSONL sink only.
 
         CONTENT CONTRACT: the observer's own numbers (the measures it computed
         and its configured bar) plus the fixed ``record`` label; nothing is
-        copied from a source payload. The record is never published on the bus
+        copied from a source payload. The indicator keys are built from the
+        fixed indicator table. The record is never published on the bus
         because it is a welfare record, not a gray-zone event.
         """
         record = {
             "ts": datetime.now(timezone.utc).isoformat(),
             "record": _AFFECT_WELFARE_RECORD,
             **self._affect_tally.snapshot(),
+            **self._indicator_fields(),
         }
         try:
             await self._sink.write(record)
@@ -967,12 +998,14 @@ class WelfareObserver(StreamSubscriberObserver):
             ts = self._event_timestamp_seconds(event)
             if ts is not None and math.isfinite(ts):
                 self._affect_tally.sleep_started(ts)
+                self._indicators.exclude_start("sleep", ts)
             return
         if event.type != "sleep.sleep.completed":
             return
         ts = self._event_timestamp_seconds(event)
         if ts is not None and math.isfinite(ts):
             self._affect_tally.sleep_completed(ts)
+            self._indicators.exclude_end("sleep", ts)
         # Maintenance completed — clear the pending fatigue alarm.
         self._fatigue_crossed_at = None
         log.debug(
@@ -1014,6 +1047,14 @@ class WelfareObserver(StreamSubscriberObserver):
                     payload.get("drive_reset_ends"),
                     payload.get("drive_open"),
                 )
+                # Freezes are skipped by the indicators, as sleep is.
+                frozen = self._unfrozen.frozen() is True
+                if frozen and not self._indicators_frozen:
+                    self._indicators.exclude_start("freeze", ts)
+                elif not frozen and self._indicators_frozen:
+                    self._indicators.exclude_end("freeze", ts)
+                self._indicators_frozen = frozen
+                self._indicators.observe_state(ts, payload)
             return
 
     async def _handle_episodic_memory(self, entry_id: str, event: Event) -> None:
@@ -1110,7 +1151,12 @@ class WelfareObserver(StreamSubscriberObserver):
 
 
 def build_welfare_producer(
-    bus, eval_cfg, development_probe=None, *, supplementary_records=None
+    bus,
+    eval_cfg,
+    development_probe=None,
+    *,
+    indicator_params: IndicatorParams | None = None,
+    supplementary_records=None,
 ) -> tuple[WelfareObserver, AsyncJsonlSink]:
     """Construct the welfare gray-zone producer outside the evaluation sidecar.
 
@@ -1135,5 +1181,6 @@ def build_welfare_producer(
         affect_summary_interval_s=eval_cfg.welfare.affect_summary_interval_s,
         development_probe=development_probe,
         supplementary_records=supplementary_records,
+        indicator_params=indicator_params,
     )
     return observer, sink

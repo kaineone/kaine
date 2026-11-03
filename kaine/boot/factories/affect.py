@@ -15,6 +15,30 @@ from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
 
 
+def affect_indicator_parameters(section: dict[str, Any]) -> dict[str, float]:
+    """The affect module's values the A.4 welfare indicators are defined over.
+
+    ``learning_progress_span_s`` (``T_lp``), ``goal_stall_s`` (``Delta_stall``),
+    ``publish_interval_s`` (``P_Aff``) and ``[affect.regulation].set_point``
+    (``theta_E``), each taken from the section when set and otherwise from the
+    default the module itself is built with, so the indicators and the module
+    read one source.
+    """
+    import inspect
+
+    from kaine.modules.affect.module import Affect
+    from kaine.modules.affect.regulation import RegulationConfig
+
+    params = inspect.signature(Affect).parameters
+    out: dict[str, float] = {}
+    for key in ("learning_progress_span_s", "goal_stall_s", "publish_interval_s"):
+        out[key] = float(section.get(key, params[key].default))
+    regulation = section.get("regulation") or {}
+    default_set_point = RegulationConfig.__dataclass_fields__["set_point"].default
+    out["regulation_set_point"] = float(regulation.get("set_point", default_set_point))
+    return out
+
+
 def make_affect(
     bus: AsyncBus,
     section: dict[str, Any],

@@ -52,6 +52,8 @@ def _all_ok(**overrides):
         self_check_passed=True,
         encryption_satisfied=True,
         individuation_enabled=True,
+        supervisor_armed=True,
+        indicator_response_wired=True,
     )
     base.update(overrides)
     return base
@@ -73,6 +75,8 @@ def test_gate_allows_when_all_conditions_hold():
         ("self_check_passed", "self-check did not pass"),
         ("encryption_satisfied", "encryption is required but not active"),
         ("individuation_enabled", "individuation producer is not enabled"),
+        ("supervisor_armed", "module supervisor is not armed and self-tested"),
+        ("indicator_response_wired", "welfare response to the welfare indicators is not wired"),
     ],
 )
 def test_gate_refuses_when_any_condition_missing(missing, needle):
@@ -144,7 +148,8 @@ def test_evaluate_safety_net(monkeypatch):
         },
         "evaluation": {"enabled": True},
         "individuation": {"enabled": True},
-        "modules": {"language": True, "self_model": True},
+        "modules": {"language": True, "self_model": True, "affect": True, "sleep": True},
+        "supervisor": {"enabled": True},
     }
     monkeypatch.setattr(
         "kaine.cycle.research_gate.run_preflight_self_check",
@@ -159,7 +164,11 @@ def test_evaluate_safety_net(monkeypatch):
         "dry_self_check_passed": True,
         "encryption_satisfied": True,
         "individuation_enabled": True,
+        "supervisor_armed": True,
+        "indicator_response_wired": True,
     }
+    assert passing.ok
+    assert passing.reasons == {}
 
     encrypted_cfg = {
         "preservation": {

@@ -56,7 +56,7 @@ def _make_config(port: int) -> dict[str, Any]:
         "perception_feed": {"mode": "seeded", "seed": 0},
         # Condition 9 needs the individuation producer wired, which needs the language module.
         "individuation": {"enabled": True},
-        "modules": {"vision": True, "language": True},
+        "modules": {"vision": True, "language": True, "affect": True, "sleep": True},
         "vision": {"capture_width": 64, "capture_height": 48},
     }
 

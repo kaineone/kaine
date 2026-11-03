@@ -626,3 +626,31 @@ def test_notify_logs_each_channel_result(caplog):
     assert "http" in caplog.text
     assert "no gdbus" in caplog.text
     assert "timeout" in caplog.text
+
+
+
+def test_indicator_notices_name_only_indicators_from_the_fixed_table():
+    from kaine.cycle.caretaker import CaretakerConfig, build_notice, render_text
+    from kaine.lifecycle.welfare_indicators import INDICATOR_NAMES
+
+    config = CaretakerConfig()
+    for event in ("welfare_indicator_rest", "welfare_stimulus_spent", "welfare_indicators_unavailable"):
+        notice = build_notice(event, config, indicators=("boredom_deprived",))
+        assert set(notice) == set(NOTICE_FIELDS)
+        assert notice["indicators"] == ["boredom_deprived"]
+        title, message = render_text(notice)
+        assert "boredom_deprived" in message
+        # Nothing but labels, a time and the dashboard address.
+        for key, value in notice.items():
+            if key in ("indicators",):
+                assert all(v in INDICATOR_NAMES for v in value)
+    with pytest.raises(ValueError):
+        build_notice("welfare_indicator_rest", config, indicators=("I feel bored",))
+
+
+def test_the_stimulus_spent_notice_says_to_change_the_stimulus():
+    from kaine.cycle.caretaker import CaretakerConfig, build_notice, render_text
+
+    title, _ = render_text(build_notice("welfare_stimulus_spent", CaretakerConfig()))
+    assert "stimulus is spent" in title
+    assert "change the stimulus" in title

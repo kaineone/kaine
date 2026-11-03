@@ -20,6 +20,7 @@ from kaine.bus.schema import validate_event
 from kaine.cycle import control_state
 from kaine.cycle.incident_log import IncidentLog
 from kaine.cycle.preservation_monitor import (
+    WelfareIndicatorConfig,
     WelfareProtectiveMonitor,
     WelfareResponseConfig,
 )
@@ -80,6 +81,9 @@ def _cfg(**overrides) -> WelfareResponseConfig:
         repeat_threshold=2,
         warmup_s=0.0,
         warmup_ceiling_s=0.0,
+        # These tests drive the distress arm alone; the indicator arm (which
+        # would see this bus's silent affect stream) has its own tests.
+        indicators=WelfareIndicatorConfig(enabled=False),
     )
     values.update(overrides)
     return WelfareResponseConfig(**values)

@@ -17,6 +17,9 @@ from kaine.research.ignition_study.plan import voice_alignment_steps
 #: The ignition log's directory, relative to a step's working directory.
 IGNITION_LOG_DIR = "data/ignition"
 
+#: The supervisor's incident log directory, relative to a step's working directory.
+SUPERVISOR_INCIDENT_DIR = "state/cycle/incidents"
+
 
 def build_overlay(
     plan: dict[str, Any],
@@ -105,11 +108,21 @@ def build_overlay(
         "evaluation": {"enabled": False, "workspace_trajectory": False},
         "preservation": {
             "divergence_monitor": {"enabled": True},
-            "welfare_response": {"enabled": True},
+            # The research gate requires the response to the A.4 welfare
+            # indicators too (it needs the affect and sleep modules, which the
+            # base set holds, and the pause or end action).
+            "welfare_response": {"enabled": True, "indicators": {"enabled": True}},
         },
         # The research gate refuses a boot without the individuation producer,
         # so every step enables it whatever the operator config says.
         "individuation": {"enabled": True},
+        # It also refuses a boot without the module supervisor armed and
+        # self-tested; the incident log stays inside the step, where the runner
+        # counts the step's restarts.
+        "supervisor": {
+            "enabled": True,
+            "incident_log": {"enabled": True, "path": SUPERVISOR_INCIDENT_DIR},
+        },
         "world_model": {"training_enabled": True, "persist_weights": True},
         "vision": {"encoder_local_dir": encoder_dir},
         # Greedy decoding and the competitive arm in every study step (paper §5.4,

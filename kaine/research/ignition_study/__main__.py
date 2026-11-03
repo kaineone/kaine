@@ -22,12 +22,15 @@ from kaine.research.ignition_study.plan import (
     validate_plan,
 )
 from kaine.research.ignition_study.runner import (
+    WELFARE_DECISIONS,
     StudyComplete,
     StudyCritical,
     StudyError,
     StudyHalted,
     StudyLocked,
     StudyRunner,
+    StudyWelfareHold,
+    failed_hold_line,
 )
 from kaine.storage import install_data_root, resolve
 
@@ -121,7 +124,42 @@ def _cmd_run(args: argparse.Namespace) -> int:
             f"Study halted: {rec['outcome']} at {rec['line']} step {rec['step']}",
             file=sys.stderr,
         )
+        try:
+            check = StudyRunner(study_dir)
+            failed_hold = check.unanswered_failed_hold()
+            if failed_hold is not None:
+                print(
+                    failed_hold_line(
+                        failed_hold, study_dir, check.failed_welfare_hold() is not None
+                    ),
+                    file=sys.stderr,
+                )
+        except StudyError as err:
+            # The halt itself is already reported; say that its welfare hold
+            # could not be checked rather than imply there is none.
+            print(f"Welfare hold not checked: {err}", file=sys.stderr)
         return 1
+    except StudyWelfareHold as exc:
+        rec = exc.record
+        reasons = ", ".join((rec.get("welfare_hold") or {}).get("reasons") or [])
+        if str(rec.get("outcome", "")).startswith("failed"):
+            what = (
+                f"Study held for welfare review: {rec['line']} step {rec['step']} failed "
+                f"({rec['outcome']}) after the welfare net acted or an indicator crossed "
+                f"({reasons}). The step is not retried until a person answers: "
+            )
+        else:
+            what = (
+                f"Study held for welfare review after {rec['line']} step {rec['step']} "
+                f"({reasons}). The next step does not start until a person answers: "
+            )
+        print(
+            what
+            + f"python -m kaine.research.ignition_study ack-welfare --study-dir "
+            f"{study_dir} --step {rec['line']}/{rec['step']} --decision continue|stop",
+            file=sys.stderr,
+        )
+        return 4
     except StudyComplete:
         print("Study complete")
         return 0
@@ -150,6 +188,30 @@ def _cmd_status(args: argparse.Namespace) -> int:
         print(f"Cannot read study: {exc}", file=sys.stderr)
         return 2
     print(runner.status())
+    return 0
+
+
+def _cmd_ack_welfare(args: argparse.Namespace) -> int:
+    """Record the operator's answer to a welfare hold. Never edits an entity's state."""
+    study_dir = resolve(Path(args.study_dir))
+    line, sep, k_text = args.step.partition("/")
+    try:
+        k = int(k_text)
+    except ValueError:
+        k = -1
+    if not sep or not line or k < 0:
+        print("--step must be LINE/K, for example development/0", file=sys.stderr)
+        return 2
+    try:
+        runner = StudyRunner(study_dir)
+        ack = runner.acknowledge_welfare(line, k, args.decision)
+    except StudyError as exc:
+        print(f"Cannot record the answer: {exc}", file=sys.stderr)
+        return 2
+    print(
+        f"Recorded {ack['decision']} for {line} step {k} at {ack['acknowledged_at']}"
+        + ("; the line has ended and its preservations are kept" if ack["decision"] == "stop" else "")
+    )
     return 0
 
 
@@ -217,6 +279,14 @@ def _build_parser() -> argparse.ArgumentParser:
     status_p = sub.add_parser("status", help="show progress")
     status_p.add_argument("--study-dir", required=True)
 
+    ack_p = sub.add_parser(
+        "ack-welfare",
+        help="answer a welfare hold: continue to the next step, or stop the line",
+    )
+    ack_p.add_argument("--study-dir", required=True)
+    ack_p.add_argument("--step", required=True, help="the held step as LINE/K")
+    ack_p.add_argument("--decision", required=True, choices=WELFARE_DECISIONS)
+
     analyse_p = sub.add_parser(
         "analyse",
         help="analyse completed ignition viewings and write the report",
@@ -227,6 +297,7 @@ def _build_parser() -> argparse.ArgumentParser:
     legacy_aliases.add_cli_aliases(run_p)
     legacy_aliases.add_cli_aliases(status_p)
     legacy_aliases.add_cli_aliases(analyse_p)
+    legacy_aliases.add_cli_aliases(ack_p)
     return parser
 
 
@@ -249,6 +320,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_status(args)
     if args.command == "analyse":
         return _cmd_analyse(args)
+    if args.command == "ack-welfare":
+        return _cmd_ack_welfare(args)
     return 2
 
 

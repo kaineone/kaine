@@ -39,6 +39,8 @@ from kaine.cycle.caretaker_state import (
     read_start,
     write_ack,
 )
+from kaine.cycle.gate_conditions import CONDITION_NAMES, Condition
+from kaine.lifecycle.welfare_indicators import INDICATOR_NAMES
 from kaine.secrets_file import read_toml_field
 from kaine.storage import set_data_root
 
@@ -61,6 +63,16 @@ _EVENT_TITLE = {
         "the entity is NOT paused, the freeze is being retried"
     ),
     "welfare_freeze_placed": "welfare freeze now in place: the entity is paused",
+    "welfare_indicator_rest": (
+        "welfare indicator crossed: the entity is resting and is flagged for review"
+    ),
+    "welfare_indicators_unavailable": (
+        "welfare indicators unavailable: no affect state is arriving"
+    ),
+    "welfare_stimulus_spent": (
+        "welfare response fired: a welfare indicator crossed again after a rest, the "
+        "developmental stimulus is spent; change the stimulus before resuming"
+    ),
     "input_lost": "input lost",
     "stimulus_source_lost": "stimulus source lost",
     "boot_failed": "boot failed",
@@ -70,7 +82,7 @@ _EVENT_TITLE = {
 }
 
 EVENT_KINDS = tuple(_EVENT_TITLE)
-NOTICE_FIELDS = ("install_label", "time", "event", "conditions", "dashboard_url")
+NOTICE_FIELDS = ("install_label", "time", "event", "conditions", "indicators", "dashboard_url")
 
 _ALLOWED_IPV4 = (
     ipaddress.IPv4Network("127.0.0.0/8"),
@@ -263,11 +275,20 @@ def build_notice(
     config: CaretakerConfig,
     *,
     conditions: Mapping[str, bool] | None = None,
+    indicators: tuple[str, ...] | list[str] = (),
     now: datetime | None = None,
 ) -> dict:
-    """Build a content-free caretaker notice."""
+    """Build a content-free caretaker notice.
+
+    ``indicators`` names welfare indicators from the fixed indicator table; any
+    other value is refused, so a notice can never carry entity content.
+    """
     if event not in EVENT_KINDS:
         raise ValueError(f"unknown caretaker event: {event!r}")
+    names = tuple(indicators or ())
+    for name in names:
+        if name not in INDICATOR_NAMES:
+            raise ValueError(f"unknown welfare indicator in a notice: {name!r}")
 
     if now is None:
         now = datetime.now(timezone.utc)
@@ -276,6 +297,7 @@ def build_notice(
         "time": now.isoformat(),
         "event": event,
         "conditions": dict(conditions) if conditions is not None else None,
+        "indicators": list(names) if names else None,
         "dashboard_url": config.dashboard_url,
     }
 
@@ -292,6 +314,9 @@ def render_text(notice: dict) -> tuple[str, str]:
         failed = [name for name, ok in conditions.items() if not ok]
         if failed:
             parts.append("Failed gate conditions: " + ", ".join(failed))
+    indicators = notice.get("indicators")
+    if isinstance(indicators, list) and indicators:
+        parts.append("Welfare indicators: " + ", ".join(str(i) for i in indicators))
     parts.append(f"Dashboard: {notice['dashboard_url']}")
     return title, "\n".join(parts)
 
@@ -562,12 +587,7 @@ def check_caretaker_condition(
     notify_fn=notify,
     secrets_path: Path = Path("config/secrets.toml"),
 ):
-    """Evaluate unattended gate condition 7: the caretaker must be told.
-
-    This function imports ``Condition`` and ``CONDITION_NAMES`` from
-    ``kaine.cycle.unattended_gate`` locally to avoid an import cycle.
-    """
-    from kaine.cycle.unattended_gate import CONDITION_NAMES, Condition
+    """Evaluate unattended gate condition 7: the caretaker must be told."""
 
     if caretaker_section is None:
         caretaker_section = {}

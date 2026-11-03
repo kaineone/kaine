@@ -15,3 +15,8 @@ arm = "competitive"
 enabled = true
 # head_gain: head and blend, plus gain moves on each accessed broadcast.
 arm = "head_gain"
+
+[supervisor]
+# A research run has no person present, so the research gate requires the
+# module supervisor armed and self-tested.
+enabled = true

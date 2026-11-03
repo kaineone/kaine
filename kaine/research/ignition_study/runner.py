@@ -7,6 +7,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import math
 import os
 import shutil
 import subprocess
@@ -23,7 +24,11 @@ from kaine.bus.config import load_bus_config, resolve_redis_auth
 from kaine.bus.errors import BusConfigError
 from kaine.cycle.control_state import read_control
 from kaine.cycle.preserve_watch import read_request, read_result
-from kaine.research.ignition_study.overlay import IGNITION_LOG_DIR, build_overlay
+from kaine.research.ignition_study.overlay import (
+    IGNITION_LOG_DIR,
+    SUPERVISOR_INCIDENT_DIR,
+    build_overlay,
+)
 from kaine.research.ignition_study.plan import (
     LOCK_FILE,
     STEPS_FILE,
@@ -69,6 +74,42 @@ MATURATION_REFERENCE_FILE = ".study_maturation_reference.json"
 #: for the scheduler's blocked retry (300 s) and a restart of an attempt cut by a sleep.
 MATURATION_REFERENCE_WAIT_SECONDS = 7200.0
 
+#: The cycle's welfare exposure record, relative to a step's working directory.
+EXPOSURE_FILE = "state/welfare/exposure.json"
+
+#: The operator's answers to welfare holds, in the study directory.
+WELFARE_ACKS_FILE = "welfare_acks.jsonl"
+
+#: The decisions ``ack-welfare`` accepts.
+WELFARE_DECISIONS = ("continue", "stop")
+
+#: Why the runner holds after a step (content-free labels).
+HOLD_REASONS = (
+    "missing",
+    "unreadable",
+    "other_run",
+    "other_boot",
+    "incomplete_coverage",
+    "indicator_crossing",
+    "protective_response",
+)
+
+#: Hold reasons that show the welfare net acted or an indicator crossed during
+#: the boot. A failed step carrying one is not retried until a person answers
+#: it, because the review must happen before the entity is booted again. The
+#: other reasons (a record missing after a crash, for example) are shown in
+#: ``status`` but do not block a retry.
+REVIEW_HOLD_REASONS = ("indicator_crossing", "protective_response")
+
+#: A step recorded while its child was still running (a failed timeout or
+#: disk-low preservation). Its child writes the exposure record only when it
+#: exits, so the runner reads the record later, before anything boots again.
+CRITICAL_OUTCOME = "failed:critical"
+
+#: Where the runner keeps a copy of a step's exposure record before a boot in
+#: the same step directory deletes it (relative to the step directory).
+EXPOSURE_ARCHIVE_DIR = "welfare_exposure_archive"
+
 #: ``maturation_reference`` values in a development step record.
 REFERENCE_COMPLETE = "complete"
 REFERENCE_MISSING = "missing"
@@ -88,6 +129,17 @@ class StudyHalted(Exception):
 
 class StudyCritical(Exception):
     """Raised when a timeout preservation fails and the operator must decide."""
+
+
+class StudyWelfareHold(Exception):
+    """Raised when a completed step's welfare exposure holds the run for review.
+
+    The next step does not start until the operator answers with
+    ``ack-welfare``.
+    """
+
+    def __init__(self, record: dict[str, Any]) -> None:
+        self.record = record
 
 
 class StudyLocked(Exception):
@@ -243,6 +295,25 @@ class StudyRunner:
         ):
             self.last_failed = None
 
+        # The operator's answers to welfare holds.
+        self.welfare_acks: list[dict[str, Any]] = []
+        acks_path = self.study_dir / WELFARE_ACKS_FILE
+        if acks_path.exists():
+            for raw in acks_path.read_text().splitlines():
+                if not raw.strip():
+                    continue
+                try:
+                    ack = json.loads(raw)
+                except json.JSONDecodeError:
+                    log.warning("Ignoring malformed %s line", WELFARE_ACKS_FILE)
+                    continue
+                if isinstance(ack, dict) and ack.get("decision") in WELFARE_DECISIONS:
+                    self.welfare_acks.append(ack)
+        self.stopped_lines: set[str] = set()
+        for ack in self.welfare_acks:
+            if ack.get("decision") == "stop":
+                self.stopped_lines |= _lines_ended_by(ack.get("line"), ack.get("step"))
+
     def _step_sequence(self) -> list[tuple[str, int]]:
         k = len(self.plan["order"])
         seq: list[tuple[str, int]] = [("development", 0), ("branch", 0), ("repeat", 0)]
@@ -261,6 +332,17 @@ class StudyRunner:
 
         if retry_failed and self.last_failed:
             rec = self.last_failed
+            if rec.get("line") in self.stopped_lines:
+                raise StudyError(
+                    f"{rec.get('line')} step {rec.get('step')} is not retried: its line "
+                    f"was stopped after a welfare review"
+                )
+            # A critical step's child may have crossed after the runner gave up
+            # on it: read its exposure record before the retry boots again.
+            self._resolve_critical_exposure()
+            held = self.failed_welfare_hold() or self.pending_welfare_hold()
+            if held is not None:
+                raise StudyWelfareHold(held)
             return {
                 "line": rec["line"],
                 "k": rec["step"],
@@ -268,12 +350,21 @@ class StudyRunner:
                 "is_retry": True,
             }
 
-        if self.last_failed:
+        if self.last_failed and self.last_failed.get("line") not in self.stopped_lines:
+            # A failed step halts the study until it is retried, unless a person
+            # stopped its line after a welfare review.
             raise StudyHalted(self.last_failed)
+
+        held = self.pending_welfare_hold()
+        if held is not None:
+            raise StudyWelfareHold(held)
 
         seed = self.line_bundles.get(("development", 0))
         for line, k in sequence:
             if (line, k) in self.completed_steps:
+                continue
+            if line in self.stopped_lines:
+                # The operator ended this line after a welfare hold.
                 continue
 
             if line == "development":
@@ -564,7 +655,175 @@ class StudyRunner:
             "adopted": True,
         }
 
+    def _apply_exposure(self, record: dict[str, Any]) -> None:
+        """Copy the step's bound exposure record into ``record``, or mark the hold.
+
+        The record is accepted only when its ``run_id`` is the step's and its
+        ``boot_started_at`` is not before the step's start. The run holds when
+        the record is missing, unreadable, bound to another run or boot,
+        incomplete in coverage, or shows any indicator crossing.
+        """
+        line_dir = self._line_dir(record["line"], record["step"])
+        exposure, reasons = read_step_exposure(
+            line_dir, run_id=record.get("run_id"), since_iso=record.get("started_at")
+        )
+        if exposure is not None:
+            record["welfare_exposure"] = exposure
+        if reasons:
+            record["welfare_hold"] = {"reasons": reasons}
+
+    def pending_welfare_hold(self) -> dict[str, Any] | None:
+        """The latest completed step record whose welfare hold is unanswered."""
+        for rec in reversed(self.steps):
+            if rec.get("outcome") != "complete":
+                continue
+            if not isinstance(rec.get("welfare_hold"), dict):
+                continue
+            if self._welfare_ack_for(rec) is not None:
+                continue
+            return rec
+        return None
+
+    def critical_exposure_unread(self) -> bool:
+        """True while the last failed step is a critical one whose exposure
+        record the runner has not read yet."""
+        rec = self.last_failed
+        return (
+            rec is not None
+            and rec.get("outcome") == CRITICAL_OUTCOME
+            and not rec.get("exposure_read")
+        )
+
+    def _resolve_critical_exposure(self) -> None:
+        """Read a critical step's exposure record once its child has exited.
+
+        The critical record was written while the child still ran, so it holds
+        no exposure. Once no cycle of the study runs, the child's record is
+        read and bound to the critical record's run and start, and the step is
+        recorded again with it (same line, step and ``ended_at``, so an answer
+        to the hold matches). Any hold reason, a missing or unreadable record
+        included, then blocks the retry until a person answers it.
+        """
+        if not self.critical_exposure_unread():
+            return
+        self._refuse_if_cycle_running()
+        resolved = dict(self.last_failed)
+        resolved.pop("welfare_hold", None)
+        resolved.pop("welfare_exposure", None)
+        self._archive_exposure(self._line_dir(resolved["line"], resolved["step"]))
+        self._apply_exposure(resolved)
+        resolved["exposure_read"] = True
+        self._append_step(resolved)
+        self.last_failed = resolved
+
+    def _archive_exposure(self, line_dir: Path) -> None:
+        """Copy the step directory's exposure record aside before a boot deletes it.
+
+        Every boot deletes ``state/welfare/exposure.json``; the copy keeps a
+        record the runner may not have bound yet. A copy that cannot be made
+        refuses the boot (fail closed: a record must never be lost unread).
+        """
+        source = Path(line_dir) / EXPOSURE_FILE
+        if not source.exists():
+            return
+        archive = Path(line_dir) / EXPOSURE_ARCHIVE_DIR
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+        try:
+            archive.mkdir(parents=True, exist_ok=True)
+            target = archive / f"exposure-{stamp}.json"
+            tmp = archive / f".exposure-{stamp}.tmp"
+            tmp.write_bytes(source.read_bytes())
+            os.chmod(tmp, 0o600)
+            os.replace(tmp, target)
+        except OSError as exc:
+            raise StudyError(
+                f"cannot keep a copy of {source} before the next boot deletes it: {exc}"
+            ) from exc
+
+    def failed_welfare_hold(self) -> dict[str, Any] | None:
+        """The failed step record awaiting a retry whose welfare hold must be
+        answered first: one naming a reason in ``REVIEW_HOLD_REASONS``, or a
+        critical step with any hold reason, with no answer recorded for it."""
+        rec = self.last_failed
+        if rec is None or self._welfare_ack_for(rec) is not None:
+            return None
+        hold = rec.get("welfare_hold")
+        if not isinstance(hold, dict):
+            return None
+        reasons = hold.get("reasons")
+        if not isinstance(reasons, list) or not reasons:
+            # A hold whose reasons cannot be read cannot show that nothing happened.
+            return rec
+        if rec.get("outcome") == CRITICAL_OUTCOME:
+            # Its child ran on after the runner gave up on it: a record that is
+            # missing or cannot be bound cannot show that nothing happened.
+            return rec
+        if any(r in REVIEW_HOLD_REASONS or r not in HOLD_REASONS for r in reasons):
+            return rec
+        return None
+
+    def unanswered_failed_hold(self) -> dict[str, Any] | None:
+        """The failed step record awaiting a retry with any unanswered welfare
+        hold, including the status-only ones."""
+        rec = self.last_failed
+        if rec is None or not isinstance(rec.get("welfare_hold"), dict):
+            return None
+        if self._welfare_ack_for(rec) is not None:
+            return None
+        return rec
+
+    def _welfare_ack_for(self, rec: dict[str, Any]) -> dict[str, Any] | None:
+        for ack in self.welfare_acks:
+            if (
+                ack.get("line") == rec.get("line")
+                and ack.get("step") == rec.get("step")
+                and ack.get("step_ended_at") == rec.get("ended_at")
+            ):
+                return ack
+        return None
+
+    def acknowledge_welfare(self, line: str, k: int, decision: str) -> dict[str, Any]:
+        """Record the operator's answer to a welfare hold; never touches a step's state.
+
+        ``continue`` releases the hold; ``stop`` ends the step's line (and any
+        line that continues its entity) and leaves every preservation in place.
+        """
+        if decision not in WELFARE_DECISIONS:
+            raise StudyError(f"decision must be one of {', '.join(WELFARE_DECISIONS)}")
+        self._resolve_critical_exposure()
+        candidates = [
+            rec
+            for rec in (self.pending_welfare_hold(), self.unanswered_failed_hold())
+            if rec is not None
+        ]
+        held = next(
+            (rec for rec in candidates if rec.get("line") == line and rec.get("step") == k),
+            None,
+        )
+        if held is None:
+            pending = (
+                ", ".join(f"{rec['line']}/{rec['step']}" for rec in candidates) or "none"
+            )
+            raise StudyError(
+                f"no welfare hold is pending for {line}/{k} (pending: {pending})"
+            )
+        ack = {
+            "line": line,
+            "step": k,
+            "decision": decision,
+            "acknowledged_at": _utc_iso(),
+            "step_ended_at": held.get("ended_at"),
+            "reasons": list((held.get("welfare_hold") or {}).get("reasons") or []),
+        }
+        with open(self.study_dir / WELFARE_ACKS_FILE, "a") as f:
+            f.write(json.dumps(ack) + "\n")
+        self.welfare_acks.append(ack)
+        if decision == "stop":
+            self.stopped_lines |= _lines_ended_by(line, k)
+        return ack
+
     def _finish_record(self, record: dict[str, Any]) -> dict[str, Any]:
+        self._apply_exposure(record)
         self._append_step(record)
         line, k, outcome = record["line"], record["step"], record["outcome"]
         if outcome == "complete":
@@ -590,6 +849,8 @@ class StudyRunner:
         # Nothing is flushed, adopted or started while a cycle the study
         # started may still hold a study database or a step directory.
         self._refuse_if_cycle_running()
+        # The boot deletes the directory's exposure record; keep a copy first.
+        self._archive_exposure(line_dir)
 
         overlay, modules_set, models_dir = build_overlay(
             self.plan,
@@ -1026,6 +1287,13 @@ class StudyRunner:
         # lifted by a named override is recorded and does not change the outcome.
         # Only a freeze noticed on the running child counts: a control file left
         # by an earlier child must not rename the failure of one that never booted.
+        # A supervisor escalation of this boot names the outcome: the supervisor
+        # preserved the entity, shut it down and wrote escalation.json. The cycle
+        # clears the file at every boot and the record must be dated inside this
+        # step, so a previous attempt's escalation is never read as this one's.
+        supervisor_escalation = read_step_escalation(line_dir, since_iso=started_at)
+        if supervisor_escalation is not None:
+            outcome = "failed:supervisor"
         welfare_held = (
             self._welfare_freeze_entry(line_dir) if welfare_freeze is not None else None
         )
@@ -1064,6 +1332,19 @@ class StudyRunner:
 
         if welfare_freeze is not None:
             record["welfare_freeze"] = dict(welfare_freeze, held_at_end=welfare_held is not None)
+
+        if supervisor_escalation is not None:
+            record["supervisor_escalation"] = supervisor_escalation
+
+        if outcome == "complete":
+            # A module restart is the architecture's own fault handling and does
+            # not fail the step; the count is recorded so the analysis lists it.
+            restarts, unreadable = count_supervisor_restarts(
+                line_dir / SUPERVISOR_INCIDENT_DIR, since_iso=started_at
+            )
+            record["supervisor_restarts"] = restarts
+            if unreadable:
+                record["supervisor_restarts_unreadable_lines"] = unreadable
 
         if disk_low_requested:
             record["disk_low_preserved"] = bool(disk_low_preserved)
@@ -1289,6 +1570,28 @@ class StudyRunner:
             lines.append(
                 f"Halted: {last['outcome']} at {last['line']} step {last['step']}"
             )
+            escalation = last.get("supervisor_escalation")
+            if last.get("outcome") == "failed:supervisor" and isinstance(escalation, dict):
+                if escalation.get("unreadable"):
+                    lines.append(
+                        "Supervisor escalation: the step's escalation record exists but "
+                        "cannot be read. Check the step's state/cycle/escalation.json and "
+                        "the supervisor's incident log before retrying the step."
+                    )
+                elif escalation.get("module") == "welfare_monitor":
+                    lines.append(
+                        f"Welfare monitor lost: the welfare monitor stopped watching, so "
+                        f"the entity was preserved first (snapshot "
+                        f"{escalation.get('snapshot_id')}) and shut down. Check the cycle "
+                        f"log for the welfare monitor's errors, then retry the step."
+                    )
+                else:
+                    lines.append(
+                        f"Supervisor escalation: module {escalation.get('module')} after "
+                        f"{escalation.get('attempts')} restart attempt(s); the entity was "
+                        f"preserved first (snapshot {escalation.get('snapshot_id')}) and shut "
+                        f"down. Check the host and the module, then retry the step."
+                    )
             freeze = last.get("welfare_freeze")
             if last.get("outcome") == "failed:welfare" and isinstance(freeze, dict):
                 lines.append(
@@ -1311,17 +1614,69 @@ class StudyRunner:
                 f"welfare safety net since {live.get('since')} ({live.get('reason')}); "
                 f"it waits for a person."
             )
+        held = self.pending_welfare_hold()
+        if held is not None:
+            reasons = ", ".join((held.get("welfare_hold") or {}).get("reasons") or [])
+            lines.append(
+                f"Welfare hold: {held['line']} step {held['step']} ({reasons}); the next "
+                f"step does not start until a person answers: python -m "
+                f"kaine.research.ignition_study ack-welfare --study-dir {self.study_dir} "
+                f"--step {held['line']}/{held['step']} --decision continue|stop"
+            )
+        if self.critical_exposure_unread():
+            rec = self.last_failed
+            lines.append(
+                f"Welfare exposure unread: critical {rec['line']} step {rec['step']}; its "
+                f"cycle may still run and writes its exposure record when it exits. Stop "
+                f"it; --retry-failed then reads the record first and holds for review "
+                f"when it is missing or shows the welfare net acting."
+            )
+        failed_hold = self.unanswered_failed_hold()
+        if failed_hold is not None:
+            lines.append(failed_hold_line(failed_hold, self.study_dir, self.failed_welfare_hold() is not None))
+        if self.stopped_lines:
+            lines.append(
+                "Stopped after a welfare review: " + ", ".join(sorted(self.stopped_lines))
+            )
         try:
             nxt = self._next_step()
             lines.append(f"Next: {nxt['line']} step {nxt['k']}")
+        except StudyWelfareHold:
+            lines.append("Next: held for welfare review")
         except StudyComplete:
             lines.append("Next: none")
         except StudyHalted:
-            lines.append(
-                f"Next: retry failed step with --retry-failed "
-                f"({self.last_failed['line']} step {self.last_failed['step']})"
-            )
+            if self.failed_welfare_hold() is not None:
+                lines.append(
+                    f"Next: answer the welfare hold, then retry the failed step with "
+                    f"--retry-failed ({self.last_failed['line']} step "
+                    f"{self.last_failed['step']})"
+                )
+            else:
+                lines.append(
+                    f"Next: retry failed step with --retry-failed "
+                    f"({self.last_failed['line']} step {self.last_failed['step']})"
+                )
         return "\n".join(lines)
+
+
+def failed_hold_line(rec: dict[str, Any], study_dir: Path, blocks_retry: bool) -> str:
+    """The operator-facing line for a failed step's unanswered welfare hold."""
+    reasons = ", ".join(str(r) for r in ((rec.get("welfare_hold") or {}).get("reasons") or []))
+    command = (
+        f"python -m kaine.research.ignition_study ack-welfare --study-dir {study_dir} "
+        f"--step {rec['line']}/{rec['step']} --decision continue|stop"
+    )
+    if blocks_retry:
+        return (
+            f"Welfare hold: failed {rec['line']} step {rec['step']} ({reasons}); the welfare "
+            f"net acted or an indicator crossed during this boot, so --retry-failed "
+            f"refuses until a person answers: {command}"
+        )
+    return (
+        f"Welfare hold: failed {rec['line']} step {rec['step']} ({reasons}); review "
+        f"before retrying (a retry is not blocked), or answer: {command}"
+    )
 
 
 def _individuation_enabled(repo_root: Path, overlay: Mapping[str, Any]) -> bool:
@@ -1469,6 +1824,221 @@ def _cycle_process_alive(pid: int) -> bool:
 
 def _utc_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _lines_ended_by(line: Any, step: Any) -> set[str]:
+    """The lines a ``stop`` on (line, step) ends: the line, and any line that
+    continues its entity (every line starts from the developmental seed; the
+    accumulate line continues branch 0)."""
+    if line == "development":
+        return {"development", "branch", "repeat", "accumulate"}
+    ended = {str(line)}
+    if line == "branch" and step == 0:
+        ended.add("accumulate")
+    return ended
+
+
+def _is_count(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+def _is_number(value: Any) -> bool:
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(float(value))
+    )
+
+
+def read_step_exposure(
+    line_dir: Path, *, run_id: str | None, since_iso: str | None
+) -> tuple[dict[str, Any] | None, list[str]]:
+    """Read and check a step's exposure record.
+
+    Returns ``(record or None, hold reasons)``. The record is returned only
+    when it is bound to this step's run and boot; the reasons name every
+    cause to hold (fail closed: a missing, unreadable or unbound record holds).
+    """
+    path = Path(line_dir) / EXPOSURE_FILE
+    if not path.exists():
+        return None, ["missing"]
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        return None, ["unreadable"]
+    if not isinstance(data, dict) or data.get("schema") != 1:
+        return None, ["unreadable"]
+    if not isinstance(run_id, str) or not run_id or data.get("run_id") != run_id:
+        return None, ["other_run"]
+    booted = _parse_iso(data.get("boot_started_at"))
+    if booted is None or not _not_before(booted, since_iso) or _parse_iso(since_iso) is None:
+        return None, ["other_boot"]
+    reasons: list[str] = []
+    monitor = data.get("monitor")
+    covered = data.get("covered_awake_seconds")
+    restarts = data.get("producer_restarts")
+    interval = data.get("affect_summary_interval_s")
+    # The tally counts wall seconds; the monitor's spans count awake entity
+    # seconds, which run ahead of wall time when the entity is dilated. The
+    # comparison uses the monitor's count converted to wall seconds, so like
+    # is compared with like at every time scale.
+    if (
+        not isinstance(monitor, dict)
+        or not _is_number(monitor.get("awake_seconds"))
+        or not _is_number(monitor.get("awake_wall_seconds"))
+        # An indicator poll that raised counted nothing for its interval.
+        or not _is_count(monitor.get("indicator_poll_failures"))
+        or monitor["indicator_poll_failures"] > 0
+    ):
+        reasons.append("incomplete_coverage")
+    elif (
+        not _is_count(restarts)
+        or restarts > 0
+        or not _is_number(covered)
+        or not _is_number(interval)
+        or float(covered) < float(monitor["awake_wall_seconds"]) - float(interval)
+    ):
+        reasons.append("incomplete_coverage")
+    if isinstance(monitor, dict):
+        crossed = False
+        for key in ("rests_requested", "freezes_placed"):
+            value = monitor.get(key)
+            # A count that is not a count cannot show that nothing crossed.
+            if not _is_count(value) or value > 0:
+                crossed = True
+        indicators = monitor.get("indicators")
+        if not isinstance(indicators, dict) or not indicators:
+            if "incomplete_coverage" not in reasons:
+                reasons.append("incomplete_coverage")
+        else:
+            for entry in indicators.values():
+                if not isinstance(entry, dict):
+                    crossed = True
+                    continue
+                for key in ("crossings", "rests_requested", "freezes_placed"):
+                    value = entry.get(key)
+                    if not _is_count(value) or value > 0:
+                        crossed = True
+        if crossed:
+            reasons.append("indicator_crossing")
+        # Every protective response the net took, by reason label. With
+        # action "end" an unavailable-indicators or distress response places
+        # no freeze and requests no rest, so only this count shows it. A value
+        # that is not a dict of counts cannot show that nothing happened.
+        responses = monitor.get("responses")
+        if not isinstance(responses, dict) or responses:
+            reasons.append("protective_response")
+    return data, reasons
+
+
+#: A step's escalation record, relative to its working directory.
+ESCALATION_FILE = "state/cycle/escalation.json"
+
+#: Slack for comparing a record's timestamp with the step's start (clock tick).
+_STEP_TIME_SLACK_S = 2.0
+
+
+def _parse_iso(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def _not_before(value: datetime, since_iso: str | None) -> bool:
+    """True when ``value`` is not earlier than the step's start (with slack)."""
+    since = _parse_iso(since_iso)
+    if since is None:
+        return True
+    return (value - since).total_seconds() >= -_STEP_TIME_SLACK_S
+
+
+def read_step_escalation(line_dir: Path, *, since_iso: str | None) -> dict[str, Any] | None:
+    """The content-free fields of this boot's supervisor escalation, or ``None``.
+
+    The cycle clears ``escalation.json`` at every boot and the supervisor writes
+    it only when it escalates, so a record with ``escalated`` true and an
+    ``escalated_at`` inside the step is this boot's. A record dated before the
+    step belongs to an earlier attempt and is ignored. A file that exists but
+    cannot be read, or an escalation without a readable time, counts as this
+    boot's (fail closed: the run halts for the operator). The free-text message
+    is left out.
+    """
+    path = Path(line_dir) / ESCALATION_FILE
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        return {"unreadable": True}
+    if not isinstance(data, dict):
+        return {"unreadable": True}
+    if data.get("escalated") is not True:
+        return None
+    escalated_at = _parse_iso(data.get("escalated_at"))
+    if escalated_at is not None and not _not_before(escalated_at, since_iso):
+        return None
+    attempts = data.get("attempts")
+    module = data.get("module")
+    snapshot_id = data.get("snapshot_id")
+    return {
+        "module": module if isinstance(module, str) else None,
+        "attempts": attempts if isinstance(attempts, int) and not isinstance(attempts, bool) else None,
+        "snapshot_id": snapshot_id if isinstance(snapshot_id, str) else None,
+        "escalated_at": data.get("escalated_at") if escalated_at is not None else None,
+    }
+
+
+def count_supervisor_restarts(
+    incident_dir: Path, *, since_iso: str | None
+) -> tuple[int | None, int]:
+    """Count the supervisor's ``restart`` transitions in a step's incident log.
+
+    Returns ``(count, unreadable_lines)``. Only records stamped at or after the
+    step's start count, because the incident log is never cleared and keeps an
+    earlier attempt's records. Lines are read through the process's state
+    encryptor: a line it cannot decrypt or parse makes the count unknown
+    (``None``), never a silent zero. The analysis, which installs the operator's
+    state key, counts again for a step whose count is unknown.
+    """
+    from kaine.security.crypto import get_state_encryptor
+
+    incident_dir = Path(incident_dir)
+    if not incident_dir.is_dir():
+        return 0, 0
+    encryptor = get_state_encryptor()
+    restarts = 0
+    unreadable = 0
+    for path in sorted(incident_dir.glob("incidents-*.jsonl")):
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except (OSError, UnicodeDecodeError):
+            unreadable += 1
+            continue
+        for raw in lines:
+            if not raw.strip():
+                continue
+            try:
+                record = json.loads(encryptor.decrypt_text(raw))
+            except Exception:
+                unreadable += 1
+                continue
+            if not isinstance(record, dict) or record.get("transition") != "restart":
+                continue
+            ts = _parse_iso(record.get("ts"))
+            if ts is None:
+                unreadable += 1
+                continue
+            if _not_before(ts, since_iso):
+                restarts += 1
+    if unreadable:
+        return None, unreadable
+    return restarts, 0
 
 
 def _check_world_model_manifest(bundle_path: str) -> tuple[str | None, bool | None]:

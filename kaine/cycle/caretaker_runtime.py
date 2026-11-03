@@ -105,9 +105,11 @@ class CaretakerNotifier:
             await self.send_event("reminder")
             self._deadline += self._config.reminder_interval_s
 
-    async def send_event(self, event: str) -> list[ChannelResult]:
+    async def send_event(
+        self, event: str, *, indicators: tuple[str, ...] = ()
+    ) -> list[ChannelResult]:
         try:
-            notice = build_notice(event, self._config)
+            notice = build_notice(event, self._config, indicators=indicators)
             results = await asyncio.to_thread(
                 self._notify_fn,
                 self._config,

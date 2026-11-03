@@ -88,3 +88,4 @@ class BootContext:
     utterance_outcome: Any = None  # set by _phase_watchers
     checkpointer: Any = None  # set by _phase_checkpoint
     checkpoint_task: Any = None  # set by _phase_checkpoint
+    welfare_supervision: Any = None  # set by _run_until_stopped; the welfare producer's restarts

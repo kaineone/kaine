@@ -15,3 +15,8 @@ arm = "competitive"
 enabled = true
 # head_only: top-down prediction head and blend only; gains stay at one.
 arm = "head_only"
+
+[supervisor]
+# A research run has no person present, so the research gate requires the
+# module supervisor armed and self-tested.
+enabled = true

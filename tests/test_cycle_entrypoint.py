@@ -102,6 +102,8 @@ def test_research_gate_evaluated_once_and_threaded_to_boot(monkeypatch):
         logging_active=True,
         self_check_passed=True,
         encryption_satisfied=True,
+        supervisor_armed=True,
+        indicator_response_wired=True,
     )
 
     def _counting_eval(config):
@@ -134,6 +136,8 @@ def test_research_gate_evaluated_once_and_threaded_to_boot(monkeypatch):
         "dry_self_check_passed": True,
         "encryption_satisfied": True,
         "individuation_enabled": True,
+        "supervisor_armed": True,
+        "indicator_response_wired": True,
     }
 
 
@@ -227,9 +231,10 @@ def test_unattended_gate_passes_to_boot_in_process(monkeypatch):
         logging_active=True,
         self_check_passed=True,
         encryption_satisfied=True,
+        supervisor_armed=True,
+        indicator_response_wired=True,
     )
     built = {
-        6: Condition(6, CONDITION_NAMES[6], True),
         7: Condition(7, CONDITION_NAMES[7], True),
         8: Condition(8, CONDITION_NAMES[8], True),
     }
@@ -282,6 +287,8 @@ def test_unattended_refusal_ignores_overrides(monkeypatch):
         logging_active=True,
         self_check_passed=True,
         encryption_satisfied=True,
+        supervisor_armed=True,
+        indicator_response_wired=True,
     )
     failing = evaluate_unattended_gate(net)
 
@@ -504,9 +511,10 @@ def test_unattended_plugin_error_sends_boot_failed_notice_and_returns_1(monkeypa
         logging_active=True,
         self_check_passed=True,
         encryption_satisfied=True,
+        supervisor_armed=True,
+        indicator_response_wired=True,
     )
     built = {
-        6: Condition(6, CONDITION_NAMES[6], True),
         7: Condition(7, CONDITION_NAMES[7], True),
         8: Condition(8, CONDITION_NAMES[8], True),
     }
@@ -606,6 +614,8 @@ def test_cli_profile_config_is_the_one_booted(monkeypatch):
         logging_active=True,
         self_check_passed=True,
         encryption_satisfied=True,
+        supervisor_armed=True,
+        indicator_response_wired=True,
     )
 
     def _counting_eval(config):

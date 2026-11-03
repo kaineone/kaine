@@ -18,17 +18,15 @@ import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional
+from typing import Any, Optional
 
 from kaine.cycle import control_state, escalation_state
+from kaine.cycle.gate_conditions import CONDITION_NAMES, Condition
 from kaine.cycle.supervisor import Supervisor, SupervisorConfig
 from kaine.lifecycle.manager import ForkManager
 from kaine.modules.base import BaseModule
 from kaine.modules.registry import ModuleRegistry
 from kaine.storage import resolve
-
-if TYPE_CHECKING:
-    from kaine.cycle.unattended_gate import Condition
 
 log = logging.getLogger(__name__)
 
@@ -267,7 +265,6 @@ async def run_supervisor_selftest(
 def check_supervisor_condition(
     supervisor_section: dict, *, timeout_s: float | None = None
 ) -> "Condition":
-    from kaine.cycle.unattended_gate import CONDITION_NAMES, Condition
 
     try:
         cfg = SupervisorConfig.from_section(supervisor_section)

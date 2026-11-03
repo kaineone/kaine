@@ -26,3 +26,8 @@ tone_rule = "error_ratio"
 # runs used.
 role = "test"
 settings_record = "config/studies/workspace_mediation_settings.json"
+
+[supervisor]
+# A research run has no person present, so the research gate requires the
+# module supervisor armed and self-tested.
+enabled = true

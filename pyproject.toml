@@ -392,6 +392,9 @@ source_modules = [
     "kaine.text_embedding",
     "kaine.text_embedding_numpy",
     "kaine.lifecycle.welfare_signal",
+    # The A.4 welfare indicator evaluator: the cycle-layer welfare monitor and
+    # the welfare observer each run their own instance.
+    "kaine.lifecycle.welfare_indicators",
     # The housekeeping pressure holder (paper A.5), read by interoception and set by sleep and the awake floor.
     "kaine.housekeeping_pressure",
     # Cross-cutting stdlib-only primitives shared by core, the modules, and the

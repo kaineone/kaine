@@ -259,7 +259,9 @@ class MaturationGateRunner:
                         payload = event.payload if isinstance(event.payload, dict) else {}
                         if (
                             payload.get("aborted") is True
-                            and payload.get("trigger") == "state_cycle"
+                            # A welfare rest in the developmental phase is the state
+                            # cycle's rest brought forward and resumes the same way.
+                            and payload.get("trigger") in ("state_cycle", "welfare_rest")
                             and payload.get("reason") == "CancelledError"
                             and payload.get("resumable") is True
                         ):

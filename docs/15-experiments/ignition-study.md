@@ -27,7 +27,7 @@ python tools/build_playlist_manifest.py --dir <films> --out <programme.toml>
 
 The study records the manifest's sha256, so changing the file voids the study.
 
-Research mode and unattended mode are separate supervision modes, and selecting both is a configuration error. On every step the study overlay enables the welfare safety net (`[preservation.divergence_monitor].enabled` and `[preservation.welfare_response].enabled`), the individuation producer (`[individuation].enabled`, which the research gate requires and which needs the language module in the base set), the research event log, external utterance capture and the ignition log. It also forces `[research_event_log.dashboard_record].enabled = false`, `[research_event_log.raw_archive].enabled = false` and `[evaluation].workspace_trajectory = false`, overriding the operator configuration so that those records stay off.
+Research mode and unattended mode are separate supervision modes, and selecting both is a configuration error. On every step the study overlay enables the welfare safety net (`[preservation.divergence_monitor].enabled` and `[preservation.welfare_response].enabled`), the individuation producer (`[individuation].enabled`, which the research gate requires and which needs the language module in the base set), the module supervisor (`[supervisor].enabled`, which the research gate also requires, with `[supervisor.incident_log]` enabled at `state/cycle/incidents` inside the step directory), the research event log, external utterance capture and the ignition log. It also forces `[research_event_log.dashboard_record].enabled = false`, `[research_event_log.raw_archive].enabled = false` and `[evaluation].workspace_trajectory = false`, overriding the operator configuration so that those records stay off.
 
 The operator supplies the Redis password and the state key. Set `KAINE_REDIS_PASSWORD` or `config/secrets.toml [redis].password`; the runner refuses to start without one. `[preservation].require_encryption` is true in the shipped configuration, so research-mode boots also need state encryption: set `KAINE_STATE_KEY` or a keyring entry named `kaine:state_key`. The runner never sends `SIGKILL`. Apart from an unviable developmental phase (described below), it stops an entity only after the entity's state has been preserved. See [Preservation and the safety net](../11-preservation.md).
 
@@ -110,11 +110,31 @@ Each study child builds the caretaker from `[caretaker]` in the operator configu
 
 Every poll the runner reads the child's `state/cycle/control.json`. When the welfare safety net holds a freeze, the runner logs it at critical level, keeps `.study_welfare_freeze.json` in the step directory while the freeze is held, and shows it in `status`. The entity was preserved before it was frozen. The runner never lifts the freeze and does not end the step early: a person answers it by overriding the welfare freeze by name (see [Operation](../06-operation/README.md)). A step that ends while the welfare freeze is still held is recorded as `failed:welfare`, with the freeze's start and reason under `welfare_freeze` and `held_at_end` true, in place of the `failed:timeout` it would otherwise get. A freeze noticed on the running child and lifted before the step ends is recorded under `welfare_freeze` with `held_at_end` false and does not change the outcome.
 
+### Welfare exposure and the review hold
+
+Every research boot writes a content-free welfare exposure record, `state/welfare/exposure.json`, when it shuts down (see [Research data](../17-research-data/README.md#the-welfare-exposure-record)), and deletes any earlier one when it boots. After each step the runner reads the step's record and copies it into the step record as `welfare_exposure` only when its `run_id` is the step's run id and its `boot_started_at` is not before the step's start, so a record left by an earlier attempt, or carried by a restored state tree, never stands for this boot.
+
+The runner then holds before the next step, with the step recorded as complete and a `welfare_hold` naming the reasons, when the record is `missing`, `unreadable`, bound to another run (`other_run`) or boot (`other_boot`), `incomplete_coverage` (the welfare producer restarted, or its tally covered less awake time than the welfare monitor counted by more than one affect summary interval; both counts are in wall seconds, so the check holds at every time scale; an indicator poll that raised during the boot also counts as incomplete coverage), shows an `indicator_crossing` (any indicator crossing, rest requested or freeze placed), or shows a `protective_response` (any protective response the welfare net took, by reason, or a response count that cannot be read). With the `end` action a response to unavailable indicators or to distress places no freeze and requests no rest, so only the response count shows it. Under CAL Article 4.7 every crossing is flagged for human review; the hold makes that review happen before the entity is booted again, which also covers the indicator spans restarting at every boot. A step adopted from a preservation the runner did not see is held too, because its record cannot be bound. `run` then exits 4, and `status` shows the hold and the command to answer it:
+
+```bash
+python -m kaine.research.ignition_study ack-welfare --study-dir studies/<study-id> --step development/0 --decision continue
+```
+
+`continue` releases the hold, and the next `run` starts the next step. `stop` ends the step's line, and any line that continues its entity (every line starts from the developmental seed, and the accumulate line continues branch 0), and leaves every preservation in place. The answer, its time and the step are appended to `welfare_acks.jsonl` in the study directory, with no name; it never edits an entity's state. `analyse` prints a per-step exposure table with the answers.
+
+### Supervisor escalations and restarts
+
+After a step's cycle exits, the runner reads the step's `state/cycle/escalation.json`. When the supervisor escalated during the step (it ran out of restarts for a module, or lost supervision itself), the step is recorded as `failed:supervisor` in place of `failed:exit:70`, with the escalation's module, attempt count, snapshot id and time under `supervisor_escalation` (the free-text message is left out), and the study halts for the operator. The cycle clears the file at every boot and the runner only accepts an escalation dated inside the step, so a retried step never inherits the previous attempt's escalation; an escalation file that cannot be read counts as an escalation. When the welfare monitor stopped watching, the escalation names module `welfare_monitor` and `status` says the welfare monitor was lost. A welfare freeze still held at the end names the outcome `failed:welfare` instead, because a person has to answer it first.
+
+A module restart that recovered does not fail the step. A completed step records `supervisor_restarts`, the number of `restart` transitions in the step's incident log since the step started. The incident log is encrypted when state encryption is on; the runner reads it without the state key, so it then records `supervisor_restarts: null` with the count of lines it could not read, and `analyse`, which installs the state key, counts again. The analysis report lists every completed step with a restart, or with a count it still cannot read, under "Supervisor restarts".
+
 ### Retry a failed step
 
 ```bash
 python -m kaine.research.ignition_study run --study-dir studies/<study-id> --retry-failed
 ```
+
+A failed step's record carries the same `welfare_hold` as a completed one. When it names `indicator_crossing` or `protective_response`, the welfare net acted or an indicator crossed during that boot, and `--retry-failed` refuses with exit code `4` until a person answers the hold with `ack-welfare --step <line>/<k>`: `continue` lets the retry boot the entity again, and `stop` ends the step's line as it does for a completed step, so the step is never retried and the study goes on with the lines that remain. Any other hold on a failed step, such as a record missing after a crash, is shown in `status` and in the halt message but does not block the retry. A `failed:critical` step is recorded while its cycle still runs, and that cycle writes its exposure record only when it exits. Once no cycle of the study runs, `--retry-failed` (or `ack-welfare`) first reads that record, binds it to the critical step's run and start, and records the step again with it; for a critical step every hold reason blocks the retry, a missing record included, because a cycle the runner gave up on may have crossed afterwards. `status` says when a critical step's record is still unread. Before every boot the runner copies an existing `state/welfare/exposure.json` to `welfare_exposure_archive/` in the step directory (mode 0600), because the boot deletes it; a copy that cannot be made refuses the boot. `status` and the halt message show the failed step's hold and the command to answer it.
 
 ### Runner exit codes
 
@@ -124,6 +144,7 @@ python -m kaine.research.ignition_study run --study-dir studies/<study-id> --ret
 | 1 | The run was halted. |
 | 2 | The run is locked or in an error state. |
 | 3 | A critical failure occurred, such as a failed timeout or disk-low preservation. |
+| 4 | The run is held for a welfare review, before the next step or before a retry; answer it with `ack-welfare`. |
 
 ### Module-specific behaviour
 

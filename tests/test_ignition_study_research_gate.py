@@ -64,7 +64,11 @@ def test_study_step_config_meets_every_config_requirement(tmp_path, line, kind, 
         "logging_active": True,
         "encryption_satisfied": True,
         "individuation_enabled": True,
+        "supervisor_armed": True,
+        "indicator_response_wired": True,
     }
+    assert config["supervisor"]["enabled"] is True
+    assert config["supervisor"]["incident_log"]["enabled"] is True
 
 
 def test_operator_cannot_switch_individuation_off_for_a_step(tmp_path):
@@ -78,3 +82,36 @@ def test_operator_cannot_switch_individuation_off_for_a_step(tmp_path):
 def test_shipped_config_alone_fails_individuation_requirement():
     shipped = _load_merged_config(SHIPPED, Path("/nonexistent/kaine.operator.toml"))
     assert config_requirements(shipped)["individuation_enabled"] is False
+
+
+@pytest.mark.parametrize(("line", "kind", "k"), STEPS)
+def test_operator_cannot_switch_the_supervisor_off_for_a_step(tmp_path, line, kind, k):
+    config = _step_config(
+        tmp_path, line, kind, k,
+        "[supervisor]\nenabled = false\n[supervisor.incident_log]\nenabled = false\n",
+    )
+    assert config["supervisor"]["enabled"] is True
+    assert config["supervisor"]["incident_log"]["enabled"] is True
+    assert config_requirements(config)["supervisor_armed"] is True
+
+
+def test_the_incident_log_stays_inside_the_step(tmp_path):
+    from kaine.research.ignition_study.overlay import SUPERVISOR_INCIDENT_DIR
+
+    config = _step_config(
+        tmp_path, "branch", "viewing", 3,
+        '[supervisor.incident_log]\npath = "/somewhere/else/incidents"\n',
+    )
+    path = Path(config["supervisor"]["incident_log"]["path"])
+    # Relative to the step's working directory (its data root is "."), so it
+    # resolves inside branch/3.
+    assert not path.is_absolute()
+    assert str(path) == SUPERVISOR_INCIDENT_DIR
+    step_dir = tmp_path / "study" / "branch" / "3"
+    assert (step_dir / path).resolve().is_relative_to(step_dir.resolve())
+
+
+def test_shipped_config_keeps_the_supervisor_off():
+    shipped = _load_merged_config(SHIPPED, Path("/nonexistent/kaine.operator.toml"))
+    assert shipped["supervisor"]["enabled"] is False
+    assert config_requirements(shipped)["supervisor_armed"] is False

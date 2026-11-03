@@ -1974,6 +1974,34 @@ warmup_s = 120.0
 out_root = "backups"
 entity_name = "kaine"
 
+[preservation.welfare_response.indicators]
+# The response to the paper A.4 welfare indicators, computed live from affect.state
+# over the latest learning-progress span of awake time ([affect].learning_progress_span_s,
+# T_lp; evaluated once the span holds [affect].goal_stall_s, Delta_stall). A first
+# crossing requests a rest (the sleep module's welfare_rest sleep; in the
+# developmental phase the state cycle's rest brought forward) and flags it for
+# review; when that rest completes every span restarts, and a crossing over the
+# fresh span preserves the entity and takes `action` above. Dormant while the
+# welfare response is disabled; enabling the welfare response enables it. The
+# research gate requires it with the pause or end action.
+enabled = true
+# theta_wf (Table A1, provisional): a deficit's share of the span at or above its
+# threshold, or valence's share below -[affect.regulation].set_point (theta_E).
+share_bar = 0.5
+# q_wf = 1 - alpha_test (Table A1, provisional): the posterior that the entity's
+# power over boredom or restlessness is below one half.
+posterior_bar = 0.95
+# A requested rest that does not start within this many seconds of unfrozen time escalates.
+rest_start_timeout_s = 30.0
+# A rest that does not complete within its bound, in unfrozen entity seconds,
+# escalates. Developmental: [sleep].developmental_rest_s plus 300 s (1710 s) unless
+# set; matured: one entity hour, a design value until the validation boot measures
+# maintenance sleeps.
+rest_complete_timeout_s = { matured = 3600.0 }
+# Indicators that stay unavailable (no affect.state) this long, in awake unfrozen
+# seconds, escalate: the supervisor's heartbeat window (60 s) plus Delta_stall (600 s).
+unavailable_escalate_s = 660.0
+
 [preservation.retention]
 # Preservation-bundle retention policy. Like fork snapshots under
 # [lifecycle].snapshots_path, a preserved individual must NEVER be
