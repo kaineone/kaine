@@ -26,10 +26,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from kaine.modules.sleep import housekeeping as housekeeping_module
 import kaine.storage
 from kaine.cycle.housekeeping_floor import AwakeFloor
 from kaine.housekeeping_pressure import HousekeepingPressure
+from kaine.modules.sleep import housekeeping as housekeeping_module
 from kaine.modules.sleep.housekeeping import (
     FileSkipped,
     Housekeeper,

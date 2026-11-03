@@ -10,8 +10,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from kaine.modules.sleep import housekeeping as housekeeping_module
 import kaine.storage
+from kaine.modules.sleep import housekeeping as housekeeping_module
 from kaine.modules.sleep.housekeeping import (
     Housekeeper,
     HousekeepingConfig,
