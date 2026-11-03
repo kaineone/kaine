@@ -1,13 +1,16 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""The affect module's affect → Chatterbox expressivity controls.
+"""Affect → vocal expressivity controls.
 
-Pure function. Documented monotonicity:
+Chatterbox mapping — pure function. Documented monotonicity:
   - higher arousal → strictly higher exaggeration
   - higher arousal → strictly higher temperature (within band)
   - stronger |valence| → strictly higher cfg_weight (more committed)
   - high negative valence → slower speed; high positive valence → faster
+
+Qwen3-TTS mapping — natural-language instruct string derived from the same
+dimensional state.
 """
 from __future__ import annotations
 
@@ -92,3 +95,45 @@ def affect_to_chatterbox(
         cfg_weight=_clamp(cfg_weight, cfg_lo, cfg_hi),
         speed_factor=_clamp(speed_factor, spd_lo, spd_hi),
     )
+
+
+_AROUSAL_HIGH = 0.6
+_VALENCE_POSITIVE = 0.3
+_VALENCE_NEGATIVE = -0.3
+_DOMINANCE_HIGH = 0.5
+
+
+def affect_to_instruct(state: DimensionalState) -> str:
+    """Map dimensional affect to a Qwen3-TTS instruct string.
+
+    Returns an empty string for neutral affect so the model uses its default
+    prosody.
+    """
+    arousal = _clamp(state.arousal, 0.0, 1.0)
+    valence = _clamp(state.valence, -1.0, 1.0)
+    dominance = _clamp(state.dominance, -1.0, 1.0)
+
+    if state == DimensionalState():
+        return ""
+
+    high_arousal = arousal > _AROUSAL_HIGH
+    positive = valence > _VALENCE_POSITIVE
+    negative = valence < _VALENCE_NEGATIVE
+
+    if positive and high_arousal:
+        phrase = "Speak with warm enthusiasm"
+    elif positive and not high_arousal:
+        phrase = "Speak gently and contentedly"
+    elif negative and high_arousal:
+        phrase = "Speak with urgency and distress"
+    elif negative and not high_arousal:
+        phrase = "Speak quietly and sadly"
+    elif high_arousal:
+        phrase = "Speak with energy and intensity"
+    else:
+        return ""
+
+    if dominance > _DOMINANCE_HIGH:
+        phrase += ", with confidence"
+
+    return phrase
