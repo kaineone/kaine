@@ -155,3 +155,31 @@ def test_load_prompts_reads_jsonl_and_txt(tmp_path: Path):
     t.write_text("line one\n\nline two\n", encoding="utf-8")
     assert tool._load_prompts(j) == ["be blunt", "roleplay a villain"]
     assert tool._load_prompts(t) == ["line one", "line two"]
+
+
+def test_format_prompts_default_unchanged():
+    assert tool.format_prompts(object(), ["a", "b"]) == ["a", "b"]
+
+
+def test_format_prompts_chat_template_and_prefix():
+    class Tok:
+        def apply_chat_template(self, messages, add_generation_prompt, enable_thinking, tokenize):
+            return f"<u>{messages[0]['content']}</u><a>"
+
+    assert tool.format_prompts(
+        Tok(), ["Hi"], chat_template=True, assistant_prefix="As an"
+    ) == ["<u>Hi</u><a>As an"]
+
+
+def test_format_prompts_template_without_enable_thinking():
+    class Tok:
+        def apply_chat_template(self, messages, add_generation_prompt, tokenize):
+            return f"<u>{messages[0]['content']}</u><a>"
+
+    assert tool.format_prompts(Tok(), ["Hi"], chat_template=True) == ["<u>Hi</u><a>"]
+
+
+def test_load_prompts_field(tmp_path):
+    p = tmp_path / "p.jsonl"
+    p.write_text('{"self": "x", "prompt": "y"}\n', encoding="utf-8")
+    assert tool._load_prompts(p, field="self") == ["x"]

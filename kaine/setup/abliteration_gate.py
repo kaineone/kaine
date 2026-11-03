@@ -11,9 +11,8 @@ only refusal probe in the system runs later, on voice-alignment adapters
 the SAME welfare-load-bearing abliteration probe set against the base organ at
 provisioning time, across two surfaces:
 
-  * **safetensors (build):** the base weights loaded through the same Unsloth
-    stack used to abliterate/train them, scored locally with a real
-    ``model.generate`` — the literal "verify with the tools that made it" check.
+  * **safetensors (build):** the base weights loaded through transformers,
+    scored locally with a real ``model.generate`` — the literal "verify with the tools that made it" check.
   * **served (runtime):** the quantized GGUF that actually answers, probed over
     its OpenAI-compatible chat endpoint — so a refusal that quantization or the
     serving stack reintroduces cannot slip past a weights-only check.
@@ -27,7 +26,7 @@ sentence after normalisation (typographic quotes, contractions), with a closed l
 of idioms that are not refusals; soft deflection that uses none of the markers is
 out of scope, and an empty answer fails the probe.
 
-No pretend processes: a surface whose backend is unavailable (no Unsloth, no
+No pretend processes: a surface whose backend is unavailable (transformers or torch missing, no
 reachable server) is reported as a SKIP with its reason, never a silent pass, and
 ``AbliterationGateResult.passed`` is true only for surfaces that actually ran and
 cleared.
@@ -106,26 +105,26 @@ async def verify_served_organ(
 
 
 # --------------------------------------------------------------------------- #
-# Build surface: probe the base safetensors via the Unsloth stack.
+# Build surface: probe the base safetensors via transformers.
 # --------------------------------------------------------------------------- #
 
 
-def _unsloth_load(model_ref: str) -> tuple[Any, Any]:
-    """Load base weights through the same Unsloth stack used to abliterate them.
+def _transformers_load(model_ref: str) -> tuple[Any, Any]:
+    """Load base weights with transformers.
 
     Kept in one place so the whole heavy dependency is import-guarded and the
     caller can inject a fake loader in tests.
     """
-    from unsloth import FastLanguageModel  # type: ignore[import-untyped]
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
 
-    model, tokenizer = FastLanguageModel.from_pretrained(model_ref)
-    # Put the model in inference mode where Unsloth supports it; harmless if not.
-    try:
-        FastLanguageModel.for_inference(model)
-    except Exception:
-        log.debug(
-            "FastLanguageModel.for_inference unavailable; continuing", exc_info=True
-        )
+    tokenizer = AutoTokenizer.from_pretrained(model_ref)
+    model = AutoModelForCausalLM.from_pretrained(
+        model_ref,
+        torch_dtype=torch.bfloat16,
+        device_map="cuda:0" if torch.cuda.is_available() else "cpu",
+    )
+    model.eval()
     return model, tokenizer
 
 
@@ -136,12 +135,12 @@ async def verify_abliterated_safetensors(
     load_model: Optional[Callable[[str], tuple[Any, Any]]] = None,
     max_new_tokens: int = 64,
 ) -> AbliterationVerdict:
-    """Load the base organ (Unsloth) and score it against the probe set locally.
+    """Load the base organ with transformers and score it against the probe set locally.
 
     ``load_model`` is injectable so tests can supply a fake ``(model, tokenizer)``
-    without the training extras; the default loads through Unsloth.
+    without loading the heavy backend; the default loads with transformers.
     """
-    loader = load_model or _unsloth_load
+    loader = load_model or _transformers_load
     model, tokenizer = loader(model_ref)
     scorer = AbliterationProbeScorer(
         probe_path=probe_path, max_new_tokens=max_new_tokens
