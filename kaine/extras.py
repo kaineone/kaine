@@ -103,14 +103,10 @@ def _vocal_sherpa(config: dict) -> bool:
     return backend == "sherpa_onnx"
 
 
-def _vocal_qwen3(section: dict, backend: str) -> bool:
-    return backend == "qwen3_tts"
-
-
 def _vocal_qwen3_needed(config: dict) -> bool:
     section = config.get("vocal") or {}
     backend = str(section.get("backend") or "chatterbox").strip().lower()
-    return _vocal_qwen3(section, backend)
+    return backend == "qwen3_tts"
 
 
 def _episodic_memory_qdrant(config: dict) -> bool:

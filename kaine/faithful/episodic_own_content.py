@@ -296,7 +296,7 @@ VOCAL_BACKENDS: frozenset[str] = frozenset(
     {"chatterbox", "sherpa_onnx", "qwen3_tts"}
 )
 VOCAL_PROSODY: frozenset[str] = frozenset(
-    {"temperature", "exaggeration", "cfg_weight", "speed_factor"}
+    {"temperature", "exaggeration", "cfg_weight", "speed_factor", "instruct"}
 )
 # Intent origins (kaine.workspace): the only producer sets "planning".
 INTENT_ORIGINS: frozenset[str] = frozenset({"planning"})
