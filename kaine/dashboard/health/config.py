@@ -21,7 +21,9 @@ from .probes import (
     DEFAULT_CACHE_TTL_S,
     DEFAULT_PROBE_TIMEOUT_S,
     DEGRADED,
+    DOWN,
     NOT_CONFIGURED,
+    UP,
     planning_health_probe,
     probe_chat_llm,
     probe_chatterbox,
@@ -44,6 +46,27 @@ async def _async_not_configured(reason: str) -> tuple[str, str]:
 async def _async_degraded(reason: str) -> tuple[str, str]:
     """Warning result for a dependency that is configured but not recognised."""
     return DEGRADED, reason
+
+
+async def _probe_qwen3_tts(model_id: str) -> tuple[str, str]:
+    """Qwen3-TTS is ready when torch and qwen-tts import and the weights are
+    cached locally or the model id is a directory."""
+    import importlib.util
+    from pathlib import Path
+
+    for module in ("torch", "qwen_tts"):
+        if importlib.util.find_spec(module) is None:
+            return DOWN, f"{module} is not installed (pip install 'kaine[speech-qwen]')"
+    if Path(model_id).is_dir():
+        return UP, f"model directory {model_id}"
+    try:
+        from huggingface_hub import try_to_load_from_cache
+
+        if try_to_load_from_cache(model_id, "config.json") is not None:
+            return UP, f"{model_id} cached"
+    except Exception:
+        pass
+    return DEGRADED, f"{model_id} not cached yet; it downloads on first use"
 
 
 def build_dependency_specs(
@@ -196,6 +219,17 @@ def build_dependency_specs(
                 ),
             )
         )
+    elif vocal_backend == "qwen3_tts":
+        speech_rows.append(
+            DependencySpec(
+                name="Qwen3-TTS",
+                role="Vocal",
+                module="vocal",
+                probe=lambda _mid=str(
+                    vocal_cfg.get("qwen3_model_id") or "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice"
+                ): _probe_qwen3_tts(_mid),
+            )
+        )
     else:
         speech_rows.append(
             DependencySpec(
@@ -203,7 +237,7 @@ def build_dependency_specs(
                 role="Vocal",
                 module="vocal",
                 probe=lambda: _async_degraded(
-                    f"unknown [vocal].backend {vocal_backend!r}; expected \"chatterbox\" or \"sherpa_onnx\""
+                    f"unknown [vocal].backend {vocal_backend!r}; expected \"chatterbox\", \"sherpa_onnx\" or \"qwen3_tts\""
                 ),
             )
         )

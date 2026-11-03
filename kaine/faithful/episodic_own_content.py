@@ -292,7 +292,9 @@ MEMORY_COLLECTIONS: frozenset[str] = frozenset(
 )
 
 # kaine.modules.vocal: the synthesis backends and the prosody parameters they apply.
-VOCAL_BACKENDS: frozenset[str] = frozenset({"chatterbox", "sherpa_onnx"})
+VOCAL_BACKENDS: frozenset[str] = frozenset(
+    {"chatterbox", "sherpa_onnx", "qwen3_tts"}
+)
 VOCAL_PROSODY: frozenset[str] = frozenset(
     {"temperature", "exaggeration", "cfg_weight", "speed_factor"}
 )

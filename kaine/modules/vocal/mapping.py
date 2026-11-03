@@ -92,3 +92,26 @@ def affect_to_chatterbox(
         cfg_weight=_clamp(cfg_weight, cfg_lo, cfg_hi),
         speed_factor=_clamp(speed_factor, spd_lo, spd_hi),
     )
+
+
+_INSTRUCT_VALENCE_THRESHOLD = 0.25
+_INSTRUCT_AROUSAL_HIGH = 0.55
+
+
+def affect_to_instruct(state: DimensionalState) -> str:
+    """Natural-language delivery instruction for instruction-following TTS.
+
+    Empty string when valence is near neutral: no instruction is better than
+    a forced emotion.
+    """
+    valence = _clamp(state.valence, -1.0, 1.0)
+    arousal = _clamp(state.arousal, 0.0, 1.0)
+    if abs(valence) < _INSTRUCT_VALENCE_THRESHOLD:
+        return ""
+    if valence > 0:
+        if arousal >= _INSTRUCT_AROUSAL_HIGH:
+            return "Speak with enthusiastic joy"
+        return "Speak with gentle warmth and contentment"
+    if arousal >= _INSTRUCT_AROUSAL_HIGH:
+        return "Speak with urgent concern"
+    return "Speak with quiet sadness"

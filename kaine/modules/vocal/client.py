@@ -25,6 +25,7 @@ class TTSRequest:
     cfg_weight: Optional[float] = None
     speed_factor: Optional[float] = None
     language: Optional[str] = None
+    instruct: Optional[str] = None
     split_text: bool = True
 
 

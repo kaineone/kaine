@@ -52,6 +52,11 @@ def make_vocal(
         "sherpa_model_id",
         "sherpa_speaker_id",
         "sherpa_num_threads",
+        "qwen3_model_id",
+        "qwen3_tokenizer_id",
+        "qwen3_device",
+        "qwen3_dtype",
+        "qwen3_speaker",
         "mirroring",  # nested sub-table: enabled, mirror_strength, mirror_ceiling, decay_s
         # shipped-voice selection, openspec vox-default-voice
         "voice_gender",
@@ -74,12 +79,22 @@ def make_vocal(
     sherpa_model_id = section.pop("sherpa_model_id", None)
     sherpa_speaker_id = section.pop("sherpa_speaker_id", None)
     sherpa_num_threads = section.pop("sherpa_num_threads", 2)
+    qwen3_model_id = section.pop("qwen3_model_id", None)
+    qwen3_tokenizer_id = section.pop("qwen3_tokenizer_id", None)
+    qwen3_device = section.pop("qwen3_device", "cuda:1")
+    qwen3_dtype = section.pop("qwen3_dtype", "bfloat16")
+    qwen3_speaker = section.pop("qwen3_speaker", "")
     backend_keys = {
         "backend",
         "sherpa_model_dir",
         "sherpa_model_id",
         "sherpa_speaker_id",
         "sherpa_num_threads",
+        "qwen3_model_id",
+        "qwen3_tokenizer_id",
+        "qwen3_device",
+        "qwen3_dtype",
+        "qwen3_speaker",
     }
     kw = config_kwargs(section, sorted(allowed - {"mirroring"} - backend_keys), Vocal)
     # [vocal.mirroring] sub-table.
@@ -95,10 +110,10 @@ def make_vocal(
     if "decay_s" in mirroring_section:
         kw["mirror_decay_s"] = float(mirroring_section["decay_s"])
 
-    if backend not in ("chatterbox", "sherpa_onnx"):
+    if backend not in ("chatterbox", "sherpa_onnx", "qwen3_tts"):
         raise ConfigurationError(
             f"unknown vocal backend {raw_backend!r}; "
-            "must be 'chatterbox' or 'sherpa_onnx'"
+            "must be 'chatterbox', 'sherpa_onnx' or 'qwen3_tts'"
         )
 
     if backend == "chatterbox":
@@ -153,9 +168,20 @@ def make_vocal(
             num_threads=int(sherpa_num_threads),
         )
 
+    def _qwen3_factory() -> TTSClient:
+        from kaine.modules.vocal.qwen3_tts import DEFAULT_MODEL_ID, Qwen3TTS
+
+        return Qwen3TTS(
+            str(qwen3_model_id or DEFAULT_MODEL_ID),
+            tokenizer_id=qwen3_tokenizer_id,
+            device=str(qwen3_device),
+            dtype=str(qwen3_dtype),
+            speaker=str(qwen3_speaker or ""),
+        )
+
     registry = BackendRegistry[TTSClient]("vocal", default="chatterbox").register(
         "chatterbox", _chatterbox_factory
-    ).register("sherpa_onnx", _sherpa_factory)
+    ).register("sherpa_onnx", _sherpa_factory).register("qwen3_tts", _qwen3_factory)
     try:
         client = registry.resolve(backend)
     except UnknownBackendError as exc:
@@ -163,9 +189,18 @@ def make_vocal(
     if client is None:
         return None
 
-    resolved_model_id = sherpa_model_id or DEFAULT_TTS
     kw["tts_client"] = client
-    kw["backend"] = "sherpa_onnx"
+    kw["backend"] = backend
+    if backend == "qwen3_tts":
+        from kaine.modules.vocal.qwen3_tts import APPLIED_PROSODY as QWEN3_PROSODY
+        from kaine.modules.vocal.qwen3_tts import DEFAULT_MODEL_ID
+
+        kw["applied_prosody"] = QWEN3_PROSODY
+        kw["voice_label"] = f"{qwen3_model_id or DEFAULT_MODEL_ID} speaker {qwen3_speaker or 'auto'}"
+        kw["voice_note"] = "configured in [vocal].qwen3_speaker" if qwen3_speaker else "first supported speaker"
+        return Vocal(bus, entity_clock=entity_clock, **kw)
+
+    resolved_model_id = sherpa_model_id or DEFAULT_TTS
     kw["applied_prosody"] = APPLIED_PROSODY
     kw["voice_label"] = f"{resolved_model_id} speaker {int(resolved['speaker_id'])}"
     kw["voice_note"] = resolved.get("note")

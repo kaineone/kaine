@@ -103,6 +103,16 @@ def _vocal_sherpa(config: dict) -> bool:
     return backend == "sherpa_onnx"
 
 
+def _vocal_qwen3(section: dict, backend: str) -> bool:
+    return backend == "qwen3_tts"
+
+
+def _vocal_qwen3_needed(config: dict) -> bool:
+    section = config.get("vocal") or {}
+    backend = str(section.get("backend") or "chatterbox").strip().lower()
+    return _vocal_qwen3(section, backend)
+
+
 def _episodic_memory_qdrant(config: dict) -> bool:
     return (config.get("episodic_memory") or {}).get("backend", "qdrant") == "qdrant"
 
@@ -185,6 +195,8 @@ REQUIREMENTS: dict[str, tuple[Requirement, ...]] = {
     ),
     "vocal": (
         Requirement("sherpa_onnx", "speech-edge", predicate=_vocal_sherpa),
+        Requirement("qwen_tts", "speech-qwen", predicate=_vocal_qwen3_needed),
+        Requirement("torch", "speech-qwen", predicate=_vocal_qwen3_needed),
     ),
     "planning": (
         Requirement("pymdp", "reasoning", predicate=_planning_pymdp_backend),

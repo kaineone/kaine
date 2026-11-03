@@ -54,6 +54,7 @@ from kaine.modules.vocal.coordination import SpeakingGate
 from kaine.modules.vocal.mapping import (
     ChatterboxParams,
     affect_to_chatterbox,
+    affect_to_instruct,
 )
 from kaine.modules.vocal.mirroring import blend_prosody, decayed_strength
 from kaine.modules.vocal.playback import (
@@ -358,7 +359,10 @@ class Vocal(BaseModule):
                 bytes_produced=0,
             )
         params = self._params_for(state or self._current_state)
-        request = self._build_request(text, params)
+        instruct = None
+        if self._backend == "qwen3_tts":
+            instruct = affect_to_instruct(state or self._current_state) or None
+        request = self._build_request(text, params, instruct=instruct)
         result = await self._tts_client.synthesize(request)
         if self._sink_enabled:
             await self._sink_audio(text, result)
@@ -410,7 +414,9 @@ class Vocal(BaseModule):
                 )
         return params
 
-    def _build_request(self, text: str, params: ChatterboxParams) -> TTSRequest:
+    def _build_request(
+        self, text: str, params: ChatterboxParams, *, instruct: str | None = None
+    ) -> TTSRequest:
         return TTSRequest(
             text=text,
             voice_mode=self._voice_mode,
@@ -420,6 +426,7 @@ class Vocal(BaseModule):
             exaggeration=params.exaggeration,
             cfg_weight=params.cfg_weight,
             speed_factor=params.speed_factor,
+            instruct=instruct,
         )
 
     async def _sink_audio(self, text: str, result: SynthesisResult) -> None:
