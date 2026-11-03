@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-CAL-0.5
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 import importlib.util
 from pathlib import Path
 
