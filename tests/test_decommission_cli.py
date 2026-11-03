@@ -1583,12 +1583,14 @@ def test_own_dir_job_still_training_refuses_before_the_backup(tmp_path, monkeypa
     monkeypatch.setenv("KAINE_DECOMMISSION_OPERATOR_PRESENT", "1")
     own_id, other_id, organ, jobs, job, extra = _seed_shared_volumes(tmp_path, monkeypatch)
     running = job(own_id, "20261002T000000Z-running0", claimed=True)
-    import kaine.lifecycle.__main__ as cli
+    import sys
+
+    cli_mod = sys.modules["kaine.lifecycle.__main__"]
     from kaine.lifecycle import decommission_locations as dl
 
     real = dl.cancel_entity_dir_jobs
     monkeypatch.setattr(
-        cli,
+        cli_mod,
         "cancel_entity_dir_jobs",
         lambda locs, wait_s=60.0: real(locs, wait_s=min(wait_s, 0.05), poll_s=0.01),
     )

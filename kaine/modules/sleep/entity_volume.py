@@ -50,10 +50,7 @@ def entity_subdir(volume: Path, entity_id: object, *, create: bool = False) -> P
     if create:
         volume.mkdir(parents=True, exist_ok=True)
         if not sub.is_symlink():
-            try:
-                sub.mkdir(mode=0o700)
-            except FileExistsError:
-                pass
+            sub.mkdir(mode=0o700, exist_ok=True)
     if sub.is_symlink():
         raise EntityVolumeError(f"refusing entity directory {sub}: it is a symlink")
     if sub.exists() and not sub.is_dir():
