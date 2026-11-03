@@ -85,7 +85,6 @@ def run(conds, hours, *, w=2.0, k=0.1, tau_a=0.05, U=4.0, margin=-0.3, own_gain=
 
     hist_n = int((win_s + withdraw_s + 30.0) * 20); hist_a = np.zeros((hist_n, B)); hist_t = np.zeros(hist_n); hist_w = np.zeros(hist_n, dtype=bool); hp = 0
     markers = []; base = [[] for _ in range(B)]
-    sos_w = butter(2, [0.3, 2.0], btype="band", fs=20.0, output="sos")
     for i in range(n_steps):
         clock.t = i * dt_step
         if i % 20 == 0:
@@ -93,7 +92,6 @@ def run(conds, hours, *, w=2.0, k=0.1, tau_a=0.05, U=4.0, margin=-0.3, own_gain=
                 if m == "rest": own[b] = 0.1 + 0.6 * float(np.clip(rng.normal(0.5, 0.15), 0, 1))
                 elif m == "rand": own[b] = float(rng.uniform(0.1, 0.7))
         withdrawing = bool(wd_flags[i])
-        tw = 0.0
         ext = np.array([0.0 if (pv is None or withdrawing) else float(pv()) for pv in provs])
         for _ in range(sub):
             x = w * s * a + margin + own_gain * own + gain * ext + 0.02 * rng.standard_normal(B) * math.sqrt(0.001 / dt)

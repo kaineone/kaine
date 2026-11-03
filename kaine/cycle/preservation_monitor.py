@@ -659,7 +659,6 @@ class _BaseSafetyMonitor(abc.ABC):
     @abc.abstractmethod
     async def _poll_once(self, stop_event: asyncio.Event) -> None:
         """Run one monitor poll. Subclasses implement the detection/action."""
-        ...
 
     #: Consecutive raising polls before the loop can count as failing.
     POLL_FAILURES_TO_ESCALATE = 3
