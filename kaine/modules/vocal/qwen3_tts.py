@@ -41,13 +41,11 @@ class Qwen3TTS:
         self,
         model_id: str = DEFAULT_MODEL_ID,
         *,
-        tokenizer_id: str | None = None,
         device: str = "cuda:1",
         dtype: str = "bfloat16",
         speaker: str = "",
     ) -> None:
         self._model_id = model_id
-        self._tokenizer_id = tokenizer_id or None
         self._device = device
         self._dtype = dtype
         self._speaker = speaker or ""

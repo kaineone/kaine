@@ -53,7 +53,6 @@ def make_vocal(
         "sherpa_speaker_id",
         "sherpa_num_threads",
         "qwen3_model_id",
-        "qwen3_tokenizer_id",
         "qwen3_device",
         "qwen3_dtype",
         "qwen3_speaker",
@@ -80,7 +79,6 @@ def make_vocal(
     sherpa_speaker_id = section.pop("sherpa_speaker_id", None)
     sherpa_num_threads = section.pop("sherpa_num_threads", 2)
     qwen3_model_id = section.pop("qwen3_model_id", None)
-    qwen3_tokenizer_id = section.pop("qwen3_tokenizer_id", None)
     qwen3_device = section.pop("qwen3_device", "cuda:1")
     qwen3_dtype = section.pop("qwen3_dtype", "bfloat16")
     qwen3_speaker = section.pop("qwen3_speaker", "")
@@ -91,7 +89,6 @@ def make_vocal(
         "sherpa_speaker_id",
         "sherpa_num_threads",
         "qwen3_model_id",
-        "qwen3_tokenizer_id",
         "qwen3_device",
         "qwen3_dtype",
         "qwen3_speaker",
@@ -173,7 +170,6 @@ def make_vocal(
 
         return Qwen3TTS(
             str(qwen3_model_id or DEFAULT_MODEL_ID),
-            tokenizer_id=qwen3_tokenizer_id,
             device=str(qwen3_device),
             dtype=str(qwen3_dtype),
             speaker=str(qwen3_speaker or ""),

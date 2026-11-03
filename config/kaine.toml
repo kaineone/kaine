@@ -1303,7 +1303,6 @@ backend = "chatterbox"
 # "qwen3_tts" runs Qwen3-TTS in-process (install the speech-qwen extra); the
 # affect state is passed as a natural-language delivery instruction.
 # qwen3_model_id = "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice"
-# qwen3_tokenizer_id = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
 # qwen3_device = "cuda:1"
 # qwen3_dtype = "bfloat16"
 # qwen3_speaker = ""  # auto-pick; see model.get_supported_speakers()
