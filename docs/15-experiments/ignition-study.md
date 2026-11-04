@@ -1,6 +1,8 @@
 # The module-addition study
 
-The module-addition study grows an entity one module at a time. It seeds an entity through a developmental phase, preserves it just after maturation, and then starts branches from that seed with held modules added in a fixed order, so that each step can be compared with the step before it. The code and the configuration call it the ignition study (`kaine/research/ignition_study/`). Use this page to run the study, resume it after a failure, run it inside a container, or read its report.
+The module-addition study grows an entity one module at a time. It seeds an entity through a developmental phase, preserves it just after maturation, and then runs viewing steps with held modules added in a fixed order, so that each step can be compared with the step before it. The code and the configuration call it the ignition study (`kaine/research/ignition_study/`). Use this page to run the study, resume it after a failure, run it inside a container, or read its report.
+
+The study supports two protocols: **progressive** (the development run) and **branching** (the original experiment). A progressive plan carries one entity forward through every step; a branching plan forks the seed into parallel branches. Set `protocol: "progressive"` in the plan to use the development run.
 
 The runner is `kaine/research/ignition_study/__main__.py` and `kaine/research/ignition_study/runner.py`. Plans are built by `kaine/research/ignition_study/plan.py`, and the configuration overlay applied to every step, voice alignment included, is `kaine/research/ignition_study/overlay.py`.
 
@@ -16,6 +18,18 @@ The runner follows a seed-and-branch plan:
 The default base set is the first configuration: the interoception, sequence, vision, audition, language, affect and sleep modules. The default order adds six held modules: episodic memory, world model, planning, self-model, social cognition and vocal, so K is 6. The effectors, perceptual locus and embodiment modules need an effector, a body or an alternative sensor feed. On the reference host they would be expected nulls, so they join through an explicit `--order` once one is attached.
 
 Every viewing opens with the same transition from the developmental stimulus to the films. The crossfade from the entity's last developmental frame is identical across viewings, and film minute 0 is its end. See [development on one host](../06-operation/development.md) for the transition details.
+
+### Progressive protocol (development run)
+
+A progressive plan replaces the branch grid with a linear sequence:
+
+- Step 0 (`seed`): the developmental phase. The entity develops, matures, and is preserved just as in the branching protocol.
+- Step 1: revive the seed with the base modules plus the first module from `module_order`, run the films, and preserve.
+- Step k: revive step k-1 with the base modules plus the first k modules from `module_order`, run the films, and preserve.
+
+Each step carries one entity forward. The plan declares `module_order` (the addition sequence) and optionally `broadcast_capacity` (the workspace's K parameter). All steps share a single Redis database number (`redis.db` is an integer, not a per-line dict). Step directories are `seed/`, `step_1/`, `step_2/`, etc.
+
+The analysis produces step-over-step comparisons: for each adjacent pair (step k, step k-1) it computes the same measures as a branching comparison, plus the new-module ignition rate — the share of coalitions that include the newly added module.
 
 ## Before you start
 
@@ -213,14 +227,24 @@ For each viewing the report records:
 - picture-to-sound drift: the median and maximum absolute `programme.offset_s - audio.delivered_s` when recorded;
 - data quality: the record count, programme-time gaps longer than 10 s, and dropped records inferred from gaps in the sink sequence.
 
-Per-viewing measures are computed for every completed viewing of `branch`, `repeat` and `accumulate`; the developmental phase is not a viewing. The report's `comparisons` section holds three families, each with per-measure differences and the correlation of the film-minute profiles:
+Per-viewing measures are computed for every completed viewing; the developmental phase is not a viewing. In branching plans, viewings are `branch`, `repeat` and `accumulate` steps. In progressive plans, viewings are the `progressive` steps (step 1 onward).
+
+For **branching** plans the report's `comparisons` section holds three families, each with per-measure differences and the correlation of the film-minute profiles:
 
 - **Module effect from the seed:** branch k minus branch 0, for k = 1 to K.
 - **Noise floor:** branch 0 minus the repeat.
 - **Familiarity and history:** accumulate k minus branch k, for k = 1 to K.
 
+For **progressive** plans the report's `comparisons` section holds one family:
+
+- **Step-over-step:** step k minus step k-1, with the new-module ignition rate (the share of coalitions containing each module added at step k).
+
 A comparison whose two viewings are not both complete is reported as `pending` and is not computed. A correlation is "not computed" when the two profiles share fewer than 30 bins, and undefined when either profile is constant.
 
 ## Limits of the report
 
-Every report includes its limits. There is one entity per condition and nothing is tested for significance, so the results are descriptive. The noise floor is a single repeat, so differences smaller than it are not evidence. Modules are added in one fixed order, so each effect is conditional on the earlier additions. The accumulate line mixes familiarity with module history, because there is no rewatch-only line. If an operator adds the effectors, perceptual locus or embodiment modules to the order on a host with no effector, body or alternative feed for them, the report flags them as expected nulls when their share is zero.
+Every report includes its limits. In both protocols, modules are added in one fixed order, so each effect is conditional on the earlier additions. If an operator adds the effectors, perceptual locus or embodiment modules to the order on a host with no effector, body or alternative feed for them, the report flags them as expected nulls when their share is zero.
+
+Branching-specific: there is one entity per condition and nothing is tested for significance. The noise floor is a single repeat, so differences smaller than it are not evidence. The accumulate line mixes familiarity with module history, because there is no rewatch-only line.
+
+Progressive-specific: there is one entity and nothing is tested for significance. Each step revives from the prior step's preservation, so familiarity and history are confounded with the module addition.
