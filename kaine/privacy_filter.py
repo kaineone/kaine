@@ -69,6 +69,16 @@ VECTOR_BACKSTOP_MIN_LEN: int = 16
 # change with a test.
 VECTOR_EXEMPT_KEYS: frozenset[str] = frozenset({"saliences", "step_magnitudes"})
 
+# Latent-derived cognitive content: decoded predictions, workspace content
+# vectors, or any other field whose value is derived from the entity's
+# internal predictive model.  Fields here are stripped from every external
+# surface, never written to the research event log, and never stored in
+# episodic traces.  The set starts empty; option F (the content workspace)
+# will add its field names here.  The privacy filter, the CI guard, and the
+# test guards in test_latent_content_privacy.py enforce the rule structurally
+# so that adding a field to this set is all that is needed to protect it.
+LATENT_CONTENT_FIELDS: frozenset[str] = frozenset()
+
 # The self-model module's values and norms are entity-interior text; the language module reads them
 # from the raw bus, and no diagnostics consumer does.
 CONTENT_FIELDS: frozenset[str] = frozenset(
@@ -119,7 +129,7 @@ class PrivacyFilter:
     extra_content_fields: frozenset[str] = field(default_factory=frozenset)
 
     def fields(self) -> frozenset[str]:
-        return CONTENT_FIELDS | self.extra_content_fields
+        return CONTENT_FIELDS | LATENT_CONTENT_FIELDS | self.extra_content_fields
 
     def filter_for_diagnostics(self, event: Event) -> Event:
         if self.dev_content_override:

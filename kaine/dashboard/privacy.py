@@ -12,6 +12,6 @@ continues to work unchanged.
 """
 from __future__ import annotations
 
-from kaine.privacy_filter import CONTENT_FIELDS, PrivacyFilter, _scrub
+from kaine.privacy_filter import CONTENT_FIELDS, LATENT_CONTENT_FIELDS, PrivacyFilter, _scrub
 
-__all__ = ["CONTENT_FIELDS", "PrivacyFilter", "_scrub"]
+__all__ = ["CONTENT_FIELDS", "LATENT_CONTENT_FIELDS", "PrivacyFilter", "_scrub"]

@@ -158,6 +158,7 @@ _REVIEWED_OPERATIONAL_KEYS = frozenset(
         "reason",          # sleep/world model/perception/preservation modules: short reason enum (consumer-read)
         "source_label",    # audition: perception source name (e.g. "microphone")
         "temporal_context",  # sequence module: numeric hidden-state vector; removed by the vector rule (VECTOR_FIELDS)
+        "prediction_error",  # processor modules: scalar numeric prediction error (float), not latent content
     }
 )
 
@@ -215,26 +216,64 @@ def _published_payload_keys() -> dict[str, str]:
 
 def test_no_uncovered_content_key_in_module_publishers():
     """No module publishes a content-capable payload key that is neither scrubbed
-    (CONTENT_FIELDS) nor reviewed-operational. A new content-shaped key trips this
-    until a human classifies it — the minimum privacy-regression guard."""
-    from kaine.dashboard.privacy import CONTENT_FIELDS
+    (CONTENT_FIELDS / LATENT_CONTENT_FIELDS) nor reviewed-operational. A new
+    content-shaped key trips this until a human classifies it — the minimum
+    privacy-regression guard."""
+    from kaine.dashboard.privacy import CONTENT_FIELDS, LATENT_CONTENT_FIELDS
 
     published = _published_payload_keys()
     assert published, "publisher scan found nothing — the scan itself is broken"
 
+    all_content = CONTENT_FIELDS | LATENT_CONTENT_FIELDS
     uncovered: dict[str, str] = {}
     for key, site in published.items():
         low = key.lower()
         if not any(tok in low for tok in _CONTENT_SUSPECT_TOKENS):
             continue
-        if key in CONTENT_FIELDS or key in _REVIEWED_OPERATIONAL_KEYS:
+        if key in all_content or key in _REVIEWED_OPERATIONAL_KEYS:
             continue
         uncovered[key] = site
 
     assert not uncovered, (
         "content-capable payload key(s) reach diagnostics uncovered — add each to "
-        "CONTENT_FIELDS (kaine/privacy_filter.py) if it is entity content, or to "
-        "_REVIEWED_OPERATIONAL_KEYS if reviewed safe: "
+        "CONTENT_FIELDS or LATENT_CONTENT_FIELDS (kaine/privacy_filter.py) if it "
+        "is entity content, or to _REVIEWED_OPERATIONAL_KEYS if reviewed safe: "
+        + ", ".join(f"{k} ({v})" for k, v in sorted(uncovered.items()))
+    )
+
+
+_LATENT_SUSPECT_TOKENS = ("latent", "prediction", "decoded", "top_down", "top-down")
+
+
+def test_no_uncovered_latent_key_in_module_publishers():
+    """Any payload key whose name suggests latent-derived content must be
+    classified in one of the three field sets (CONTENT_FIELDS,
+    LATENT_CONTENT_FIELDS, VECTOR_FIELDS) or in VECTOR_EXEMPT_KEYS.  This
+    catches a future option-F field that was added to a publisher without
+    being registered in the privacy filter."""
+    from kaine.privacy_filter import (
+        CONTENT_FIELDS,
+        LATENT_CONTENT_FIELDS,
+        VECTOR_EXEMPT_KEYS,
+        VECTOR_FIELDS,
+    )
+
+    published = _published_payload_keys()
+    all_classified = CONTENT_FIELDS | LATENT_CONTENT_FIELDS | VECTOR_FIELDS | VECTOR_EXEMPT_KEYS
+
+    uncovered: dict[str, str] = {}
+    for key, site in published.items():
+        low = key.lower()
+        if not any(tok in low for tok in _LATENT_SUSPECT_TOKENS):
+            continue
+        if key in all_classified or key in _REVIEWED_OPERATIONAL_KEYS:
+            continue
+        uncovered[key] = site
+
+    assert not uncovered, (
+        "latent-content-suspect payload key(s) reach diagnostics without being "
+        "classified in any field set — add each to LATENT_CONTENT_FIELDS, "
+        "CONTENT_FIELDS, VECTOR_FIELDS, or VECTOR_EXEMPT_KEYS: "
         + ", ".join(f"{k} ({v})" for k, v in sorted(uncovered.items()))
     )
 
@@ -256,12 +295,12 @@ def test_user_input_and_faithful_rendering_are_content_fields():
 
 
 def test_preservation_block_drops_all_content_fields(tmp_path):
-    """No CONTENT_FIELD survives the preservation incident-log allowlist, even
-    if a future incident record were to carry one."""
+    """No CONTENT_FIELD or LATENT_CONTENT_FIELD survives the preservation
+    incident-log allowlist, even if a future incident record were to carry one."""
     import json
 
     from kaine.dashboard.health import HealthProber
-    from kaine.dashboard.privacy import CONTENT_FIELDS
+    from kaine.dashboard.privacy import CONTENT_FIELDS, LATENT_CONTENT_FIELDS
 
     pres_dir = tmp_path / "preservation"
     pres_dir.mkdir()
@@ -273,8 +312,8 @@ def test_preservation_block_drops_all_content_fields(tmp_path):
         "preservation_id": "PRES-9",
         "snapshot_id": "snap-9",
     }
-    # Seed EVERY known content field into the record.
-    for f in CONTENT_FIELDS:
+    all_content = CONTENT_FIELDS | LATENT_CONTENT_FIELDS
+    for f in all_content:
         record[f] = f"leak-{f}"
     (pres_dir / "preservation_divergence-2026-06-15.jsonl").write_text(
         json.dumps(record) + "\n"
@@ -288,7 +327,7 @@ def test_preservation_block_drops_all_content_fields(tmp_path):
     block = prober._preservation_block()
     assert block["events"], "expected the seeded record to be read"
     surfaced = block["events"][0]
-    for f in CONTENT_FIELDS:
+    for f in all_content:
         assert f not in surfaced, f"content field {f!r} leaked into preservation surface"
     # The allowlisted operational fields ARE surfaced.
     assert surfaced["preservation_id"] == "PRES-9"
@@ -296,12 +335,13 @@ def test_preservation_block_drops_all_content_fields(tmp_path):
 
 
 def test_preservation_allowlist_has_no_content_field():
-    """The static allowlist itself must not name any content field."""
+    """The static allowlist itself must not name any content or latent field."""
     from kaine.dashboard.health import HealthProber
-    from kaine.dashboard.privacy import CONTENT_FIELDS
+    from kaine.dashboard.privacy import CONTENT_FIELDS, LATENT_CONTENT_FIELDS
 
     allowed = set(HealthProber._PRESERVATION_ALLOWED_FIELDS)
-    assert allowed.isdisjoint(CONTENT_FIELDS)
+    all_content = CONTENT_FIELDS | LATENT_CONTENT_FIELDS
+    assert allowed.isdisjoint(all_content)
 
 
 def test_preservation_js_reads_only_allowlisted_payload_fields():

@@ -37,6 +37,18 @@ Boundary-neutral homes sit between core and evaluation. They may import neither 
 
 The contract also includes `kaine/decision/`, `kaine/defaults.py`, `kaine/state_io.py`, `kaine/storage.py`, `kaine/shared_services.py`, `kaine/net.py`, `kaine/memory_kinds.py`, and `kaine/text_embedding_numpy.py`. See [`pyproject.toml`](../../pyproject.toml) under `[tool.importlinter]` for the current definitions.
 
+## Privacy boundaries
+
+The `PrivacyFilter` in `kaine/privacy_filter.py` strips entity-interior content from every external surface (diagnostics SSE, research event log, episodic traces). Three field sets define what is stripped:
+
+| Set | Purpose |
+|-----|---------|
+| `CONTENT_FIELDS` | Text-valued entity-interior fields (speech, beliefs, goals, norms). |
+| `LATENT_CONTENT_FIELDS` | Latent-derived cognitive content (decoded predictions, workspace content vectors, top-down feedback). Currently empty; option F will populate it. |
+| `VECTOR_FIELDS` | Perceptual and latent embedding vectors (vision CLIP, sequence CfC hidden state). |
+
+The filter applies `CONTENT_FIELDS | LATENT_CONTENT_FIELDS` recursively at every nesting depth, so a content field embedded inside a `workspace.broadcast` selected-entry payload is stripped the same way as one at the top level. See [Security and privacy](../13-security-and-privacy.md) for the full policy.
+
 ## Declared layering
 
 The import contracts document and enforce the project's real layering. Violations break CI.
