@@ -15,6 +15,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Optional
 
+from kaine.modules.sleep.entity_volume import (
+    entity_subdir,
+    is_entity_id,
+    require_entity_id,
+)
+
 log = logging.getLogger(__name__)
 
 MANIFEST = "active.json"
@@ -43,39 +49,106 @@ def sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
-def read_manifest(volume: Path) -> dict | None:
-    path = volume / MANIFEST
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
+def _validate_manifest(
+    path: Path, data: object, key: str, *, entity_id: str | None
+) -> dict | None:
+    """Check a parsed manifest.
 
+    ``entity_id`` is the owner an entity manifest must name; ``None`` means the
+    volume-root manifest, which is either a pointer naming its entity or the
+    earlier flat layout.
+    """
     if not isinstance(data, dict):
-        _warn_once(f"{volume}:not_dict", f"organ adapter manifest {path} is not a dict")
+        _warn_once(f"{key}:not_dict", f"organ adapter manifest {path} is not a dict")
         return None
 
     file = data.get("file")
     sha = data.get("sha256")
     gen = data.get("generation")
     adapter_id = data.get("adapter_id")
+    owner = data.get("entity_id")
     problems: list[str] = []
-    if not isinstance(file, str) or not _ACTIVE_FILE_RE.match(file):
+    if entity_id is not None:
+        # An entity's own manifest inside <volume>/<entity_id>/.
+        if owner != entity_id:
+            problems.append(f"entity_id must be {entity_id}")
+        if not isinstance(file, str) or not _ACTIVE_FILE_RE.match(file):
+            problems.append("file must match ^active-\\d+\\.gguf$")
+    elif "entity_id" in data:
+        # The volume-root pointer: file is <entity_id>/active-N.gguf.
+        if not is_entity_id(owner):
+            problems.append("entity_id is not an entity id")
+        elif not isinstance(file, str) or not re.fullmatch(
+            re.escape(str(owner)) + r"/active-\d+\.gguf", file
+        ):
+            problems.append("file must be <entity_id>/active-N.gguf")
+    elif not isinstance(file, str) or not _ACTIVE_FILE_RE.match(file):
+        # The earlier flat layout: the file sits beside the manifest.
         problems.append("file must match ^active-\\d+\\.gguf$")
     if not isinstance(sha, str) or not _SHA256_RE.match(sha):
         problems.append("sha256 must be 64 hex digits")
-    if not isinstance(gen, int) or gen < 1:
+    if not isinstance(gen, int) or isinstance(gen, bool) or gen < 1:
         problems.append("generation must be int >= 1")
     if not isinstance(adapter_id, str):
         problems.append("adapter_id must be a string")
 
     if problems:
         _warn_once(
-            f"{volume}:invalid",
+            f"{key}:invalid",
             f"organ adapter manifest {path} invalid: {', '.join(problems)}",
         )
         return None
 
     return data
+
+
+def read_manifest(volume: Path) -> dict | None:
+    """Read the volume-root manifest: a pointer to one entity's adapter, or the earlier flat layout."""
+    path = volume / MANIFEST
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return _validate_manifest(path, data, str(volume), entity_id=None)
+
+
+def read_entity_manifest(volume: Path, entity_id: str) -> dict | None:
+    """Read ``<volume>/<entity_id>/active.json``, the entity's own adapter manifest."""
+    sub = entity_subdir(volume, entity_id)
+    path = sub / MANIFEST
+    if path.is_symlink():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return _validate_manifest(path, data, str(sub), entity_id=entity_id)
+
+
+def _read_volume_generation(volume: Path) -> int:
+    """The volume-wide generation counter the organ launcher watches (0 when absent)."""
+    try:
+        gen = int((volume / GENERATION).read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        gen = 0
+    root = read_manifest(volume)
+    if root is not None:
+        gen = max(gen, int(root["generation"]))
+    return max(gen, 0)
+
+
+def _write_atomic(path: Path, text: str) -> None:
+    tmp = path.parent / f"{path.name}.tmp"
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(str(tmp), str(path))
+    os.chmod(path, 0o600)
+
+
+def names_file(loaded_path: object, file: str) -> bool:
+    """True when the organ's loaded adapter path ends with a manifest's ``file``."""
+    want = Path(file).parts
+    got = Path(str(loaded_path)).parts
+    return bool(want) and len(got) >= len(want) and got[-len(want):] == want
 
 
 def _prune_old_adapters(volume: Path, current_gen: int) -> None:
@@ -89,43 +162,60 @@ def _prune_old_adapters(volume: Path, current_gen: int) -> None:
             f.unlink(missing_ok=True)
 
 
-def activate(adapter_path: Path, volume: Path) -> dict:
+def activate(adapter_path: Path, volume: Path, entity_id: str) -> dict:
+    """Promote an adapter into ``<volume>/<entity_id>/`` and point the organ at it.
+
+    Writes ``<entity_id>/active-N.gguf`` and the entity's own
+    ``<entity_id>/active.json`` first, then the volume-root pointer
+    ``active.json``, and last the volume-wide ``generation`` counter the organ
+    launcher watches, each atomically. ``N`` counts this entity's promotions;
+    the volume counter counts every entity's. Returns the pointer. Refuses an
+    ``entity_id`` that is not in the identity format, and an entity directory
+    that is a symlink or resolves anywhere but directly under the volume.
+    """
     source = adapter_path / "adapter.gguf"
     if source.is_symlink() or not source.is_file():
         raise ValueError(f"adapter source {source} must be a regular file")
 
+    eid = require_entity_id(entity_id)
     volume.mkdir(parents=True, exist_ok=True)
+    sub = entity_subdir(volume, eid, create=True)
 
-    current = read_manifest(volume)
+    current = read_entity_manifest(volume, eid)
     gen = (current["generation"] if current else 0) + 1
-    target = volume / f"active-{gen}.gguf"
-    tmp = volume / f"active-{gen}.gguf.tmp"
+    target = sub / f"active-{gen}.gguf"
+    tmp = sub / f"active-{gen}.gguf.tmp"
 
     shutil.copyfile(source, tmp)
     os.replace(str(tmp), str(target))
     os.chmod(target, 0o600)
 
     sha = sha256_file(target)
-    manifest = {
+    activated_at = datetime.now(timezone.utc).isoformat()
+    entity_manifest = {
+        "entity_id": eid,
         "file": target.name,
         "sha256": sha,
         "generation": gen,
         "adapter_id": adapter_path.name,
-        "activated_at": datetime.now(timezone.utc).isoformat(),
+        "activated_at": activated_at,
     }
+    _write_atomic(sub / MANIFEST, json.dumps(entity_manifest, separators=(",", ":")))
 
-    manifest_tmp = volume / "active.json.tmp"
-    manifest_tmp.write_text(json.dumps(manifest, separators=(",", ":")), encoding="utf-8")
-    os.replace(str(manifest_tmp), str(volume / MANIFEST))
-    os.chmod(volume / MANIFEST, 0o600)
+    volume_gen = _read_volume_generation(volume) + 1
+    pointer = {
+        "entity_id": eid,
+        "file": f"{eid}/{target.name}",
+        "sha256": sha,
+        "generation": volume_gen,
+        "adapter_id": adapter_path.name,
+        "activated_at": activated_at,
+    }
+    _write_atomic(volume / MANIFEST, json.dumps(pointer, separators=(",", ":")))
+    _write_atomic(volume / GENERATION, str(volume_gen))
 
-    gen_tmp = volume / f"{GENERATION}.tmp"
-    gen_tmp.write_text(str(gen), encoding="utf-8")
-    os.replace(str(gen_tmp), str(volume / GENERATION))
-    os.chmod(volume / GENERATION, 0o600)
-
-    _prune_old_adapters(volume, gen)
-    return manifest
+    _prune_old_adapters(sub, gen)
+    return pointer
 
 
 async def _default_http_get(url: str, headers: dict[str, str]) -> tuple[int, Any]:
@@ -168,7 +258,7 @@ async def wait_ready(
         if status == 200 and isinstance(data, list):
             for entry in data:
                 try:
-                    if Path(entry["path"]).name == expected_file:
+                    if names_file(entry["path"], expected_file):
                         return True
                 except (KeyError, TypeError):
                     continue
@@ -285,7 +375,7 @@ class OrganAdapterResolver:
 
         for entry in data:
             try:
-                if Path(entry["path"]).name == manifest["file"]:
+                if names_file(entry["path"], manifest["file"]):
                     self._maybe_log(True, f"organ loaded {manifest['file']}")
                     return [{"id": entry["id"], "scale": 1.0}]
             except (KeyError, TypeError, AttributeError):

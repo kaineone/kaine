@@ -111,6 +111,7 @@ async def test_round_trip_with_fake_service(tmp_path, monkeypatch):
     """Stub service sees READY only after job.json + pairs.jsonl exist."""
     cfg = _cfg(tmp_path)
     trainer = JobQueueVoiceTrainer(
+        entity_id="ent-00000000000000000000000000000000",
         jobs_dir=tmp_path / "jobs",
         timeout_s=10.0,
         poll_interval_s=0.05,
@@ -131,7 +132,7 @@ async def test_round_trip_with_fake_service(tmp_path, monkeypatch):
     )
 
     async def fake_service():
-        jobs_dir = tmp_path / "jobs"
+        jobs_dir = tmp_path / "jobs" / "ent-00000000000000000000000000000000"
         deadline = time.monotonic() + 5.0
         while time.monotonic() < deadline:
             if jobs_dir.exists():
@@ -205,7 +206,7 @@ async def test_round_trip_with_fake_service(tmp_path, monkeypatch):
 
     assert current_path(cfg.adapter_output_dir) == final
 
-    job_dirs = list((tmp_path / "jobs").iterdir())
+    job_dirs = list((tmp_path / "jobs" / "ent-00000000000000000000000000000000").iterdir())
     assert len(job_dirs) == 1
     assert not (job_dirs[0] / "pairs.jsonl").exists()
 
@@ -224,6 +225,7 @@ async def test_timeout_writes_cancelled_and_deletes_pairs(tmp_path):
     """No service picking up the job → timeout error + CANCELLED marker."""
     cfg = _cfg(tmp_path)
     trainer = JobQueueVoiceTrainer(
+        entity_id="ent-00000000000000000000000000000000",
         jobs_dir=tmp_path / "jobs",
         timeout_s=0.3,
         poll_interval_s=0.05,
@@ -231,7 +233,7 @@ async def test_timeout_writes_cancelled_and_deletes_pairs(tmp_path):
     with pytest.raises(SubprocessTrainerError, match="did not finish"):
         await trainer.train(_pairs(), cfg)
 
-    job_dirs = list((tmp_path / "jobs").iterdir())
+    job_dirs = list((tmp_path / "jobs" / "ent-00000000000000000000000000000000").iterdir())
     assert len(job_dirs) == 1
     assert (job_dirs[0] / "CANCELLED").exists()
     assert not (job_dirs[0] / "pairs.jsonl").exists()
@@ -242,13 +244,14 @@ async def test_failed_result_raises_and_deletes_pairs(tmp_path):
     """result.json with ok=False is an error, never a fake success."""
     cfg = _cfg(tmp_path)
     trainer = JobQueueVoiceTrainer(
+        entity_id="ent-00000000000000000000000000000000",
         jobs_dir=tmp_path / "jobs",
         timeout_s=1.0,
         poll_interval_s=0.05,
     )
 
     async def fake_service():
-        jobs_dir = tmp_path / "jobs"
+        jobs_dir = tmp_path / "jobs" / "ent-00000000000000000000000000000000"
         deadline = time.monotonic() + 5.0
         while time.monotonic() < deadline:
             if jobs_dir.exists():
@@ -273,7 +276,7 @@ async def test_failed_result_raises_and_deletes_pairs(tmp_path):
         await trainer.train(_pairs(), cfg)
     assert (await service_task) is None
 
-    job_dirs = list((tmp_path / "jobs").iterdir())
+    job_dirs = list((tmp_path / "jobs" / "ent-00000000000000000000000000000000").iterdir())
     assert len(job_dirs) == 1
     assert not (job_dirs[0] / "pairs.jsonl").exists()
 
@@ -286,13 +289,14 @@ async def test_adapter_dir_escaping_job_dir_raises(tmp_path):
     (evil / "adapter_config.json").write_text("{}")
     cfg = _cfg(tmp_path)
     trainer = JobQueueVoiceTrainer(
+        entity_id="ent-00000000000000000000000000000000",
         jobs_dir=tmp_path / "jobs",
         timeout_s=1.0,
         poll_interval_s=0.05,
     )
 
     async def fake_service():
-        jobs_dir = tmp_path / "jobs"
+        jobs_dir = tmp_path / "jobs" / "ent-00000000000000000000000000000000"
         deadline = time.monotonic() + 5.0
         while time.monotonic() < deadline:
             if jobs_dir.exists():
@@ -325,7 +329,7 @@ async def test_adapter_dir_escaping_job_dir_raises(tmp_path):
         await trainer.train(_pairs(), cfg)
     assert (await service_task) is None
 
-    job_dirs = list((tmp_path / "jobs").iterdir())
+    job_dirs = list((tmp_path / "jobs" / "ent-00000000000000000000000000000000").iterdir())
     assert not (job_dirs[0] / "pairs.jsonl").exists()
 
 
@@ -334,13 +338,14 @@ async def test_gguf_sha_mismatch_raises(tmp_path):
     """The adapter.gguf sha256 must match result.json."""
     cfg = _cfg(tmp_path)
     trainer = JobQueueVoiceTrainer(
+        entity_id="ent-00000000000000000000000000000000",
         jobs_dir=tmp_path / "jobs",
         timeout_s=1.0,
         poll_interval_s=0.05,
     )
 
     async def fake_service():
-        jobs_dir = tmp_path / "jobs"
+        jobs_dir = tmp_path / "jobs" / "ent-00000000000000000000000000000000"
         deadline = time.monotonic() + 5.0
         while time.monotonic() < deadline:
             if jobs_dir.exists():
@@ -380,7 +385,7 @@ async def test_gguf_sha_mismatch_raises(tmp_path):
         await trainer.train(_pairs(), cfg)
     assert (await service_task) is None
 
-    job_dirs = list((tmp_path / "jobs").iterdir())
+    job_dirs = list((tmp_path / "jobs" / "ent-00000000000000000000000000000000").iterdir())
     assert not (job_dirs[0] / "pairs.jsonl").exists()
 
 
@@ -397,6 +402,7 @@ async def test_does_not_block_event_loop(tmp_path):
     """Polling train() lets other coroutines run while it waits."""
     cfg = _cfg(tmp_path)
     trainer = JobQueueVoiceTrainer(
+        entity_id="ent-00000000000000000000000000000000",
         jobs_dir=tmp_path / "jobs",
         timeout_s=0.3,
         poll_interval_s=0.05,
@@ -438,6 +444,7 @@ async def test_subprocess_backend_does_not_block_event_loop(tmp_path):
         """,
     )
     trainer = SubprocessVoiceTrainer(
+        entity_id="ent-00000000000000000000000000000000",
         trainer_python=VENV_PY,
         trainer_workdir=str(tmp_path / "jobs"),
         entry_script=stub,
@@ -461,6 +468,16 @@ def test_job_queue_backend_selects_job_queue_trainer(tmp_path, _approved, monkey
     assert trainer._organ_adapters_dir == Path(tmp_path / "organ_adapters")
     assert trainer._organ_url == organ_root_url("http://organ:8080")
     assert trainer._organ_api_key == "boot-secret"
+
+
+def test_job_queue_factory_passes_an_explicit_owner(tmp_path, _approved):
+    from kaine.boot.factories.sleep import _resolve_job_queue_trainer
+
+    owner = "ent-" + "c" * 32
+    trainer = _resolve_job_queue_trainer(_cfg(tmp_path), entity_id=owner)
+    assert trainer._entity_id == owner
+    # The cycle passes none: the trainer reads the identity file when it trains.
+    assert _resolve_job_queue_trainer(_cfg(tmp_path))._entity_id is None
 
 
 def test_job_queue_timeout_zero_raises_config_error(tmp_path, _approved):
@@ -489,12 +506,12 @@ async def test_early_result_without_done_is_not_consumed(tmp_path: Path) -> None
     """The external script writes result.json before the service converts the
     adapter; the trainer must wait for DONE and time out rather than read it."""
     jobs = tmp_path / "jobs"
-    trainer = JobQueueVoiceTrainer(jobs_dir=jobs, timeout_s=0.4, poll_interval_s=0.05)
+    trainer = JobQueueVoiceTrainer(entity_id="ent-00000000000000000000000000000000", jobs_dir=jobs, timeout_s=0.4, poll_interval_s=0.05)
     cfg = _cfg(tmp_path)
 
     async def early_script_only() -> None:
         for _ in range(100):
-            ready = list(jobs.glob("*/READY"))
+            ready = list(jobs.glob("*/*/READY"))
             if ready:
                 (ready[0].parent / "result.json").write_text(
                     json.dumps({"ok": True, "accepted": True, "adapter_dir": "out/x"})
@@ -506,3 +523,115 @@ async def test_early_result_without_done_is_not_consumed(tmp_path: Path) -> None
     with pytest.raises(SubprocessTrainerError, match="did not finish"):
         await trainer.train(_pairs(), cfg)
     assert (await task) is None
+
+
+# --------------------------------------------------------------------------- #
+# per-entity layout in a shared jobs volume
+# --------------------------------------------------------------------------- #
+EID = "ent-" + "0" * 32
+OTHER_EID = "ent-" + "f" * 32
+
+
+@pytest.mark.asyncio
+async def test_job_queue_job_lives_under_the_entity_and_names_it(tmp_path):
+    jobs = tmp_path / "jobs"
+    # A study line's job in the same volume is left alone, pairs and all.
+    other_job = jobs / OTHER_EID / "20261001T000000Z-deadbeef"
+    other_job.mkdir(parents=True)
+    (other_job / "pairs.jsonl").write_text("OTHER pairs\n")
+    (other_job / "READY").write_text("")
+
+    trainer = JobQueueVoiceTrainer(
+        entity_id=EID, jobs_dir=jobs, timeout_s=0.2, poll_interval_s=0.05
+    )
+    with pytest.raises(SubprocessTrainerError, match="did not finish"):
+        await trainer.train(_pairs(), _cfg(tmp_path))
+
+    assert sorted(p.name for p in jobs.iterdir()) == sorted([EID, OTHER_EID])
+    job_dirs = list((jobs / EID).iterdir())
+    assert len(job_dirs) == 1
+    job = json.loads((job_dirs[0] / "job.json").read_text())
+    assert job["entity_id"] == EID
+    assert job["adapter_output_dir"] == "out"
+    assert (jobs / EID).stat().st_mode & 0o777 == 0o700
+    assert (other_job / "pairs.jsonl").read_text() == "OTHER pairs\n"
+
+
+@pytest.mark.asyncio
+async def test_subprocess_job_lives_under_the_entity_and_names_it(tmp_path):
+    seen = tmp_path / "seen.json"
+    stub = _write_subprocess_stub(
+        tmp_path,
+        f"""
+        Path({str(seen)!r}).write_text(json.dumps({{"job_dir": str(job_dir), "job": job}}))
+        (job_dir / 'result.json').write_text(json.dumps({{
+            'ok': True, 'accepted': False, 'schema_version': 2,
+            'abliteration_passed': True, 'abliteration_probes_scored': 1,
+            'reason': 'rejected', 'capability_loss': 0.0, 'samples_used': len(pairs),
+        }}))
+        """,
+    )
+    trainer = SubprocessVoiceTrainer(
+        entity_id=EID,
+        trainer_python=VENV_PY,
+        trainer_workdir=str(tmp_path / "work"),
+        entry_script=stub,
+    )
+    result = await trainer.train(_pairs(), _cfg(tmp_path, trainer_backend="subprocess"))
+    assert result.accepted is False
+    record = json.loads(seen.read_text())
+    job_dir = Path(record["job_dir"])
+    assert job_dir.parent == tmp_path / "work" / EID
+    assert record["job"]["entity_id"] == EID
+
+
+@pytest.mark.asyncio
+async def test_job_owner_is_read_from_the_identity_file(tmp_path):
+    from kaine.lifecycle.identity import IDENTITY_PATH, mint_identity, save_identity
+    from kaine.storage import resolve
+
+    identity = mint_identity()
+    save_identity(identity, resolve(IDENTITY_PATH))
+    jobs = tmp_path / "jobs"
+    trainer = JobQueueVoiceTrainer(jobs_dir=jobs, timeout_s=0.2, poll_interval_s=0.05)
+    with pytest.raises(SubprocessTrainerError, match="did not finish"):
+        await trainer.train(_pairs(), _cfg(tmp_path))
+    job_dirs = list((jobs / identity.entity_id).iterdir())
+    assert len(job_dirs) == 1
+    assert json.loads((job_dirs[0] / "job.json").read_text())["entity_id"] == identity.entity_id
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("bad_id", [None, "ent-xyz", "../" + EID, "/abs", ".."])
+async def test_a_job_without_a_valid_owner_is_refused(tmp_path, bad_id):
+    """No identity file and no (valid) id: nothing is written, not even at the root."""
+    jobs = tmp_path / "jobs"
+    trainer = JobQueueVoiceTrainer(
+        entity_id=bad_id, jobs_dir=jobs, timeout_s=0.2, poll_interval_s=0.05
+    )
+    with pytest.raises(SubprocessTrainerError, match="not an entity id"):
+        await trainer.train(_pairs(), _cfg(tmp_path))
+    assert not jobs.exists() or not any(jobs.iterdir())
+
+    sub = SubprocessVoiceTrainer(
+        entity_id=bad_id, trainer_python=VENV_PY, trainer_workdir=str(tmp_path / "work")
+    )
+    with pytest.raises(SubprocessTrainerError, match="not an entity id"):
+        await sub.train(_pairs(), _cfg(tmp_path, trainer_backend="subprocess"))
+    work = tmp_path / "work"
+    assert not work.exists() or not any(work.iterdir())
+
+
+@pytest.mark.asyncio
+async def test_a_symlinked_entity_job_dir_is_refused(tmp_path):
+    jobs = tmp_path / "jobs"
+    jobs.mkdir()
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (jobs / EID).symlink_to(elsewhere)
+    trainer = JobQueueVoiceTrainer(
+        entity_id=EID, jobs_dir=jobs, timeout_s=0.2, poll_interval_s=0.05
+    )
+    with pytest.raises(SubprocessTrainerError, match="symlink"):
+        await trainer.train(_pairs(), _cfg(tmp_path))
+    assert not any(elsewhere.iterdir())

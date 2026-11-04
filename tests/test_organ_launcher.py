@@ -242,6 +242,221 @@ def test_sigterm_terminates_fake_and_launcher(tmp_path: Path):
     assert session.proc.returncode is not None
 
 
+# --------------------------------------------------------------------------- #
+# per-entity layout: the volume-root active.json is a pointer to
+# <entity_id>/active-N.gguf
+# --------------------------------------------------------------------------- #
+EID_A = "ent-" + "a" * 32
+EID_B = "ent-" + "b" * 32
+
+
+def _write_pointer(adapter_dir: Path, entity_id: str, file: str, sha256_hex: str) -> None:
+    adapter_dir.mkdir(parents=True, exist_ok=True)
+    pointer = {
+        "entity_id": entity_id,
+        "file": file,
+        "sha256": sha256_hex,
+        "generation": 1,
+        "adapter_id": "test-adapter",
+    }
+    (adapter_dir / "active.json").write_text(json.dumps(pointer, separators=(",", ":")))
+    (adapter_dir / "generation").write_text("1")
+
+
+def _entity_adapter(adapter_dir: Path, entity_id: str, content: str, n: int = 1) -> Path:
+    sub = adapter_dir / entity_id
+    sub.mkdir(parents=True, exist_ok=True)
+    path = sub / f"active-{n}.gguf"
+    path.write_text(content)
+    return path
+
+
+@NEEDS_UNIX_TOOLS
+def test_pointer_loads_the_named_entitys_adapter(tmp_path: Path):
+    adapters = tmp_path / "adapters"
+    own = _entity_adapter(adapters, EID_A, "adapter-a")
+    _entity_adapter(adapters, EID_B, "adapter-b")
+    _write_pointer(adapters, EID_A, f"{EID_A}/active-1.gguf", _sha256(own))
+
+    with LauncherSession(tmp_path):
+        last = _wait_for_log(tmp_path / "llama.log")
+        assert f"--lora-scaled {os.path.realpath(own)}:0" in last
+        assert "--no-cache-prompt" in last
+        assert EID_B not in last
+
+
+@NEEDS_UNIX_TOOLS
+def test_pointer_symlink_out_of_the_entity_dir_is_refused(tmp_path: Path):
+    """The pointer's file resolves (through a symlink) into another entity's
+    directory: the real path is not under the pointer's own entity directory."""
+    adapters = tmp_path / "adapters"
+    other = _entity_adapter(adapters, EID_B, "adapter-b")
+    (adapters / EID_A).mkdir(parents=True)
+    (adapters / EID_A / "active-1.gguf").symlink_to(other)
+    _write_pointer(adapters, EID_A, f"{EID_A}/active-1.gguf", _sha256(other))
+
+    with LauncherSession(tmp_path) as session:
+        last = _wait_for_log(tmp_path / "llama.log")
+        assert "--lora" not in last
+        assert "outside" in session.stderr()
+
+
+@NEEDS_UNIX_TOOLS
+def test_pointer_symlink_out_of_the_volume_is_refused(tmp_path: Path):
+    adapters = tmp_path / "adapters"
+    outside = tmp_path / "evil.gguf"
+    outside.write_text("not an adapter")
+    (adapters / EID_A).mkdir(parents=True)
+    (adapters / EID_A / "active-1.gguf").symlink_to(outside)
+    _write_pointer(adapters, EID_A, f"{EID_A}/active-1.gguf", _sha256(outside))
+
+    with LauncherSession(tmp_path) as session:
+        last = _wait_for_log(tmp_path / "llama.log")
+        assert "--lora" not in last
+        assert "outside" in session.stderr()
+
+
+@NEEDS_UNIX_TOOLS
+def test_symlinked_entity_dir_is_refused(tmp_path: Path):
+    """<volume>/<entity_id> itself links to another entity's directory."""
+    adapters = tmp_path / "adapters"
+    other = _entity_adapter(adapters, EID_B, "adapter-b")
+    (adapters / EID_A).symlink_to(adapters / EID_B)
+    _write_pointer(adapters, EID_A, f"{EID_A}/active-1.gguf", _sha256(other))
+
+    with LauncherSession(tmp_path) as session:
+        last = _wait_for_log(tmp_path / "llama.log")
+        assert "--lora" not in last
+        assert "outside" in session.stderr()
+
+
+@NEEDS_UNIX_TOOLS
+def test_pointer_to_another_entitys_dir_is_refused(tmp_path: Path):
+    """The pointer names entity A but its file is entity B's."""
+    adapters = tmp_path / "adapters"
+    other = _entity_adapter(adapters, EID_B, "adapter-b")
+    _write_pointer(adapters, EID_A, f"{EID_B}/active-1.gguf", _sha256(other))
+
+    with LauncherSession(tmp_path) as session:
+        last = _wait_for_log(tmp_path / "llama.log")
+        assert "--lora" not in last
+        assert "outside" in session.stderr()
+
+
+@NEEDS_UNIX_TOOLS
+@pytest.mark.parametrize(
+    "file",
+    [
+        f"{EID_A}/../{EID_B}/active-1.gguf",
+        f"{EID_A}/../../evil.gguf",
+        "/etc/passwd",
+        "ABSOLUTE",
+    ],
+)
+def test_pointer_with_dotdot_or_absolute_path_is_refused(tmp_path: Path, file: str):
+    adapters = tmp_path / "adapters"
+    other = _entity_adapter(adapters, EID_B, "adapter-b")
+    outside = tmp_path / "evil.gguf"
+    outside.write_text("not an adapter")
+    if file == "ABSOLUTE":
+        file = str(other)
+    (adapters / EID_A).mkdir(parents=True, exist_ok=True)
+    _write_pointer(adapters, EID_A, file, _sha256(other))
+
+    with LauncherSession(tmp_path) as session:
+        last = _wait_for_log(tmp_path / "llama.log")
+        assert "--lora" not in last
+        assert "absolute or contains '..'" in session.stderr()
+
+
+@NEEDS_UNIX_TOOLS
+@pytest.mark.parametrize(
+    "entity_id",
+    ["ent-xyz", "", "../ent-" + "a" * 32, "ENT-" + "a" * 32, "ent-" + "a" * 31, "other-" + "a" * 32],
+)
+def test_pointer_with_malformed_entity_id_is_refused(tmp_path: Path, entity_id: str):
+    adapters = tmp_path / "adapters"
+    own = _entity_adapter(adapters, EID_A, "adapter-a")
+    _write_pointer(adapters, entity_id, f"{EID_A}/active-1.gguf", _sha256(own))
+
+    with LauncherSession(tmp_path) as session:
+        last = _wait_for_log(tmp_path / "llama.log")
+        assert "--lora" not in last
+        assert "is not an entity id" in session.stderr()
+
+
+@NEEDS_UNIX_TOOLS
+def test_pointer_sha_mismatch_is_refused(tmp_path: Path):
+    adapters = tmp_path / "adapters"
+    _entity_adapter(adapters, EID_A, "adapter-a")
+    _write_pointer(adapters, EID_A, f"{EID_A}/active-1.gguf", "0" * 64)
+
+    with LauncherSession(tmp_path) as session:
+        last = _wait_for_log(tmp_path / "llama.log")
+        assert "--lora" not in last
+        assert "mismatch" in session.stderr().lower()
+
+
+@NEEDS_UNIX_TOOLS
+def test_launcher_loads_what_activate_wrote(tmp_path: Path):
+    """The Python writer and the shell reader agree on the layout: two entities
+    activate into one volume and the organ loads the last one's adapter."""
+    from kaine.modules.sleep.organ_adapter import activate
+
+    adapters = tmp_path / "adapters"
+    for eid, content in ((EID_A, b"adapter-a"), (EID_B, b"adapter-b")):
+        src = tmp_path / f"src-{eid}" / "accepted-1"
+        src.mkdir(parents=True)
+        (src / "adapter.gguf").write_bytes(content)
+        activate(src, adapters, eid)
+
+    with LauncherSession(tmp_path):
+        last = _wait_for_log(tmp_path / "llama.log")
+        expected = os.path.realpath(adapters / EID_B / "active-1.gguf")
+        assert f"--lora-scaled {expected}:0" in last
+        assert EID_A not in last
+
+
+@NEEDS_UNIX_TOOLS
+def test_launcher_starts_without_adapter_after_decommission_removes_the_pointer(tmp_path: Path):
+    """Decommission removes the entity's directory and the pointer naming it
+    and keeps the generation file; the launcher then starts with no adapter."""
+    from kaine.lifecycle.decommission import delete_entity_state
+    from kaine.lifecycle.identity import mint_identity, save_identity
+    from kaine.modules.sleep.organ_adapter import activate
+    from kaine.security.crypto import CryptoConfig, StateEncryptor, set_state_encryptor
+
+    set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))
+    state_root = tmp_path / "state"
+    identity = mint_identity()
+    save_identity(identity, state_root / "identity" / "entity.json")
+    adapters = tmp_path / "adapters"
+    src = tmp_path / "src" / "accepted-1"
+    src.mkdir(parents=True)
+    (src / "adapter.gguf").write_bytes(b"adapter-own")
+    activate(src, adapters, identity.entity_id)
+
+    result = delete_entity_state(
+        state_root=state_root,
+        qdrant_cfg={
+            "episodic_memory": {"backend": "inmemory"},
+            "social_cognition": {"backend": "inmemory"},
+            "sleep": {"voice_alignment": {"organ_adapters_dir": str(adapters)}},
+        },
+        fork_root=tmp_path / "forks",
+        data_root=tmp_path / "data",
+    )
+    assert not result.errors, result.errors
+    assert not (adapters / "active.json").exists()
+    assert not (adapters / identity.entity_id).exists()
+    assert (adapters / "generation").exists()
+
+    with LauncherSession(tmp_path) as session:
+        last = _wait_for_log(tmp_path / "llama.log")
+        assert "--lora" not in last
+        assert "no active.json manifest" in session.stderr()
+
+
 def test_compose_security_invariants():
     yaml = pytest.importorskip("yaml")
     data = yaml.safe_load(COMPOSE_FILE.read_text())
