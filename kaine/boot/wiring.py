@@ -86,6 +86,7 @@ _WORKSPACE_ALLOWED_KEYS: set[str] = {
     "arm",  # the arm of the planned test, read by the cycle
     "regulation_bias",  # emotion regulation's tier-1 selection bias gate (paper §3.5); false in every study arm
     "feedback",  # the [workspace.feedback] table (paper §3.2), read by kaine.boot.feedback
+    "content",  # the [workspace.content] table (paper §3.2, option F), read by kaine.boot.feedback
 }
 
 # Shipped default source per salience factor (wire-salience-goal-thymos, STAGED
