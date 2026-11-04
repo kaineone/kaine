@@ -6,13 +6,13 @@ The development run protocol governs the single-entity progressive run: one enti
 ## ADDED Requirements
 
 ### Requirement: progressive-step-sequence
-The development run SHALL execute steps in a fixed linear order. Step 0 is the seed (gestation and maturation). Each subsequent step SHALL revive the previous step's preserved entity with one additional module enabled, in the declared module order, then play the film programme.
+The development run SHALL execute steps in a fixed linear order. Step 0 is the seed (development and maturation). Each subsequent step SHALL revive the previous step's preserved entity with one additional module enabled, in the declared module order, then play the film programme.
 
 #### Scenario: step ordering
 - **WHEN** the run plan is generated for modules [episodic-memory, world-model, planning]
 - **THEN** step 0 is the seed, step 1 adds episodic-memory, step 2 adds world-model, step 3 adds planning, each reviving the previous step's preservation
 
-#### Scenario: step 0 is gestation
+#### Scenario: step 0 is development
 - **WHEN** step 0 begins
 - **THEN** a new entity is spawned with the base module set, enters the local stimulus source, and matures under the default gate
 

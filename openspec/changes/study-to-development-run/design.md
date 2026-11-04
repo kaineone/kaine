@@ -27,7 +27,7 @@ The conversion simplifies the plan generator and analysis while keeping the runn
 
 The plan generator produces:
 ```
-step 0: seed (gestation → maturation → preserve)
+step 0: seed (development → maturation → preserve)
 step 1: revive seed + [episodic-memory] → films → preserve
 step 2: revive step 1 + [world-model] → films → preserve
 ...
