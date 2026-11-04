@@ -1,128 +1,29 @@
-# voice-alignment Specification
+# Spec Delta
 
-## Purpose
-Voice-alignment training runs outside the cycle's process, in a subprocess or a trainer service, so the cycle never shares the trainer's torch and CUDA stack and is never blocked by it. Reloading the organ afterwards coordinates with the GPU headroom gate.
+## ADDED Requirements
 
-## Requirements
+### Requirement: Shared adapter and job volumes are partitioned by entity
+When the organ-adapters directory or the trainer-jobs directory may be shared between entities, the system SHALL write each entity's promoted adapters, adapter manifest and voice-alignment jobs under a subdirectory named by that entity's id, and SHALL record the entity id in each job's description.
 
-### Requirement: Out-of-process voice-alignment trainer
-The sleep module's voice-alignment consolidation phase SHALL be able to run its
-DPO/QLoRA training in a separate, operator-configured Python environment as an
-isolated subprocess, so the entity-runtime interpreter is never coupled to the
-trainer's torch/CUDA stack. The trainer interpreter SHALL be configurable
-(`[sleep.voice_alignment].trainer_python`), the training subprocess SHALL
-receive the preference pairs, the base-model reference, and the LoRA/DPO
-configuration via a filesystem job spec and return a real trained adapter, and
-the external training entry point SHALL NOT import the `kaine` package (so the
-runtime import boundary is unaffected). The existing capability and abliteration
-gates SHALL apply to the returned adapter unchanged.
+#### Scenario: Two entities promote adapters into one volume
+- **WHEN** the main entity and a study line each promote a voice adapter into the same organ-adapters volume
+- **THEN** each adapter and its manifest are under that entity's own subdirectory, and neither overwrites the other's files
 
-#### Scenario: External env trains and returns an adapter
-- **WHEN** voice-alignment runs with `trainer_backend = "subprocess"` and a valid `trainer_python`
-- **THEN** the phase writes the preference pairs + base-model reference + config to a job spec, invokes the configured interpreter as a subprocess, and consumes the adapter it produces — which then passes through the unchanged capability and abliteration gates
+#### Scenario: A job names its owner
+- **WHEN** the voice-alignment phase writes a training job into a shared jobs directory
+- **THEN** the job is under the entity's subdirectory and its description records the entity id
 
-#### Scenario: Missing or incompatible trainer env fails loud
-- **WHEN** the subprocess backend is selected but the trainer interpreter is unset, missing, exits non-zero, or produces no adapter
-- **THEN** the phase raises a clear error (a config error at boot for an unset/invalid interpreter; a training error at run time for a failed subprocess) and NEVER reports a fake or no-op training success
+#### Scenario: An entity id that is not an identity
+- **WHEN** an entity id does not match the identity format
+- **THEN** it is never used as a directory name, and the write or the load is refused
 
-#### Scenario: In-process path retained for compatible hosts
-- **WHEN** `trainer_backend = "in_process"` (the shipped default) and the runtime venv has the `[training]` extra
-- **THEN** voice-alignment trains in-process exactly as before, unchanged
+#### Scenario: Legacy flat layout
+- **WHEN** the volume holds only the earlier flat layout (`active.json` and `active-N.gguf` at the root)
+- **THEN** the organ still loads the adapter it names, and the trainer service still runs root-level jobs
 
-### Requirement: Organ-dependent cognition tolerates the training window
+### Requirement: The organ loads only the pointed entity's own adapter
+The organ SHALL load the adapter named by a volume-level pointer that identifies the entity, and SHALL load it only when the target's real path lies under the subdirectory of the entity the pointer names, refusing absolute paths and `..`.
 
-The system SHALL allow organ-dependent cognition to degrade gracefully while the
-organ is unloaded for the voice-alignment training window. Because the window
-falls inside sleep — when the entity is not expected to speak — the language module's generation
-requests SHALL be deferred (resolved as a "resting" no-op or queued) rather than
-raising, and the A/B-divergence evaluation arm SHALL skip its samples for the
-window, logged as skipped (not failed). Consumers SHALL resume normally once the
-organ is reloaded.
-
-#### Scenario: Generation during the window defers cleanly
-
-- **WHEN** the language module receives a generation request while the organ is unloaded for
-  training
-- **THEN** the request resolves as a resting/deferred no-op and does not raise
-
-#### Scenario: The eval arm skips rather than fails
-
-- **WHEN** the A/B-divergence arm would sample while the organ is unloaded
-- **THEN** the sample is logged as skipped for the window and the eval does not
-  record a failure
-
-### Requirement: The organ reload cooperates with the GPU headroom gate
-
-The system SHALL verify per-device GPU headroom (reusing `gpu-preflight`) before
-reloading the organ after training, and SHALL report rather than thrash if the
-device is short, never terminating foreign processes. The organ process SHALL be
-supervised so a reload failure is surfaced and retried/escalated rather than
-leaving the entity voiceless on wake.
-
-#### Scenario: Insufficient headroom is reported, not forced
-
-- **WHEN** the device lacks headroom to reload the organ after training
-- **THEN** the condition is reported to the operator and no foreign process is
-  terminated
-
-#### Scenario: A supervised reload failure escalates
-
-- **WHEN** the organ fails to reload after training
-- **THEN** the supervisor surfaces the failure (retry/escalate) rather than
-  silently leaving the organ unloaded
-
-### Requirement: A containerized cycle trains through a trainer service
-With `trainer_backend = "job_queue"`, the voice-alignment phase SHALL write the existing filesystem job spec (the preference pairs, the base-model reference and the LoRA/DPO configuration) to a new directory under `[sleep.voice_alignment].trainer_jobs_dir`, mark it ready, and await the trainer service's `result.json` asynchronously. It SHALL wait no longer than `[sleep.voice_alignment].trainer_timeout_s` (default 21600).
-
-The job's adapter output directory SHALL be inside the job directory, so the trainer service sees only the jobs volume and never the entity's state. The phase SHALL apply the same validation as the subprocess backend: success status, a non-empty adapter directory inside the job directory, and the unchanged capability and abliteration gates. On success, the phase SHALL promote the vetted adapter, together with its GGUF form, into the entity's configured `adapter_output_dir` through the existing atomic promotion. Whatever the outcome, it SHALL delete the job's preference pairs, which are entity language, once the job ends. A timeout, a failed result or a missing adapter SHALL fail loud and SHALL NEVER report a fake or no-op success.
-
-The trainer service (`python -m kaine.modules.sleep.trainer_service`) SHALL:
-- run each ready job with the existing external training entry point;
-- convert a promoted adapter to a GGUF LoRA with llama.cpp's converter pinned to the organ's build, and write it beside the adapter;
-- write `result.json`;
-- start training only after confirming the organ reports that it is asleep and the training device has the configured free VRAM, and otherwise fail the job with the reason;
-- never need the Docker socket or host ports.
-
-#### Scenario: A job round-trips through the trainer service
-- **WHEN** voice alignment runs with `trainer_backend = "job_queue"` and the trainer service is running
-- **THEN** the job spec appears in the jobs directory, the service trains, vetoes or promotes, converts the promoted adapter to GGUF, and writes `result.json`, and the phase consumes it without blocking the cycle
-
-#### Scenario: The trainer never sees entity state
-- **WHEN** a job-queue job runs
-- **THEN** the job spec names an adapter output directory inside the job directory, the vetted adapter is promoted into the entity's `adapter_output_dir` by the cycle, and the job's `pairs.jsonl` no longer exists after the job ends
-
-#### Scenario: No trainer service fails loud
-- **WHEN** no trainer service picks up the job before `trainer_timeout_s`
-- **THEN** the phase raises a training error naming the timeout, and no adapter is reported
-
-#### Scenario: A busy organ defers training honestly
-- **WHEN** the organ is awake, or the training device lacks the configured free VRAM, when a job is picked up
-- **THEN** the service waits a bounded time for the organ to sleep, and otherwise fails the job with the reason, never training on a contended device
-
-### Requirement: The subprocess trainer never blocks the cycle
-With `trainer_backend = "subprocess"`, the training subprocess SHALL run without blocking the cycle's event loop. The cycle's other tasks SHALL continue while the trainer runs.
-
-#### Scenario: The cycle keeps ticking during subprocess training
-- **WHEN** a subprocess training run takes several seconds
-- **THEN** other coroutines on the cycle's event loop keep running during it
-
-### Requirement: The pair builder skips identity leakage
-The voice-alignment pair builder SHALL build no pair from an intent-log record whose `extra.identity_leak` is true. Such a record SHALL count as scanned and not as usable.
-
-#### Scenario: A marked record
-- **WHEN** the log holds one marked and one unmarked record that would each give a pair
-- **THEN** the builder returns only the unmarked record's pair
-
-### Requirement: Voice adaptation idles without a validated preference source
-The voice-alignment phase SHALL build preference pairs only when it is enabled, operator approval is granted and its configured preference source is a validated training source. Otherwise it SHALL build no pairs and SHALL compute, publish and persist no organ-level divergence: no `sleep.consolidation_divergence` event, no `state/sleep/consolidation_divergence.json` and no `consolidation_divergence` key in the phase metadata (paper section 3.5). The sleep index SHALL advance once per sleep, at its start, and `sleep.sleep.started` SHALL carry it as `sleep_index`, so listeners learn it whether or not the sleep-time intent audit succeeds.
-
-#### Scenario: The first configuration
-- **WHEN** a sleep runs with voice alignment disabled and an intent log of 100 records
-- **THEN** no pairs are built, no consolidation divergence record or event exists, and the sleep index rises by one and appears on `sleep.sleep.started`
-
-### Requirement: The pair builder skips every text that says what the entity is
-The voice-alignment pair builder SHALL build no pair from an intent-log record whose `extra.identity_leak` or `extra.self_description` is true, so voice adaptation trains self-description in neither direction (paper section 3.5). Such a record SHALL count as scanned and not as usable.
-
-#### Scenario: A self-description
-- **WHEN** a record carries `extra.self_description = true`
-- **THEN** the builder returns no pair for it
+#### Scenario: A pointer that leaves the volume
+- **WHEN** the volume-level pointer names a file outside the organ-adapters volume
+- **THEN** the organ loads no adapter and logs why
