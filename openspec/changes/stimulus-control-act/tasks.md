@@ -26,16 +26,16 @@
 - [x] 4.3 Offline check of D6 on the affect module's trackers. Test: `tests/test_stimulus_habituation.py`; record: `docs/records/shakedowns/2026-10-31-stimulus-control-habituation.md`.
 - [x] 4.4 Docs: `docs/09-modules/effectors.md`, `docs/09-modules/affect.md`, `docs/appendix-a-configuration/perception-and-sleep.md`, `docs/17-research-data/README.md`.
 - [x] 4.5 Independent second review (welfare-high-risk).
-- [ ] 4.6 Paper change settled through the revision notes: §3.6, §6.5, §9, §11 sentences; A.4 credit; A.6 stage-M rule; Table A1 values for `Delta_sc`, `n_seek`, `P_max`, `G_step`, `G_max`.
+- [x] 4.6 Paper change settled through the revision notes: §3.6, §6.5, §9, §11 sentences; A.4 credit; A.6 stage-M rule; Table A1 values for `Delta_sc`, `n_seek`, `P_max`, `G_step`, `G_max`.
 - [ ] 4.7 One supervised validation boot on a branch before the join.
 
 ## 5. Development-run join (after `development-run` is built)
 
 - [ ] 5.1 Registry entry in `config/development_run/components.toml`: class action, readout `stimulus_control`, experience-changing with its second-review record, reversible.
-- [ ] 5.2 Per-pass viewings: with `programme_end = "continue"`, reset the gain and close a `stimulus_control` record at each pass end, and end each pass at its programme's perceived length.
+- [x] 5.2 Per-pass viewings: with `programme_end = "continue"`, reset the gain and close a `stimulus_control` record at each pass end, and end each pass at its programme's perceived length.
 - [x] 5.3 Operator decision on the paused share, revised on the second review's evidence (F1): a pause waits `Delta_sc` after the previous pause ended, and is taken only while a full one keeps the paused share of the trailing awake hour within 25 %. Test: `tests/test_stimulus_pause_bound.py` (the scripted cycle; stage M under sustained boredom, 5 seeds x 3 h).
 - [x] 5.5 Operator decision (2026-11-01): stage M never draws `pause` until learned action selection (stage L) exists; the effector keeps `pause`, its bounds and refusals. Test: `tests/test_stimulus_stage_m.py::test_stage_m_never_draws_pause`; the sustained-boredom test now finds a paused share of 0.
-- [ ] 5.4 Development-run first-hours stop criterion on the paused share (text in `development-run`): during the first three awake hours after stimulus control is switched on, the run stops at the next pass end and holds for the operator's review when the `stimulus_control` record's `paused_share_last_awake_hour_max` exceeds 0.20 or `pause_share_refusals` is above 0, with the readout's `after_own_act_by_action.pause` reported alongside.
+- [x] 5.4 Development-run first-hours stop criterion on the paused share (text in `development-run`): during the first three awake hours after stimulus control is switched on, the run stops at the next pass end and holds for the operator's review when the `stimulus_control` record's `paused_share_last_awake_hour_max` exceeds 0.20 or `pause_share_refusals` is above 0, with the readout's `after_own_act_by_action.pause` reported alongside.
 
 ## 6. Stage L (after dependencies)
 
