@@ -138,6 +138,8 @@ class TopDownHead:
                 f"TopDownHead state shape mismatch: expected "
                 f"({self._output_dim}, {self._input_dim}), got {weights.shape}"
             )
+        if not np.all(np.isfinite(weights)):
+            raise ValueError("TopDownHead state contains non-finite weights")
         self._weights = weights
         # lr is structural and set at construction; log if it changed but don't reject
         saved_lr = state.get("lr")

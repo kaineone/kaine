@@ -2368,6 +2368,11 @@ async def _phase_workspace(ctx: BootContext) -> int | None:
             "workspace feedback runs the %s arm of the held extension (paper §6.4)",
             ctx.workspace.feedback.arm,
         )
+    else:
+        pending = getattr(ctx.registry, "pending_feedback_state", None)
+        if pending is not None:
+            del ctx.registry.pending_feedback_state
+            log.info("workspace feedback disabled; discarded preserved gains")
     if ctx.workspace.arm != "competitive":
         log.warning(
             "workspace runs the %s control arm of the planned ablation", ctx.workspace.arm
