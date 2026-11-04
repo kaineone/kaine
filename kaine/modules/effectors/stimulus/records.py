@@ -195,6 +195,39 @@ class StimulusTally:
                     self._otherwise.add(dt, **values)
             self._changed = True
 
+    def close_pass(self, pass_number: int) -> dict[str, Any]:
+        with self._lock:
+            rec = self._record_locked()
+            rec["pass"] = int(pass_number)
+            self._reset_locked()
+            return rec
+
+    def _reset_locked(self) -> None:
+        self._accepted = {a: 0 for a in self._declared}
+        self._refused = {a: 0 for a in self._declared}
+        self._refused[_OTHER_ACTION] = 0
+        self._auto_releases = 0
+        self._awake_s = 0.0
+        self._entity_paused_s = 0.0
+        self._gain_s = {}
+        self._visits = []
+        self._visits_dropped = 0
+        self._after = _Window()
+        self._otherwise = _Window()
+        self._after_by_action = {}
+        self._last_action = None
+        self._window_action = None
+        self._window_credited_ends = 0
+        self._window_open = False
+        self._boredom_at_open = None
+        self._boredom_last = None
+        self._acts_observed = 0
+        self._acts_boredom_fell = 0
+        self._paused_share = 0.0
+        self._paused_share_max = 0.0
+        self._pause_share_refusals = 0
+        self._changed = False
+
     # -- readers ------------------------------------------------------------
 
     def record(self) -> dict[str, Any]:
