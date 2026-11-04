@@ -156,6 +156,10 @@ curl -s -H "Authorization: Bearer $KAINE_MODEL_SERVER_API_KEY" http://127.0.0.1:
 
 The cycle refuses to boot, with exit code `9`, if the organ returns no content. Set `KAINE_ALLOW_MUTE_ORGAN=1` to override that gate.
 
+### Decision server (optional)
+
+The decision server is a second model server that serves K1-Jev, the welfare and self-model grader. It is optional and runs only when `[decision].enabled = true` in `kaine.toml`; the rest of its settings are in the `[decision]` section. It listens on port 11436 (`KAINE_DECISION_SERVER_HOST_PORT`). See [Containers](../07-deployment/containers.md) for how it runs.
+
 ## Speech services
 
 The default entity has the [audition](../09-modules/audition.md) module enabled with `transcription_enabled = false`, so speech-to-text never runs and the audition module does not contact Speaches. The health board lists Speaches as `not configured` while transcription is off, which is expected. The [vocal](../09-modules/vocal.md) module is off by default; enable it only if you want TTS.
