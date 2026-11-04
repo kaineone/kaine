@@ -26,7 +26,7 @@
 - [x] 4.3 Offline check of D6 on the affect module's trackers. Test: `tests/test_stimulus_habituation.py`; record: `docs/records/shakedowns/2026-10-31-stimulus-control-habituation.md`.
 - [x] 4.4 Docs: `docs/09-modules/effectors.md`, `docs/09-modules/affect.md`, `docs/appendix-a-configuration/perception-and-sleep.md`, `docs/17-research-data/README.md`.
 - [x] 4.5 Independent second review (welfare-high-risk).
-- [ ] 4.6 Paper change settled through the revision notes: §3.6, §6.5, §9, §11 sentences; A.4 credit; A.6 stage-M rule; Table A1 values for `Delta_sc`, `n_seek`, `P_max`, `G_step`, `G_max`.
+- [x] 4.6 Paper change settled through the revision notes: §3.6, §6.5, §9, §11 sentences; A.4 credit; A.6 stage-M rule; Table A1 values for `Delta_sc`, `n_seek`, `P_max`, `G_step`, `G_max`.
 - [ ] 4.7 One supervised validation boot on a branch before the join.
 
 ## 5. Development-run join (after `development-run` is built)
