@@ -150,7 +150,7 @@ class Qwen3TTS:
 
                 self._qwen_tts_module = qwen_tts
             except ImportError:
-                pass
+                pass  # deferred: ensure_loaded() will raise if still missing
 
     async def ensure_loaded(self) -> None:
         """Load the model when it is not loaded.
