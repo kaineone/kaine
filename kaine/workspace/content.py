@@ -2,6 +2,7 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 from __future__ import annotations
 
+import itertools
 import math
 from typing import Any
 
@@ -213,6 +214,23 @@ class ContentLevel:
             if latent is not None:
                 self._encoders[name].adapt(latent, grad_z)
             losses[name] = loss
+        return losses
+
+    def train_step_translation(self, observed: dict[str, np.ndarray]) -> dict[str, float]:
+        """Cycle-consistency training across processor pairs."""
+        losses: dict[str, float] = {}
+        names = [n for n in observed if n in self._encoders and n in self._decoders]
+        for p, q in itertools.combinations(names, 2):
+            lat_p = np.asarray(observed[p], dtype=np.float64)
+            lat_q = np.asarray(observed[q], dtype=np.float64)
+            z_pq = self._encoders[q].encode(lat_q)
+            loss_pq, grad_pq = self._decoders[p].adapt(z_pq, lat_p)
+            self._encoders[q].adapt(lat_q, grad_pq)
+            z_qp = self._encoders[p].encode(lat_p)
+            loss_qp, grad_qp = self._decoders[q].adapt(z_qp, lat_q)
+            self._encoders[p].adapt(lat_p, grad_qp)
+            losses[p] = losses.get(p, 0.0) + loss_pq
+            losses[q] = losses.get(q, 0.0) + loss_qp
         return losses
 
     @property

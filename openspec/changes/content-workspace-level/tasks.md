@@ -2,9 +2,9 @@
 
 ## 1. Content level core
 
-- [ ] 1.1 `kaine/workspace/content.py`: `ContentLevel` class with per-source `ContentEncoder` (linear d_p → code_dim, tanh), per-processor `ContentDecoder` (linear code_dim → d_p, tanh), shared code `z_k` update (intensity-weighted centroid), and reconstruction-error training step. Pure numpy, matching TopDownHead's style.
-- [ ] 1.2 `ContentLevel.state_dict()` / `load_state_dict()` for preservation: encoder weights, decoder weights, current `z_k`. Finite-weights guard on load, shape-mismatch rejection, backward compat (missing keys → fresh init).
-- [ ] 1.3 Tests: `tests/test_content_level.py` — encoder/decoder round-trip, z_k update with intensity weighting, training step reduces reconstruction error over 50 steps, state_dict round-trip, shape mismatch rejection, off-by-default produces no side effects.
+- [x] 1.1 `kaine/workspace/content.py`: `ContentLevel` class with per-source `ContentEncoder` (linear d_p → code_dim, tanh), per-processor `ContentDecoder` (linear code_dim → d_p, tanh), shared code `z_k` update (intensity-weighted centroid), and reconstruction-error training step. Pure numpy, matching TopDownHead's style.
+- [x] 1.2 `ContentLevel.state_dict()` / `load_state_dict()` for preservation: encoder weights, decoder weights, current `z_k`. Finite-weights guard on load, shape-mismatch rejection, backward compat (missing keys → fresh init).
+- [x] 1.3 Tests: `tests/test_content_level.py` — encoder/decoder round-trip, z_k update with intensity weighting, training step reduces reconstruction error over 50 steps, state_dict round-trip, shape mismatch rejection, off-by-default produces no side effects.
 
 ## 2. Translation-loss arm
 
