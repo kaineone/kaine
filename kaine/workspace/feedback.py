@@ -32,10 +32,15 @@ import random
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+import numpy as np
 
 from kaine.bus.schema import Event
 from kaine.cycle.types import WorkspaceSnapshot
+
+if TYPE_CHECKING:
+    from kaine.workspace.content import ContentLevel
 
 FEEDBACK_ARMS: tuple[str, ...] = ("off", "head_only", "head_gain", "full", "matched_random")
 PROCESSORS: tuple[str, ...] = ("vision", "audition", "interoception")
@@ -49,6 +54,11 @@ SEQUENCE_REPORT_TYPE = "sequence.report"
 SEQUENCE_PREDICTION_KEY = "predicted_next_feature_vector"
 SEQUENCE_PREDICTION_DIM = 24
 FEEDBACK_KEY = "workspace_feedback"
+LATENT_KEYS: dict[str, str] = {
+    "vision": "latent",
+    "audition": "feature_vector",
+    "interoception": "feature_vector",
+}
 ALLOWED_KEYS: frozenset[str] = frozenset({
     "enabled", "arm", "pi_min", "pi_max", "disagreement_threshold",
     "conflict_error_ratio", "gain_step", "gain_relax_s", "refractory_s",
@@ -216,6 +226,7 @@ class FeedbackController:
         self,
         settings: WorkspaceFeedbackSettings,
         *,
+        content: ContentLevel | None = None,
         seed: int | None = None,
         clock: Callable[[], float] | None = None,
     ) -> None:
@@ -235,6 +246,7 @@ class FeedbackController:
             processor: -math.inf for processor in PROCESSORS
         }
         self._seen: set[str] = set()
+        self._content = content
         self._sequence_prediction: tuple[float, ...] | None = None
 
     @property
@@ -259,7 +271,10 @@ class FeedbackController:
 
     def state_dict(self) -> dict[str, Any]:
         """Snapshot the workspace-level gains for preservation."""
-        return {"gains": dict(self._gains)}
+        result: dict[str, Any] = {"gains": dict(self._gains)}
+        if self._content is not None:
+            result["content"] = self._content.state_dict()
+        return result
 
     def load_state_dict(self, state: dict[str, Any]) -> None:
         """Restore gains from a preserved snapshot."""
@@ -275,6 +290,9 @@ class FeedbackController:
                 and self._settings.pi_min <= value <= self._settings.pi_max
             ):
                 self._gains[processor] = float(value)
+        content_state = state.get("content")
+        if content_state is not None and self._content is not None:
+            self._content.load_state_dict(content_state)
 
     def _is_usable_number(self, value: Any) -> bool:
         """Return True for finite ints and floats, excluding bool."""
@@ -367,6 +385,34 @@ class FeedbackController:
             score = snapshot.salience_scores.get(entry_id, event.salience)
             if threshold is None or score >= threshold:
                 accessed[event.source] = event
+
+        content_predictions: dict[str, list[float]] = {}
+        content_losses: dict[str, float] = {}
+        if self._content is not None and accessed:
+            latents: dict[str, np.ndarray] = {}
+            intensities: dict[str, float] = {}
+            for proc_name, event in accessed.items():
+                key = LATENT_KEYS.get(proc_name)
+                if key is None:
+                    continue
+                raw = event.payload.get(key)
+                if raw is None:
+                    continue
+                try:
+                    arr = np.asarray(raw, dtype=np.float64)
+                    if arr.ndim == 1 and np.all(np.isfinite(arr)):
+                        latents[proc_name] = arr
+                        intensities[proc_name] = self._gains.get(proc_name, 1.0)
+                except (ValueError, TypeError):
+                    continue
+
+            if latents:
+                self._content.update_code(latents, intensities)
+                content_losses = self._content.train_step(latents)
+                for proc_name in latents:
+                    pred = self._content.predict(proc_name)
+                    if pred is not None:
+                        content_predictions[proc_name] = pred
 
         eligible: dict[str, dict[str, Any]] = {}
         for processor in PROCESSORS:
@@ -476,7 +522,7 @@ class FeedbackController:
                                 }
                             )
 
-        return {
+        result = {
             "arm": self._settings.arm,
             "gains": dict(self._gains),
             "sequence_prediction": (
@@ -486,3 +532,11 @@ class FeedbackController:
             ),
             "episodes": episodes,
         }
+        if self._content is not None:
+            z = self._content.code
+            result["content"] = {
+                "z_k": z.tolist() if z is not None else None,
+                "predictions": content_predictions,
+                "losses": content_losses,
+            }
+        return result
