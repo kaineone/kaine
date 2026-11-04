@@ -257,6 +257,25 @@ class FeedbackController:
         """The most recently observed sequence feature vector, if any."""
         return self._sequence_prediction
 
+    def state_dict(self) -> dict[str, Any]:
+        """Snapshot the workspace-level gains for preservation."""
+        return {"gains": dict(self._gains)}
+
+    def load_state_dict(self, state: dict[str, Any]) -> None:
+        """Restore gains from a preserved snapshot."""
+        gains = state.get("gains")
+        if not isinstance(gains, dict):
+            return
+        for processor in PROCESSORS:
+            value = gains.get(processor)
+            if (
+                isinstance(value, (int, float))
+                and not isinstance(value, bool)
+                and math.isfinite(value)
+                and self._settings.pi_min <= value <= self._settings.pi_max
+            ):
+                self._gains[processor] = float(value)
+
     def _is_usable_number(self, value: Any) -> bool:
         """Return True for finite ints and floats, excluding bool."""
         return (

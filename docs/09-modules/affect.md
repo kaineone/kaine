@@ -399,7 +399,7 @@ Every dimension is clipped to its range after each update. The perceived emotion
 ## Spec and related pages
 
 - Spec: `openspec/specs/affect/spec.md`
-- Affect coupling spec: `openspec/specs/thymos-affect-coupling/spec.md`
+- Affect coupling spec: `openspec/specs/affect-coupling/spec.md`
 - [Global workspace](../08-cognitive-cycle/global-workspace.md): scoring, access and the arousal gain
 - [Vision](vision.md), [Audition](audition.md): perceptual alerts and error streams
 - [Interoception](interoception.md), [Sequence](sequence.md), [Episodic memory](episodic-memory.md): peer inputs

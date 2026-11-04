@@ -28,7 +28,7 @@ The cognitive modules themselves are reasonably sized, mostly 1–4k lines each.
 
 **What the research run uses.**
 
-- `config/kaine.operator.toml` enables 7 of the 16 modules: soma, chronos, topos, audition, lingua, thymos and hypnos. Those 7 modules total about 19.6k lines. The 9 disabled ones total about 13.7k.
+- `config/kaine.operator.toml` enables 7 of the 16 modules: interoception, sequence, vision, audition, language, affect and sleep. Those 7 modules total about 19.6k lines. The 9 disabled ones total about 13.7k.
 - The static import closure of `python -m kaine.cycle` reaches 281 files and 81.6k lines, which is 75% of the package. The cycle entry point imports almost everything, enabled or not. That figure is an upper bound, because it counts function-level imports.
 - Adding the study runner, Nexus, preboot and provisioning raises the reach to 82%. The unreached 18% is:
   - the offline benchmarks (6.2k)

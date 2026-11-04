@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import math
 from collections import deque
-from typing import Sequence
+from typing import Any, Sequence
 
 import numpy as np
 
@@ -121,6 +121,36 @@ class TopDownHead:
 
         self._weights -= self._lr * grad
         return loss
+
+    def state_dict(self) -> dict[str, Any]:
+        """Snapshot: weights as nested list, structural dimensions, learning rate."""
+        return {
+            "weights": self._weights.tolist(),
+            "output_dim": self._output_dim,
+            "lr": self._lr,
+        }
+
+    def load_state_dict(self, state: dict[str, Any]) -> None:
+        """Restore from a state_dict() snapshot."""
+        weights = np.asarray(state["weights"], dtype=np.float64)
+        if weights.shape != (self._output_dim, self._input_dim):
+            raise ValueError(
+                f"TopDownHead state shape mismatch: expected "
+                f"({self._output_dim}, {self._input_dim}), got {weights.shape}"
+            )
+        if not np.all(np.isfinite(weights)):
+            raise ValueError("TopDownHead state contains non-finite weights")
+        self._weights = weights
+        # lr is structural and set at construction; log if it changed but don't reject
+        saved_lr = state.get("lr")
+        if saved_lr is not None and saved_lr != self._lr:
+            import logging
+
+            logging.getLogger(__name__).info(
+                "TopDownHead: snapshot lr=%s differs from construction lr=%s",
+                saved_lr,
+                self._lr,
+            )
 
 
 class FeedbackChannel:
@@ -375,3 +405,62 @@ class TopDownBlend:
         self.last_top_weight = w_top
 
         return error
+
+    # -- state persistence (preservation / revive) -------------------------
+
+    def state_dict(self) -> dict[str, Any]:
+        """Wrap the inner model's state with the top-down head's state and error windows."""
+        state: dict[str, Any] = {"inner": self._inner.state_dict()}
+        if self._head is not None:
+            state["head"] = self._head.state_dict()
+        state["own_errors"] = list(self._own_errors)
+        state["top_errors"] = list(self._top_errors)
+        state["blend_errors"] = list(self._blend_errors)
+        return state
+
+    def load_state_dict(self, state: dict[str, Any]) -> None:
+        """Restore inner model + head + error windows from a state_dict() snapshot."""
+        # Always restore the inner model. Legacy snapshots have no "inner" key.
+        self._inner.load_state_dict(state.get("inner", state))
+
+        # Restore the head if the snapshot has one.
+        head_state = state.get("head")
+        if head_state is not None:
+            output_dim = head_state.get("output_dim")
+            if output_dim is not None and output_dim > 0:
+                if self._head is None:
+                    self._head = TopDownHead(output_dim, lr=self._lr)
+                self._head.load_state_dict(head_state)
+
+        # Restore error windows.
+        for key, deq in [
+            ("own_errors", self._own_errors),
+            ("top_errors", self._top_errors),
+            ("blend_errors", self._blend_errors),
+        ]:
+            values = state.get(key)
+            if isinstance(values, list):
+                deq.clear()
+                deq.extend(values[-self._window :])
+
+        # Clear transient blend state (formed from the next step).
+        self._clear_formed_state()
+
+    def matches_state_shape(self, state: dict[str, Any]) -> bool:
+        """True when the snapshot's structure fits this blend's inner model."""
+        inner_state = state.get("inner", state)
+        checker = getattr(self._inner, "matches_state_shape", None)
+        if callable(checker):
+            return checker(inner_state)
+        return True
+
+    def state_shape_mismatch(self, state: dict[str, Any]) -> str | None:
+        """Explain why a snapshot doesn't fit, or None when it fits."""
+        inner_state = state.get("inner", state)
+        explainer = getattr(self._inner, "state_shape_mismatch", None)
+        if callable(explainer):
+            return explainer(inner_state)
+        checker = getattr(self._inner, "matches_state_shape", None)
+        if callable(checker) and not checker(inner_state):
+            return "inner model state shape mismatch"
+        return None
