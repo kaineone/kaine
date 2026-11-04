@@ -380,8 +380,6 @@ class StudyRunner:
             if step_index == 0:
                 revived_from: str | None = None
             else:
-                prev_kind, prev_idx = sequence[step_index - 1] if step_index > 0 else ("seed", 0)
-                # Find the previous step's bundle from completed records.
                 prior_bundle = self.line_bundles.get(
                     (steps_by_index[step_index - 1]["kind"], step_index - 1)
                 )
