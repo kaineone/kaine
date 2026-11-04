@@ -1,34 +1,18 @@
-## MODIFIED Requirements
+# Spec Delta
 
-### Requirement: Research boot is gated on the autonomous safety net
-An unsupervised research boot SHALL refuse to start unless the autonomous safety
-net is live and verified, because the research phase runs with no human in the
-loop and the safeguards must be present in the system itself. The required conditions
-are: preservation enabled, the welfare-protective response wired, full
-logging/admissibility active, a preflight dry snapshot→restore round-trip
-confirming the preservation+revive path is functional on this install, the
-configured encryption contract satisfied where encryption is required, the
-individuation producer enabled, and the module supervisor armed and self-tested
-(`[supervisor].enabled` true, a restart ladder of at least one rung, writable
-escalation and incident-log paths, and a passing supervisor self-test within
-`selftest_timeout_s`, evaluated by the same function as unattended condition 6
-before any entity module is constructed). The refusal SHALL be an operator-facing
-message that names each failed condition and its reason, with a distinct exit code
-(no traceback). For research this gate REPLACES the operator-present gate; a run is
-either operator-supervised or autonomous-safety-net-verified, never neither.
+## ADDED Requirements
 
-#### Scenario: Research boot refused without a working safety net
-- **WHEN** an unsupervised research boot is attempted and any of {preservation enabled, welfare-protective response wired, full logging active, the dry snapshot→restore self-check passing, encryption satisfied, individuation producer enabled, supervisor armed and self-tested} is not satisfied
-- **THEN** the boot refuses to start with an operator-facing message and a distinct exit code
+### Requirement: content-weights-in-snapshot
+The content encoder weights, decoder weights, and the current shared code `z_k` are included in the entity's preservation snapshot alongside the existing module states and feedback controller state.
 
-#### Scenario: Research boot allowed when the safety net is verified
-- **WHEN** every condition holds, including a supervisor self-test that passes
-- **THEN** the unsupervised research boot is allowed to proceed
+#### Scenario: snapshot includes content state
+- **WHEN** an entity with an active content level is preserved
+- **THEN** `snapshot.metadata["workspace_content"]` contains the serialized encoder weights, decoder weights, and `z_k`
 
-#### Scenario: A research boot with the supervisor off
-- **WHEN** a research boot finds `[supervisor].enabled = false`
-- **THEN** the boot refuses with exit code 5 and the message names the supervisor condition with the reason "not enabled"
+#### Scenario: revive restores content state
+- **WHEN** an entity is revived from a snapshot containing `workspace_content` metadata
+- **THEN** the content level restores its encoder weights, decoder weights, and `z_k` from the snapshot
 
-#### Scenario: A failing supervisor self-test
-- **WHEN** the supervisor section is valid but its self-test does not complete within its bounded window
-- **THEN** the boot refuses with exit code 5, the message gives the self-test's reason, and no entity module was constructed
+#### Scenario: revive from a pre-content snapshot
+- **WHEN** an entity is revived from a snapshot that does not contain `workspace_content` metadata
+- **THEN** the content level initializes fresh (random encoder/decoder weights, zero `z_k`); no error is raised
