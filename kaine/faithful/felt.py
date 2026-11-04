@@ -327,13 +327,52 @@ def _f_planning_proposal(payload: dict[str, Any]) -> str:
 def _f_episodic_memory_recall(payload: dict[str, Any]) -> str:
     count = payload.get("count")
     if isinstance(count, bool) or not isinstance(count, (int, float)):
-        return "Some memories come back to me."
+        return "Something stirs in my memories."
     if count == 0:
         return "Nothing comes back to me from memory."
-    return "Some memories come back to me."
+
+    content = payload.get("content")
+    if content and isinstance(content, dict):
+        members = content.get("members")
+        age_band = content.get("age_band", "this_wake")
+        if members and isinstance(members, list):
+            age_phrase = AGE_PHRASES.get(age_band, "from earlier today")
+            lines = []
+            for m in members:
+                src = m.get("source", "")
+                typ = m.get("type", "")
+                ff = m.get("felt_fields") or {}
+                past_fn = PAST_TENSE_TEMPLATES.get((src, typ))
+                if past_fn:
+                    lines.append(past_fn(ff))
+                else:
+                    lines.append("I remember a moment I cannot make out.")
+            joined = " ".join(lines)
+            return f"I remember {age_phrase}: {joined}"
+
+    familiarity = payload.get("familiarity", "somewhat_familiar")
+    if familiarity == "faintly_familiar":
+        return "This feels faintly familiar."
+    if familiarity == "familiar":
+        return "This feels familiar."
+    return "This feels somewhat familiar."
 
 
 def _f_episodic_memory_replay(payload: dict[str, Any]) -> str:
+    members = payload.get("members")
+    if members and isinstance(members, list):
+        lines = []
+        for m in members:
+            src = m.get("source", "")
+            typ = m.get("type", "")
+            ff = m.get("felt_fields") or {}
+            past_fn = PAST_TENSE_TEMPLATES.get((src, typ))
+            if past_fn:
+                lines.append(past_fn(ff))
+            else:
+                lines.append("I remember a moment I cannot make out.")
+        if lines:
+            return f"As I rest, I go over a memory: {' '.join(lines)}"
     return "I am going over a memory."
 
 
@@ -425,6 +464,146 @@ def _f_language_internal_speech(payload: dict[str, Any]) -> str:
     return "I had a thought."
 
 
+# -- Past-tense templates for recalled members --------------------------------
+
+
+def _past_vision_report(payload: dict[str, Any]) -> str:
+    clauses = []
+    change = grade(payload.get("change_score"), CHANGE_WORDS)
+    if change:
+        clauses.append(f"was {change}")
+    fam = grade(payload.get("habituation_score"), FAMILIARITY_WORDS)
+    if fam:
+        clauses.append(f"felt {fam}")
+    pe = grade(payload.get("normalised_error"), PREDICTION_ERROR_WORDS)
+    if pe:
+        clauses.append(f"was {pe}")
+    return _sentence("What I saw", clauses) or "I was looking."
+
+
+def _past_audition_perception(payload: dict[str, Any]) -> str:
+    clauses = []
+    change = grade(payload.get("change_score"), CHANGE_WORDS)
+    if change:
+        clauses.append(f"was {change}")
+    pe = grade(payload.get("normalised_error"), PREDICTION_ERROR_WORDS)
+    if pe:
+        clauses.append(f"was {pe}")
+    return _sentence("What I heard", clauses) or "I was listening."
+
+
+def _past_interoception_report(payload: dict[str, Any]) -> str:
+    clauses = []
+    w = grade(payload.get("wellness"), WELLNESS_WORDS)
+    if w:
+        clauses.append(f"felt {w}")
+    alerts = payload.get("alerts")
+    if alerts:
+        clauses.append("felt strained somewhere")
+    pe_ratio = _ratio(payload.get("prediction_error"), payload.get("mean_prediction_error"))
+    if pe_ratio is not None:
+        pe = grade(pe_ratio, PREDICTION_ERROR_WORDS)
+        if pe:
+            clauses.append(f"was {pe}")
+    first = _sentence("My body", clauses)
+    threshold = payload.get("fatigue_threshold")
+    if isinstance(threshold, bool) or not isinstance(threshold, (int, float)) or not math.isfinite(threshold) or threshold <= 0:
+        threshold = FATIGUE_DEFAULT_THRESHOLD
+    f_ratio = _ratio(payload.get("fatigue_value"), threshold)
+    second = None
+    if f_ratio is not None:
+        f = grade(f_ratio, FATIGUE_WORDS)
+        if f:
+            second = f"I felt {f}."
+    if first and second:
+        return f"{first} {second}"
+    if first:
+        return first
+    if second:
+        return second
+    return "I sensed my body."
+
+
+def _past_affect_state(payload: dict[str, Any]) -> str:
+    state = payload.get("state")
+    if not isinstance(state, dict):
+        state = {}
+    drives = payload.get("drives")
+    if not isinstance(drives, dict):
+        drives = {}
+    feelings = []
+    arousal = grade(state.get("arousal"), AROUSAL_WORDS)
+    if arousal:
+        feelings.append(arousal)
+    valence = grade(state.get("valence"), VALENCE_WORDS)
+    if valence:
+        feelings.append(valence)
+    dominance = grade(state.get("dominance"), DOMINANCE_WORDS)
+    if dominance:
+        feelings.append(dominance)
+    s1 = f"I felt {_join(feelings)}." if feelings else None
+    items = []
+    for name in sorted(drives):
+        level = grade(drives[name], DRIVE_LEVEL_WORDS)
+        if level is None:
+            continue
+        noun = DRIVE_NOUNS.get(name) or _words(name)
+        if noun is None:
+            continue
+        items.append(f"{level} {noun}")
+    s2 = f"I sensed {_join(items)}." if items else None
+    s3 = None
+    e = _words(payload.get("emotion"))
+    if e and e != "unknown":
+        s3 = f"My emotion was {e}."
+    sentences = [s for s in [s1, s2, s3] if s]
+    if sentences:
+        return " ".join(sentences)
+    return "I felt my mood."
+
+
+def _past_affect_emotion(payload: dict[str, Any]) -> str:
+    e = _words(payload.get("emotion"))
+    if e and e != "unknown":
+        return f"I felt {e}."
+    return "I felt something I could not name."
+
+
+PAST_TENSE_INTERACTION_WORDS: dict[str, str] = {
+    "someone was with me just now": "Someone had been with me.",
+    "it has been a little while since anyone was with me": "It had been a little while since anyone was with me.",
+    "it has been a long time since anyone was with me": "It had been a long time since anyone was with me.",
+}
+
+
+def _past_sequence_report(payload: dict[str, Any]) -> str:
+    clauses = []
+    a = grade(payload.get("anomaly_score"), ANOMALY_WORDS)
+    if a:
+        clauses.append(f"felt {a}")
+    fam = grade(payload.get("habituation_score"), FAMILIARITY_WORDS)
+    if fam:
+        clauses.append(f"felt {fam}")
+    if payload.get("rumination_detected"):
+        clauses.append("kept circling back")
+    first = _sentence("The rhythm of things", clauses)
+    i = grade(payload.get("time_since_last_interaction_s"), INTERACTION_WORDS)
+    second = None
+    if i:
+        past_i = PAST_TENSE_INTERACTION_WORDS.get(i)
+        if past_i:
+            second = past_i
+        else:
+            second = i[0].upper() + i[1:] + "."
+    if first and second:
+        return f"{first} {second}"
+    if first:
+        return first
+    if second:
+        return second
+    return "Time was moving on."
+
+
 def _guarded(source: str, fn: TemplateFn, fallback_line: Optional[str] = None) -> TemplateFn:
     """Render ``fn(payload)`` unless the result contains any digit.
 
@@ -439,6 +618,23 @@ def _guarded(source: str, fn: TemplateFn, fallback_line: Optional[str] = None) -
             return felt_fallback(source, "", {})
         return line
     return wrapper
+
+
+AGE_PHRASES: dict[str, str] = {
+    "this_wake": "from earlier today",
+    "before_last_sleep": "from before my last rest",
+    "earlier": "from long ago",
+}
+
+
+PAST_TENSE_TEMPLATES: dict[tuple[str, str], TemplateFn] = {
+    ("vision", "vision.report"): _guarded("vision", _past_vision_report),
+    ("audition", "audition.perception"): _guarded("audition", _past_audition_perception),
+    ("interoception", "interoception.report"): _guarded("interoception", _past_interoception_report),
+    ("affect", "affect.state"): _guarded("affect", _past_affect_state),
+    ("affect", "affect.emotion"): _guarded("affect", _past_affect_emotion),
+    ("sequence", "sequence.report"): _guarded("sequence", _past_sequence_report),
+}
 
 
 FELT_FIELDS: dict[tuple[str, str], frozenset[str]] = {
@@ -462,7 +658,7 @@ FELT_FIELDS: dict[tuple[str, str], frozenset[str]] = {
     ("planning", "planning.policy"): frozenset(),
     ("planning", "planning.timeout"): frozenset(),
     ("planning", "planning.proposal"): frozenset({"kind"}),
-    ("episodic_memory", "episodic_memory.recall"): frozenset({"count"}),
+    ("episodic_memory", "episodic_memory.recall"): frozenset({"count", "familiarity", "top_similarity"}),
     ("episodic_memory", "episodic_memory.replay"): frozenset(),
     ("self_model", "self_model.drift"): frozenset(),
     ("self_model", "self_model.document"): frozenset(),
@@ -538,6 +734,7 @@ def redact_heard_speech_felt(event) -> Optional[str]:
 
 
 __all__ = [
+    "AGE_PHRASES",
     "ANOMALY_WORDS",
     "AROUSAL_WORDS",
     "CERTAINTY_WORDS",
@@ -551,6 +748,7 @@ __all__ = [
     "FELT_FIELDS",
     "FELT_TEMPLATES",
     "INTERACTION_WORDS",
+    "PAST_TENSE_TEMPLATES",
     "PREDICTION_ERROR_WORDS",
     "SOURCE_PHRASES",
     "SURPRISE_WORDS",
