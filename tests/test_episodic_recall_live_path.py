@@ -11,13 +11,13 @@ from kaine.bus import Event
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.cycle.types import WorkspaceSnapshot
+from kaine.faithful.felt import _f_episodic_memory_recall
 from kaine.modules.episodic_memory import (
     EpisodicMemory,
     EpisodicMemoryCore,
     FakeEmbedder,
     InMemoryStorage,
 )
-from kaine.faithful.felt import _f_episodic_memory_recall
 
 
 @pytest.fixture
