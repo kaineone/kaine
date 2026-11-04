@@ -181,3 +181,105 @@ def test_collection_prefix_for_step_default():
 def test_collection_prefix_for_step_custom():
     plan = {"collection_prefix": "myrun"}
     assert collection_prefix_for_step(plan, 1) == "myrun_step1_"
+
+
+def test_cli_init_progressive(tmp_path):
+    """``main --protocol progressive`` creates a valid progressive study."""
+    from kaine.research.ignition_study.__main__ import main
+    from kaine.research.ignition_study.plan import load_plan
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "config").mkdir()
+    (repo / "config" / "kaine.toml").write_text("[core]\n")
+    manifest = repo / "programme.toml"
+    manifest.write_text("[[films]]\npath = 'test.mp4'\n")
+    study_dir = tmp_path / "study"
+
+    argv = [
+        "init",
+        "--study-id", "dev-run-cli",
+        "--study-dir", str(study_dir),
+        "--repo-root", str(repo),
+        "--base-modules", *BASE,
+        "--order", *ORDER,
+        "--programme-manifest", str(manifest),
+        "--protocol", "progressive",
+        "--db-progressive", "5",
+    ]
+    assert main(argv) == 0
+
+    plan = load_plan(study_dir)
+    assert plan["protocol"] == "progressive"
+    assert plan["redis"]["db"] == 5
+    assert plan["collection_prefix"] == "devrun"
+    assert len(plan["steps"]) == len(ORDER) + 1
+    assert plan["steps"][0]["kind"] == "seed"
+    assert (study_dir / "seed").is_dir()
+    for i in range(1, len(ORDER) + 1):
+        assert (study_dir / f"step_{i}").is_dir()
+
+
+def test_cli_init_progressive_voice_alignment(tmp_path):
+    """--voice-alignment-step-index is recorded in the progressive plan."""
+    from kaine.research.ignition_study.__main__ import main
+    from kaine.research.ignition_study.plan import load_plan
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "config").mkdir()
+    (repo / "config" / "kaine.toml").write_text("[core]\n")
+    manifest = repo / "programme.toml"
+    manifest.write_text("[[films]]\npath = 'test.mp4'\n")
+    study_dir = tmp_path / "study"
+
+    argv = [
+        "init",
+        "--study-id", "dev-run-va",
+        "--study-dir", str(study_dir),
+        "--repo-root", str(repo),
+        "--base-modules", *BASE,
+        "--order", *ORDER,
+        "--programme-manifest", str(manifest),
+        "--protocol", "progressive",
+        "--voice-alignment-step-index", "3",
+        "--voice-alignment-step-index", "6",
+    ]
+    assert main(argv) == 0
+
+    plan = load_plan(study_dir)
+    assert plan["voice_alignment_steps"] == [
+        {"step_index": 3},
+        {"step_index": 6},
+    ]
+
+
+def test_cli_init_progressive_collection_prefix(tmp_path):
+    """--collection-prefix overrides the default."""
+    from kaine.research.ignition_study.__main__ import main
+    from kaine.research.ignition_study.plan import load_plan
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "config").mkdir()
+    (repo / "config" / "kaine.toml").write_text("[core]\n")
+    manifest = repo / "programme.toml"
+    manifest.write_text("[[films]]\npath = 'test.mp4'\n")
+    study_dir = tmp_path / "study"
+
+    argv = [
+        "init",
+        "--study-id", "dev-run-pfx",
+        "--study-dir", str(study_dir),
+        "--repo-root", str(repo),
+        "--base-modules", *BASE,
+        "--order", *ORDER,
+        "--programme-manifest", str(manifest),
+        "--protocol", "progressive",
+        "--collection-prefix", "myrun",
+    ]
+    assert main(argv) == 0
+
+    plan = load_plan(study_dir)
+    assert plan["collection_prefix"] == "myrun"
+    assert plan["collections"] == {"progressive": "myrun_"}

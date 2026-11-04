@@ -62,6 +62,26 @@ python -m kaine.research.ignition_study init \
     [--study-dir /absolute/path]
 ```
 
+For a **progressive** (development-run) plan, pass `--protocol progressive`:
+
+```bash
+python -m kaine.research.ignition_study init \
+    --protocol progressive \
+    --study-id <id> \
+    --repo-root /path/to/repo \
+    --programme-manifest /path/to/programme.toml \
+    [--base-modules ...] [--order ...] \
+    [--redis-base-url redis://127.0.0.1:6479] \
+    [--db-progressive 10] \
+    [--broadcast-capacity 4] \
+    [--collection-prefix devrun] \
+    [--voice-alignment-step-index 6] \
+    [--min-free-gb 20.0] \
+    [--study-dir /absolute/path]
+```
+
+The progressive protocol uses a single Redis database (`--db-progressive`, default 10) instead of separate databases per line. `--broadcast-capacity` sets the workspace broadcast ring size. `--collection-prefix` (default `devrun`) prefixes the Chromadb collection names. `--voice-alignment-step-index` (repeatable) registers voice alignment at the given step indices; by default, only the final step is registered.
+
 `init` creates `studies/<study-id>/` with `study.json` and the step directories `development/`, `branch/<k>/`, `repeat/` and `accumulate/`. Inside each step directory it creates a `config/` holding symlinks to `config/kaine.toml` and `config/profiles`. It does not create `steps.jsonl`; that file is written when the first step is recorded.
 
 All four commands (`init`, `run`, `status`, `analyse`) load the configuration, install the data root (`[storage].data_root` or `KAINE_DATA_ROOT`), and resolve a relative `--study-dir` under it. An absolute path is used as given. When no configuration can be loaded, paths stay relative to the working directory and the command prints a note on stderr.
@@ -74,6 +94,11 @@ All four commands (`init`, `run`, `status`, `analyse`) load the configuration, i
 - `--min-free-gb` (default 20.0) for the disk guard.
 - `--viewing-budget-seconds` (default 21600, six hours) and `--development-budget-seconds` (default 345600, 96 hours) for the timeouts behind `failed:timeout`.
 - `--voice-alignment-step LINE:K` (repeatable) to register voice-alignment steps. By default only the final accumulate step is registered.
+- `--protocol` (`progressive` or `branching`, default `branching`). A progressive plan creates a linear development-run sequence instead of the branching grid.
+- `--db-progressive` (default 10) assigns the single Redis database for a progressive plan, replacing the four per-line databases.
+- `--broadcast-capacity` (optional) sets the workspace broadcast ring size in a progressive plan.
+- `--collection-prefix` (default `devrun`) sets the Chromadb collection prefix for progressive plans.
+- `--voice-alignment-step-index N` (repeatable, progressive only) registers voice alignment at step index N (1 to len(order)). By default only the final step is registered.
 - `--study-dir` to place the directory somewhere other than the default under the data root.
 
 Each database the runner flushes carries the key `kaine:study:owner` naming the study. The runner refuses to flush a database that another study owns, so two studies on one Redis server never flush each other's bus.

@@ -67,36 +67,66 @@ def _parse_voice_alignment_step(value: str) -> dict[str, Any]:
 def _cmd_init(args: argparse.Namespace) -> int:
     repo_root = Path(args.repo_root).resolve()
     manifest = Path(args.programme_manifest).resolve()
-    plan = {
-        "study_id": args.study_id,
-        "repo_root": str(repo_root),
-        "base_modules": args.base_modules,
-        "order": args.order,
-        "programme": {
-            "manifest": str(manifest),
-            "sha256": programme_sha256(manifest),
-        },
-        "redis": {
-            "base_url": args.redis_base_url,
-            "db": {
-                "development": args.db_development,
-                "branch": args.db_branch,
-                "repeat": args.db_repeat,
-                "accumulate": args.db_accumulate,
+    protocol = getattr(args, "protocol", "branching")
+
+    if protocol == "progressive":
+        plan: dict[str, Any] = {
+            "protocol": "progressive",
+            "study_id": args.study_id,
+            "repo_root": str(repo_root),
+            "base_modules": args.base_modules,
+            "order": args.order,
+            "programme": {
+                "manifest": str(manifest),
+                "sha256": programme_sha256(manifest),
             },
-        },
-        "collections": {
-            "development": f"study_{args.study_id}_g_",
-            "branch": f"study_{args.study_id}_b_",
-            "repeat": f"study_{args.study_id}_r_",
-            "accumulate": f"study_{args.study_id}_a_",
-        },
-        "viewing_budget_seconds": args.viewing_budget_seconds,
-        "development_budget_seconds": args.development_budget_seconds,
-        "min_free_gb": args.min_free_gb,
-    }
-    if args.voice_alignment_step:
-        plan["voice_alignment_steps"] = list(args.voice_alignment_step)
+            "redis": {
+                "base_url": args.redis_base_url,
+                "db": args.db_progressive,
+            },
+            "viewing_budget_seconds": args.viewing_budget_seconds,
+            "development_budget_seconds": args.development_budget_seconds,
+            "min_free_gb": args.min_free_gb,
+        }
+        if args.broadcast_capacity is not None:
+            plan["broadcast_capacity"] = args.broadcast_capacity
+        if args.collection_prefix is not None:
+            plan["collection_prefix"] = args.collection_prefix
+        if args.voice_alignment_step_index:
+            plan["voice_alignment_steps"] = [
+                {"step_index": i} for i in args.voice_alignment_step_index
+            ]
+    else:
+        plan = {
+            "study_id": args.study_id,
+            "repo_root": str(repo_root),
+            "base_modules": args.base_modules,
+            "order": args.order,
+            "programme": {
+                "manifest": str(manifest),
+                "sha256": programme_sha256(manifest),
+            },
+            "redis": {
+                "base_url": args.redis_base_url,
+                "db": {
+                    "development": args.db_development,
+                    "branch": args.db_branch,
+                    "repeat": args.db_repeat,
+                    "accumulate": args.db_accumulate,
+                },
+            },
+            "collections": {
+                "development": f"study_{args.study_id}_g_",
+                "branch": f"study_{args.study_id}_b_",
+                "repeat": f"study_{args.study_id}_r_",
+                "accumulate": f"study_{args.study_id}_a_",
+            },
+            "viewing_budget_seconds": args.viewing_budget_seconds,
+            "development_budget_seconds": args.development_budget_seconds,
+            "min_free_gb": args.min_free_gb,
+        }
+        if args.voice_alignment_step:
+            plan["voice_alignment_steps"] = list(args.voice_alignment_step)
     # validate_plan returns the normalised plan (its defaults filled in); that
     # is what the study records, so study.json shows every setting it runs with.
     plan = validate_plan(plan)
@@ -259,6 +289,37 @@ def _build_parser() -> argparse.ArgumentParser:
         "--min-free-gb",
         type=float,
         default=20.0,
+    )
+    init_p.add_argument(
+        "--protocol",
+        choices=["progressive", "branching"],
+        default="branching",
+        help="plan protocol: progressive (development run) or branching (study)",
+    )
+    init_p.add_argument(
+        "--db-progressive",
+        type=int,
+        default=10,
+        help="single Redis db for the progressive protocol (1-15)",
+    )
+    init_p.add_argument(
+        "--broadcast-capacity",
+        type=int,
+        default=None,
+        help="workspace broadcast capacity (progressive only)",
+    )
+    init_p.add_argument(
+        "--collection-prefix",
+        type=str,
+        default=None,
+        help="Chromadb collection prefix (progressive only, default: devrun)",
+    )
+    init_p.add_argument(
+        "--voice-alignment-step-index",
+        action="append",
+        type=int,
+        default=None,
+        help="step index for voice alignment (progressive only, repeatable)",
     )
     init_p.add_argument(
         "--voice-alignment-step",
