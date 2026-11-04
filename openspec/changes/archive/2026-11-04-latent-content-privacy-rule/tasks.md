@@ -21,4 +21,4 @@
 
 - [x] 4.1 Worker first-pass review (beam:cloud). 4 findings, all verified: 0 confirmed bugs.
 - [x] 4.2 Second review (SR): Claude adversarial review — D8 checklist PASS. Two notes for option F: (a) episodic store field-level path relies on type-level guard; (b) dev_content_override passes latent fields (same as regular content, documented).
-- [ ] 4.3 Merge to main. PR #656, CI required gates pass, enqueued.
+- [x] 4.3 Merge to main. PR #656, CI required gates pass, enqueued.
