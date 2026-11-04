@@ -395,6 +395,7 @@ class IndicatorEvaluator:
         self._intervals.clear()
         for drive in UNCONTROLLED_DRIVES:
             self._ends[drive].clear()
+            self._last_ends[drive] = None
         for name in self._over:
             self._over[name] = False
 
