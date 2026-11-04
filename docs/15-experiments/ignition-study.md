@@ -82,7 +82,7 @@ python -m kaine.research.ignition_study init \
 
 The progressive protocol uses a single Redis database (`--db-progressive`, default 10) instead of separate databases per line. `--broadcast-capacity` sets the workspace broadcast ring size. `--collection-prefix` (default `devrun`) prefixes the Chromadb collection names. `--voice-alignment-step-index` (repeatable) registers voice alignment at the given step indices; by default, only the final step is registered.
 
-`init` creates `studies/<study-id>/` with `study.json` and the step directories `development/`, `branch/<k>/`, `repeat/` and `accumulate/`. Inside each step directory it creates a `config/` holding symlinks to `config/kaine.toml` and `config/profiles`. It does not create `steps.jsonl`; that file is written when the first step is recorded.
+`init` creates `studies/<study-id>/` with `study.json` and the step directories. For a **branching** plan: `development/`, `branch/<k>/`, `repeat/` and `accumulate/`. For a **progressive** plan: `seed/` and `step_1/` through `step_N/` (one per module in the order). Inside each step directory it creates a `config/` holding symlinks to `config/kaine.toml` and `config/profiles`. It does not create `steps.jsonl`; that file is written when the first step is recorded.
 
 All four commands (`init`, `run`, `status`, `analyse`) load the configuration, install the data root (`[storage].data_root` or `KAINE_DATA_ROOT`), and resolve a relative `--study-dir` under it. An absolute path is used as given. When no configuration can be loaded, paths stay relative to the working directory and the command prints a note on stderr.
 
