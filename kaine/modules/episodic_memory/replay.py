@@ -139,6 +139,9 @@ def build_replay_events(
             "source_timestamp": entry.timestamp,
             "replayed_at": ts,
         }
+        trace_members = entry.payload.get("members")
+        if trace_members:
+            loop_payload["members"] = trace_members
         if redact_content:
             observer_payload = {
                 k: v

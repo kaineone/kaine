@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
+from collections import deque
 from typing import Any, ClassVar, Optional, Sequence
 
 from kaine.bus.client import AsyncBus, tail_id
@@ -130,6 +131,7 @@ class EpisodicMemory(BaseModule):
         self._recall_content = bool(recall_content)
         self._recall_render_max = int(recall_render_max)
         self._familiarity_window = int(familiarity_window)
+        self._similarity_history: deque[float] = deque(maxlen=self._familiarity_window)
         self._clock = entity_clock or EntityClock()
         # Subjective-time timestamp of the last spontaneous recall; None until
         # the first recall fires so the very first cued tick is not suppressed.
@@ -269,6 +271,19 @@ class EpisodicMemory(BaseModule):
         if self._last_recall_monotonic is None:
             return True
         return self._clock.now() - self._last_recall_monotonic >= self._recall_cooldown_s
+
+    def _familiarity_grade(self, top_similarity: float) -> str:
+        """Grade how familiar this recall feels by its rank among recent recalls."""
+        self._similarity_history.append(top_similarity)
+        if len(self._similarity_history) < 10:
+            return "somewhat_familiar"
+        rank = sum(1 for v in self._similarity_history if v < top_similarity)
+        percentile = rank / len(self._similarity_history)
+        if percentile < 1 / 3:
+            return "faintly_familiar"
+        if percentile < 2 / 3:
+            return "somewhat_familiar"
+        return "familiar"
 
     # ------------------------------------------------------------------
     # The affect module's subscription (affect.state) + the sleep module's sleep-end tracking
@@ -437,6 +452,8 @@ class EpisodicMemory(BaseModule):
             "max_affect_intensity": summary.max_affect_intensity,
             "top_similarity": summary.top_similarity,
         }
+        if summary.count > 0:
+            event_payload["familiarity"] = self._familiarity_grade(summary.top_similarity)
         if self._recall_content and results:
             content = _recall_content_for(
                 results[0], self._core.sleeps, self._recall_render_max
