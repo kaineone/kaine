@@ -1,170 +1,23 @@
-# module-ignition-study Specification
+## ADDED Requirements
 
-## Purpose
-The module-ignition study raises one entity from the developmental phase through a fixed four-film programme, adding one module per viewing, with a familiarity-control line that re-watches without new modules. This capability covers the study runner and its analysis: every step is run, isolated, preserved and recorded the same way, the two lines never share state, and the ignition analysis compares them.
+### Requirement: Every study step runs the module supervisor
+`build_overlay` SHALL set `[supervisor].enabled = true` and `[supervisor.incident_log].enabled = true` for every step kind, overriding the operator config, with the incident log path relative to the step's working directory. A test SHALL build the merged config of each step kind (shipped config plus study overlay, no operator overlay) and assert that every config-level research-gate requirement, including the supervisor's, passes.
 
-## Requirements
+#### Scenario: An operator config turns the supervisor off
+- **WHEN** the operator config sets `[supervisor].enabled = false`
+- **THEN** every step's overlay sets it to true
 
-### Requirement: The study runner drives every step the same way and records it
-The study runner SHALL run the developmental phase and then each line's viewings in a fixed order, one start at a time, each from the line's previous preservation and with exactly the step's module set, in research mode, and SHALL record every step: its line, step, module set, start bundle, resulting preservation, run id, exit code and outcome. A step SHALL count as complete only when its end-of-programme preservation (or, for the developmental phase, the maturation preservation) reports success.
+#### Scenario: The incident log stays inside the step
+- **WHEN** an overlay is built for branch step 3
+- **THEN** the incident log path resolves inside that step's directory
 
-#### Scenario: A viewing completes
-- **WHEN** a viewing's process exits after its end-of-programme preservation reports success
-- **THEN** the step is recorded as complete and its bundle becomes the line's next start
+### Requirement: A supervisor escalation is its own step outcome
+After a step's cycle exits, the study runner SHALL read the step's `state/cycle/escalation.json`. When it exists, the step's outcome SHALL be `failed:supervisor`, the record SHALL carry the escalation record's content-free fields, and the run SHALL halt for the operator. A step that completes SHALL record `supervisor_restarts`, the number of restart transitions in the step's incident log, and the analysis SHALL list steps with at least one restart.
 
-#### Scenario: Resume after an interruption
-- **WHEN** the runner is started again on a study with recorded steps
-- **THEN** it continues from each line's last completed bundle and never repeats a completed step
+#### Scenario: A step escalates
+- **WHEN** the supervisor escalates during a step and the cycle exits non-zero
+- **THEN** the step is recorded as `failed:supervisor`, not `failed:exit:<code>`, and the next step does not start
 
-### Requirement: Lines never share the entity's state
-Each line SHALL run from its own working directory with its own Redis database, its own memory collections and its own social cognition module's collection, so the two entities never read or write each other's state.
-
-#### Scenario: Two lines
-- **WHEN** the main and control lines have each run a viewing
-- **THEN** their working directories, Redis databases and collection prefixes are all distinct
-
-### Requirement: The runner halts rather than improvise
-Any step that ends other than by a successful preservation (a non-zero exit, a refused revive, a welfare-protective end, a missing or failed preservation, or a timeout) SHALL halt the study and be recorded as failed, and the runner SHALL NOT retry it unless the operator asks. The runner SHALL NOT delete any preservation, state or line.
-
-#### Scenario: A preservation fails at the end of a viewing
-- **WHEN** the end-of-programme preservation reports failure
-- **THEN** the step is recorded as failed, the study halts, and nothing is retried or deleted
-
-### Requirement: Each viewing's ignitions are measured the same way and compared across lines and steps
-The analysis SHALL compute, for every completed viewing, the broadcast rate over unpaused programme time, the broadcasts per film-minute, coalition size, each module's share of broadcasts, member salience by module, the inhibited share, picture-to-sound drift when recorded, and data-quality counts; and SHALL compare each step's main line against its control line and each step against the previous one. Its report SHALL be content-free and SHALL state the study's limits: accumulated order, familiarity-only control, one entity per line, and expected nulls for faculties without an input channel.
-
-#### Scenario: Paused time does not dilute the rate
-- **WHEN** a viewing includes a sleep replay window during which the programme was paused
-- **THEN** the broadcast rate is computed over unpaused programme time only
-
-#### Scenario: A comparison without enough overlap
-- **WHEN** two film-minute profiles share fewer than 30 bins
-- **THEN** their correlation is reported as not computed rather than as a number
-
-### Requirement: A viewing with World model completes only when its world model is preserved
-When a step's module set includes the world model module, the study runner SHALL read the resulting preservation bundle's manifest and SHALL record the step as complete only when the manifest reports the world model captured. A step whose manifest reports it not captured SHALL be recorded as `failed:world_model_not_captured`, and a step whose manifest is missing or unreadable SHALL be recorded as `failed:manifest_unreadable`; either halts the study like any other failed step. Every step record SHALL carry `world_model_captured`: true or false when the world model module is enabled, null when it is not.
-
-#### Scenario: The world model is captured
-- **WHEN** a viewing with the world model module enabled ends in a successful preservation whose manifest has `world_model_captured` true
-- **THEN** the step is recorded as complete with `world_model_captured` true
-
-#### Scenario: The world model is missing from the bundle
-- **WHEN** a viewing with the world model module enabled ends in a successful preservation whose manifest has `world_model_captured` false
-- **THEN** the step is recorded as `failed:world_model_not_captured` and the study halts
-
-#### Scenario: A step before World model
-- **WHEN** a step without the world model module ends in a successful preservation
-- **THEN** its outcome does not depend on the manifest and its record has `world_model_captured` null
-
-### Requirement: The ignition analysis accounts for time dilation
-The ignition analysis SHALL report, for each step, the range of `time_scale` in force and whether it changed, and SHALL report ignitions per tick alongside ignitions per film minute, so that a step run under dilation is not read as a change in the entity. The study manifest SHALL record whether automatic dilation was on.
-
-#### Scenario: A dilated step is flagged
-- **WHEN** a viewing's ignition records show more than one `time_scale`
-- **THEN** that step's report has `time_scale_changed` true, its scale range, and its ignitions per tick
-
-### Requirement: Voice alignment runs only on pre-registered steps
-`init` SHALL record `voice_alignment_steps` in the study plan: a list of `{line, k}` steps. It defaults to the final accumulate step only (`{"line": "accumulate", "k": len(order)}`), and the operator can set it explicitly at `init`. The plan SHALL reject unknown lines and out-of-range steps.
-
-`build_overlay` SHALL set `[sleep.voice_alignment].enabled = true` for exactly those steps and `false` for every other step, overriding any operator setting, so the choice is fixed before launch and recorded in each step's overlay hash. A step with voice alignment enabled SHALL still require the operator approval variable in its environment. Without it, voice alignment stays off by the existing two-layer opt-in, and the step records that.
-
-#### Scenario: Default is the final accumulate step
-- **WHEN** a study is initialised with nine modules in `order` and no explicit `voice_alignment_steps`
-- **THEN** the plan records `[{"line": "accumulate", "k": 9}]`
-
-#### Scenario: Only the registered step enables voice alignment
-- **WHEN** overlays are built for every step of that study
-- **THEN** `accumulate` step 9 has `[sleep.voice_alignment].enabled = true`, and every other step has it `false`, even when the operator configuration enables it
-
-#### Scenario: An invalid registration is refused
-- **WHEN** `voice_alignment_steps` names an unknown line or a step outside that line's range
-- **THEN** `init` refuses with an error naming the entry
-
-### Requirement: Every study command resolves the study directory the same way
-`init`, `run`, `status` and `analyse` SHALL resolve `--study-dir` under the installed data root in the same way, so a study created by `init` is found by the other commands from any working directory.
-
-#### Scenario: A study is found from another directory
-- **WHEN** a data root is installed, `init` creates `studies/s1`, and `status --study-dir studies/s1` runs from a different working directory
-- **THEN** `status` reads the study `init` created
-
-### Requirement: An unviable developmental phase ends early, with its data kept and a note written
-During a developmental step, until it requests the maturation or a disk-low preservation, the study runner SHALL poll the step's `state/lifecycle/development_viability.json`, ignoring a file older than the step. On an unviable verdict it SHALL stop the cycle gracefully without requesting a preservation bundle, record the step with outcome `failed:development_unviable` and the verdict's evidence, write `ENDED-NOTE.md` into the step directory describing the issue and the evidence, and halt the study for the operator. If stopping the cycle fails, the runner SHALL retry on the next poll; it SHALL NOT send SIGKILL. A verdict SHALL NOT stop or relabel a step whose maturation has been requested. It SHALL NOT delete any study data.
-
-#### Scenario: The runner ends an unviable developmental phase
-- **WHEN** the developmental phase's viability file reports an unviable verdict
-- **THEN** the cycle is stopped without a preservation request, the step is recorded as `failed:development_unviable`, `ENDED-NOTE.md` exists in the step directory, the study halts, and the step's data remains on disk
-
-#### Scenario: A verdict after maturation is ignored
-- **WHEN** an unviable verdict file appears after the runner has requested the maturation preservation
-- **THEN** the cycle is not stopped by the watch and the step is not recorded as `failed:development_unviable`
-
-### Requirement: A study records the workspace graph, not every module's output
-`build_overlay` SHALL set `[research_event_log.dashboard_record].enabled = false`, `[evaluation].workspace_trajectory = false` and `[evaluation].enabled = false` for every study step, overriding any operator setting, and SHALL keep `[ignition_log].enabled = true`. No evaluation observer SHALL run in a study. Run-control and safety records (developmental readouts and viability, preservation and welfare monitors including the gray-zone producer, research events, external utterances, the run manifest) SHALL be unaffected.
-
-#### Scenario: An operator config enables the Dashboard record
-- **WHEN** the operator config sets `[research_event_log.dashboard_record].enabled = true` and `[evaluation].workspace_trajectory = true`
-- **THEN** every step's overlay sets both to false and the ignition log stays enabled
-
-#### Scenario: Safety records are kept
-- **WHEN** an overlay is built for a developmental step
-- **THEN** it still enables the ignition log, the research event log, external utterances and the preservation monitors
-
-#### Scenario: Evaluation observers are off in a study
-- **WHEN** the operator config sets `[evaluation].enabled = true`
-- **THEN** every step's overlay sets `[evaluation].enabled = false`
-
-### Requirement: The first round adds six held modules by default
-Without an explicit order, `init` SHALL record the order episodic memory, world model, planning, self-model, social cognition, vocal modules. The effectors, perceptual locus and embodiment modules SHALL join only through an explicit order, once an effector, body or alternative sensor feed is attached.
-
-#### Scenario: Default order
-- **WHEN** a study is initialised without `--order`
-- **THEN** its plan's order is episodic memory, world model, planning, self-model, social cognition, vocal modules.
-
-### Requirement: Study steps decode greedily in the competitive arm
-Every study step's overlay SHALL set `[language].temperature` to 0.0 and `[workspace].arm` to `"competitive"`, overriding the operator configuration.
-
-#### Scenario: An operator temperature does not reach a study step
-- **WHEN** the operator configuration sets `[language].temperature = 0.7` and `[workspace].arm = "pooled"`
-- **THEN** the step's overlay has temperature 0.0 and arm "competitive"
-
-### Requirement: The runner surfaces a welfare freeze and never lifts it
-The study runner SHALL read each running child's freeze stack, SHALL surface a `welfare` entry in the step's status and log, and SHALL NOT lift it. A step that ends while a welfare freeze noticed on the running child is still held SHALL be recorded with the outcome `failed:welfare` and the freeze's start and reason.
-
-#### Scenario: The child is frozen by the welfare safety net
-- **WHEN** a running child's freeze stack holds a `welfare` entry and the step then ends
-- **THEN** the step is recorded `failed:welfare`, `status` shows the freeze, and the freeze is still in the child's control file
-
-#### Scenario: An earlier child's control file
-- **WHEN** a child exits at boot and the step directory holds a welfare entry from an earlier child
-- **THEN** the step keeps its own failure outcome
-
-### Requirement: The seed is preserved only with its maturation reference
-When a step's resolved configuration enables the individuation producer, the study runner SHALL request the developmental phase's maturation preservation only after the cycle reports the individuation maturation reference complete, or after a bounded wait has run out. The reference and its ledger are encrypted, so the runner SHALL read only the content-free `individuation` block of the child's `state/cycle/runtime.json`, which carries the reference kind and whether the reference and its ledger are both saved; it is complete when the kind is `maturation` and both are saved. The runner SHALL NOT read the individuation store. A complete reference of kind `capture` SHALL fail the step at once. While a welfare freeze is held, the wait SHALL NOT count down and the runner SHALL NOT request the maturation preservation. When the wait runs out the runner SHALL preserve the entity before it stops it, SHALL record the step with the outcome `failed:maturation_reference_missing`, and SHALL halt the study.
-
-#### Scenario: The reference arrives after the bloom ends
-- **WHEN** the maturation bloom has ended and the reference and ledger appear later within the bound
-- **THEN** the maturation preservation is requested after they appear and the step completes with `maturation_reference` `complete`
-
-#### Scenario: The reference never arrives
-- **WHEN** the reference or its ledger is still missing when the bound runs out
-- **THEN** the entity is preserved, the step is recorded as `failed:maturation_reference_missing` and the study halts
-
-#### Scenario: The reference is already present
-- **WHEN** the reference and ledger exist when the maturation bloom ends
-- **THEN** the maturation preservation is requested without waiting
-
-#### Scenario: The runner never reads the encrypted reference
-- **WHEN** the reference and ledger on disk are ciphertext
-- **THEN** the wait still releases on the runtime block alone
-
-#### Scenario: A sleep downgrades the capture
-- **WHEN** the runtime block reports a complete reference of kind `capture`
-- **THEN** the runner preserves the entity and records `failed:maturation_reference_missing` without waiting out the bound
-
-#### Scenario: A welfare freeze during the wait
-- **WHEN** the welfare safety net holds a freeze while the runner waits for the reference
-- **THEN** the wait does not count down and the runner does not request the maturation preservation
-
-#### Scenario: A restarted runner adopts the seed
-- **WHEN** the runner restarts after requesting the maturation preservation
-- **THEN** the adopted record carries the reference state written before the request, and a missing or absent state fails the step
+#### Scenario: A restart that recovered
+- **WHEN** the supervisor restarted one module once during a step and the step completed
+- **THEN** the step record carries `supervisor_restarts: 1` and the step is listed as having a restart

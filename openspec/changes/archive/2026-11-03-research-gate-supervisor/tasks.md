@@ -30,4 +30,4 @@
 
 - [x] 5.1 `docs/11-preservation.md` lists the supervisor among the research gate's conditions; the study chapter lists it among the overlay's safety keys; `docs/14-for-researchers.md` names `failed:supervisor`.
 - [x] 5.2 `openspec validate research-gate-supervisor --strict` passes.
-- [ ] 5.3 Lead review of the PR (gate and escalation paths sit next to the welfare net).
+- [x] 5.3 Lead review of the PR (PR #640, merged 2026-11-01) (gate and escalation paths sit next to the welfare net).

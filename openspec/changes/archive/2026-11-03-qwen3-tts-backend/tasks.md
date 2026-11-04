@@ -9,4 +9,4 @@
 - [x] 7. `extras.py`: require `qwen-tts` when backend is `qwen3_tts`; `pyproject.toml` extra `speech-qwen3`.
 - [x] 8. Tests: 17 unit tests for Qwen3TTS + 9 affect_to_instruct mapping tests + episodic own-content union assertion.
 - [x] 9. Worker review (beam:cloud) + Claude adversarial review. Findings fixed: double ticket.release(), speed_factor removed from APPLIED_PROSODY, missing pyproject.toml extra, bare else in factory.
-- [ ] 10. Merge.
+- [x] 10. Merge (PR #648, merged 2026-11-03).
