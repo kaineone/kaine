@@ -31,7 +31,7 @@
 
 ## 5. Development-run join (after `development-run` is built)
 
-- [ ] 5.1 Registry entry in `config/development_run/components.toml`: class action, readout `stimulus_control`, experience-changing with its second-review record, reversible.
+- [x] 5.1 Registry entry in `config/development_run/components.toml`: class action, readout `stimulus_control`, experience-changing with its second-review record, reversible.
 - [ ] 5.2 Per-pass viewings: with `programme_end = "continue"`, reset the gain and close a `stimulus_control` record at each pass end, and end each pass at its programme's perceived length.
 - [x] 5.3 Operator decision on the paused share, revised on the second review's evidence (F1): a pause waits `Delta_sc` after the previous pause ended, and is taken only while a full one keeps the paused share of the trailing awake hour within 25 %. Test: `tests/test_stimulus_pause_bound.py` (the scripted cycle; stage M under sustained boredom, 5 seeds x 3 h).
 - [x] 5.5 Operator decision (2026-11-01): stage M never draws `pause` until learned action selection (stage L) exists; the effector keeps `pause`, its bounds and refusals. Test: `tests/test_stimulus_stage_m.py::test_stage_m_never_draws_pause`; the sustained-boredom test now finds a paused share of 0.

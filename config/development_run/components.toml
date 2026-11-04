@@ -1,0 +1,19 @@
+# Components that may join the development run after the base set.
+#
+# Each entry describes a joinable component: its class (module or action),
+# the welfare readout it produces, whether it changes the entity's experience,
+# whether it carries a second-review record, and whether the join is reversible
+# (the component has a bit-identical off switch).
+#
+# The operator names the component and the entity id to join it; the plan lists
+# the step where the join occurs.
+
+[stimulus_control]
+class = "action"
+readout = "stimulus_control"
+experience_changing = true
+second_review = true
+reversible = true
+switch = "stimulus_control.enabled"
+stage = "M"
+effector = "stimulus"
