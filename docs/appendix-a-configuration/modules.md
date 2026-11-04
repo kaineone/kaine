@@ -220,6 +220,10 @@ The episodic memory module is the vector-store memory module. It backs episodic,
 | `recall_top_k` | integer | `5` | Number of nearest-neighbor results returned per recall query. |
 | `recall_on_workspace` | boolean | `true` | Whether the episodic memory module recalls in response to workspace broadcasts. |
 | `recall_cooldown_s` | float | `5.0` | Minimum seconds between recall attempts. |
+| `recall_exclude_recent_s` | float | `30.0` | Entity-time seconds; traces younger than this are skipped during recall so a just-stored snapshot does not match itself. |
+| `recall_content` | boolean | `false` | When true, recall events carry a `content` dict with coalition members, age band and trace ref. |
+| `recall_render_max` | integer | `3` | Maximum members rendered in a recall's felt line. |
+| `familiarity_window` | integer | `100` | Rolling window of recent similarities used to grade familiarity. |
 | `baseline_salience` | float | `0.15` | Intensity of routine recall events. |
 | `alert_salience` | float | `0.6` | Intensity of a recall whose strongest memory has affect intensity of at least 0.5. |
 | `storage_budget_bytes` | integer | `10737418240` | Budget of the persisted memory stores in bytes (paper A.10). When a sleep leaves the stores above it, the weakest traces are deleted first, the oldest first among equal strengths, until they fit; traces replayed in that sleep are kept. Set it from the disk the installation can give the episodic memory module. The paper gives no value, and 10 GiB is only a safe default. |

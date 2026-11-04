@@ -33,10 +33,10 @@ A background task, `_peer_consumer_loop`, reads the affect and sleep modules' ev
 
 | Stream | Event type | Payload fields | Intensity |
 |---|---|---|---|
-| `episodic_memory.out` | `episodic_memory.recall` | `count`, `collection`, `query_length`, `max_affect_intensity` | `alert_salience` if `max_affect_intensity ≥ 0.5`, otherwise `baseline_salience` |
+| `episodic_memory.out` | `episodic_memory.recall` | `count`, `collection`, `query_length`, `max_affect_intensity`, `top_similarity`, `familiarity`, `content` | `alert_salience` if `max_affect_intensity ≥ 0.5`, otherwise `baseline_salience` |
 | `episodic_memory.out` | `episodic_memory.replay` | `memory_id`, `text`, `affect`, `affect_intensity`, `source_timestamp`, `replayed_at` | `baseline_salience` |
 
-`episodic_memory.recall` carries no memory content and no query text. A storage failure publishes a `episodic_memory.recall` with `count = 0`, `error = true` and an `error_detail`. `episodic_memory.replay` carries the trace text, because a replayed trace enters the workspace competition as a candidate like any other module event, and [the world model module](world-model.md) takes it as a cue for a scenario.
+`episodic_memory.recall` never carries query text. When `recall_content = true` and the recall finds results, the event carries a `content` dict with `members` (the coalition members of the best-matching trace, each with `source`, `type` and optionally `felt_fields` or `heard`), `age_band` (one of `this_wake`, `before_last_sleep`, `earlier`) and `trace_ref` (the point id). When `recall_content = false` (the default), no content is attached. `top_similarity` is the cosine similarity of the best match (0.0 when the store is empty). `familiarity` grades the recall against the recent similarity history: `faintly_familiar`, `somewhat_familiar` or `familiar`. A storage failure publishes a `episodic_memory.recall` with `count = 0`, `error = true` and an `error_detail`. `episodic_memory.replay` carries the trace text, because a replayed trace enters the workspace competition as a candidate like any other module event, and [the world model module](world-model.md) takes it as a cue for a scenario.
 
 ## Configuration
 
@@ -52,6 +52,10 @@ All keys are under `[episodic_memory]` and its sub-tables. Shared keys such as `
 | `alert_salience` | float | `0.6` | Intensity of a recall whose strongest trace was stored at arousal 0.5 or higher |
 | `recall_on_workspace` | bool | `true` | Whether recall runs on each broadcast |
 | `recall_cooldown_s` | float | `5.0` | Minimum entity-time seconds between recalls |
+| `recall_exclude_recent_s` | float | `30.0` | Entity-time seconds; traces younger than this are skipped during recall so a just-stored snapshot does not match itself |
+| `recall_content` | bool | `false` | When true, recall events carry a `content` dict with coalition members, age band and trace ref |
+| `recall_render_max` | int | `3` | Maximum members rendered in a recall's felt line |
+| `familiarity_window` | int | `100` | Rolling window of recent similarities used to grade familiarity |
 | `[episodic_memory.qdrant].host` | string | `"127.0.0.1"` | Qdrant host |
 | `[episodic_memory.qdrant].port` | int | `6533` | Qdrant port |
 | `[episodic_memory.qdrant].api_key` | string | unset | Qdrant API key; see below |
@@ -90,15 +94,15 @@ The short-term buffer is working memory. It is not saved by `serialize()`, but p
 flowchart TD
     WS[workspace.broadcast] --> SER[serialize snapshot to text]
     SER --> COOL{recall on\nand cooldown elapsed?}
-    COOL -- yes --> RECALL[search short_term\nby cosine similarity]
-    RECALL --> PUB_REC[publish episodic_memory.recall\nno memory content]
+    COOL -- yes --> RECALL[search persisted + short_term\nby cosine similarity]
+    RECALL --> PUB_REC[publish episodic_memory.recall\nwith optional content]
     COOL -- no --> STORE
     PUB_REC --> STORE[store text and affect tag\nin short_term]
     STORE --> OVR{short_term full?}
     OVR -- yes --> EVICT[embed the oldest entry\nand move it to episodic]
 ```
 
-The cooldown runs on entity time, so it stretches and shrinks with `time_scale`. The live recall searches only the short-term buffer, by cosine similarity to the embedded cue. Storing needs no embedding: each short-term entry is embedded once, in memory, the first time a recall needs it, and an entry is embedded for the backend when it moves to `episodic`.
+The cooldown runs on entity time, so it stretches and shrinks with `time_scale`. The live recall searches the persisted episodic collection and the short-term buffer, by cosine similarity to the embedded cue; traces younger than `recall_exclude_recent_s` are skipped. Storing needs no embedding: each short-term entry is embedded once, in memory, the first time a recall needs it, and an entry is embedded for the backend when it moves to `episodic`.
 
 ### Embedder
 
@@ -197,7 +201,7 @@ The tick index is kept in the stored payload, with the inhibited flag and the co
 
 One limit remains: the entity's own speech (`external_speech` and `internal_speech`) is stored as spoken, so heard words the entity repeated are stored as its own words. The language module has the same limit for its notes (see the known limit under [Felt rendering](language.md#felt-rendering)). Traces written before this rule may hold in-world chat text or heard-text fields; `tools/maintainer/scan_heard_traces.py` reports, without content, whether a store or preservation bundle does.
 
-`EpisodicMemory.serialize()` emits `short_term_size`, `collection_prefix` and `embedding_space`, and no memory content. `export_preservation_state()` captures the full store, short-term buffer included, and fails loudly if the backend cannot be read; see [Preservation and the safety net](../11-preservation.md).
+`EpisodicMemory.serialize()` emits `short_term_size`, `collection_prefix`, `embedding_space`, and per-run recall counters: `recall_total` (recalls attempted), `recall_with_content` (recalls that attached content), `recall_accessed` (recalls that found results but did not attach content). It carries no memory content. `export_preservation_state()` captures the full store, short-term buffer included, and fails loudly if the backend cannot be read; see [Preservation and the safety net](../11-preservation.md).
 
 ## Tests
 
@@ -219,6 +223,12 @@ One limit remains: the entity's own speech (`external_speech` and `internal_spee
 | `tests/test_episodic_memory_association_wiring.py` | `[episodic_memory.association]` keys, the retired `cross_period_candidates`, module forwarding, decommission names |
 | `tests/test_episodic_memory_get_points.py` | `get_points` on all three backends |
 | `tests/systems/test_episodic_memory_subsystem.py` | End-to-end subsystem test |
+| `tests/test_episodic_recall_live_path.py` | Live-path integration: planted thought recalled with and without content, per-run counters |
+| `tests/test_felt_recall_content.py` | Felt rendering of recall events with content members and past-tense templates |
+| `tests/test_felt_recall_familiarity.py` | Familiarity grading (faintly/somewhat/familiar) and felt phrases |
+| `tests/test_felt_no_content_claim.py` | Recall with no content never claims "I remember" |
+| `tests/test_episodic_memory_members.py` | Coalition member extraction for recall content |
+| `tests/test_episodic_memory_recall_scope.py` | Recall searches persisted collection, not only short-term |
 
 The offline suite's memory-coherence battery (`kaine/evaluation/benchmarks/instrument_runners/memory_coherence_runner.py`) exercises the episodic memory module offline.
 
