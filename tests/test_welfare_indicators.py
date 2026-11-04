@@ -337,3 +337,47 @@ def test_shares_equal_the_tally_over_a_run_shorter_than_t_lp(with_sleep):
         snap["negative_valence_share"]
     )
     assert reading.span_awake_s == pytest.approx(snap["awake_seconds"])
+
+
+def test_uncontrolled_indicator_does_not_bleed_across_restart():
+    """Drive endings during a rest must not contaminate the fresh span.
+
+    Before the fix, restart() did not reset _last_ends, so the first
+    post-restart observation computed a delta from the pre-restart baseline
+    and attributed rest-period endings to the fresh span.
+    """
+    ev = IndicatorEvaluator(IndicatorParams())
+    # Feed 601 s with 2 other-ended boredom crossings (cumulative 0 → 2).
+    t = 0.0
+    ev.observe_state(t, _state(ends=_ends(0, 0)))
+    for k in range(1, 601):
+        t += 1.0
+        ev.observe_state(t, _state(ends=_ends(0, min(2, k // 200))))
+    ev.evaluate()
+
+    ev.restart()
+
+    # Simulate 3 other-ended crossings happening during the rest (the
+    # cumulative counter jumped from 2 to 5 while the evaluator was not
+    # observing). Then feed 601 s where only 1 more ending happens
+    # (cumulative 5 → 6). A correct fresh span counts only that 1 ending.
+    for k in range(601):
+        t += 1.0
+        other = 5 + (1 if k >= 300 else 0)
+        ev.observe_state(t, _state(ends=_ends(0, other)))
+    after = ev.evaluate()
+
+    # A fresh evaluator fed the same 1 ending over 601 s.
+    fresh = IndicatorEvaluator(IndicatorParams())
+    t2 = 0.0
+    fresh.observe_state(t2, _state(ends=_ends(0, 0)))
+    for k in range(1, 601):
+        t2 += 1.0
+        other = 0 + (1 if k >= 300 else 0)
+        fresh.observe_state(t2, _state(ends=_ends(0, other)))
+    expected = fresh.evaluate()
+
+    assert after.reading("boredom_uncontrolled").value == expected.reading("boredom_uncontrolled").value
+    # With only 1 other-ended crossing: posterior = P(p < 1/2 | s=0, f=1)
+    # = 3/4 which is below the 0.95 bar.
+    assert not after.reading("boredom_uncontrolled").over
