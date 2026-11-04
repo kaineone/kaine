@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-"""Boot helpers for the workspace feedback extension.
+"""Boot helpers for the workspace feedback extension and content level.
 
-These functions read the `[workspace.feedback]` table and build a
-`FeedbackController` when the extension is enabled. They keep the boot layer
-separate from the cycle types.
+These functions read the `[workspace.feedback]` and `[workspace.content]`
+tables and build a `FeedbackController` (optionally holding a
+`ContentLevel`) when the extensions are enabled. They keep the boot
+layer separate from the cycle types.
 """
 
 from __future__ import annotations
@@ -14,9 +15,15 @@ from collections.abc import Mapping
 from typing import Any
 
 from kaine.boot.errors import ConfigurationError
+from kaine.workspace.content import ContentLevel
 from kaine.workspace.feedback import FeedbackController, WorkspaceFeedbackSettings
 
 FEEDBACK_SECTION_KEY = "workspace_feedback"
+DEFAULT_PROCESSOR_DIMS: dict[str, int] = {
+    "vision": 768,
+    "audition": 64,
+    "interoception": 8,
+}
 
 
 def feedback_section(kaine_config: Mapping[str, Any]) -> dict[str, Any]:
@@ -36,6 +43,43 @@ def feedback_settings(section: Mapping[str, Any] | None) -> WorkspaceFeedbackSet
         return WorkspaceFeedbackSettings.from_section(section)
     except ValueError as exc:
         raise ConfigurationError(f"[workspace.feedback]: {exc}") from exc
+
+
+def content_section(kaine_config: Mapping[str, Any]) -> dict[str, Any]:
+    """The `[workspace.content]` table as a plain dict, {} when absent."""
+    workspace = kaine_config.get("workspace") or {}
+    content = workspace.get("content") or {}
+    if not isinstance(content, Mapping):
+        raise ConfigurationError("[workspace.content] must be a table")
+    return dict(content)
+
+
+def make_content_level(kaine_config: Mapping[str, Any]) -> ContentLevel | None:
+    """Build a ContentLevel from [workspace.content], or None when disabled."""
+    section = content_section(kaine_config)
+    if not section.get("enabled", False):
+        return None
+
+    code_dim = int(section.get("code_dim", 32))
+    encoder_lr = float(section.get("encoder_lr", 1e-3))
+    decoder_lr = float(section.get("decoder_lr", 1e-3))
+
+    raw_dims = section.get("processor_dims")
+    if raw_dims is not None:
+        if not isinstance(raw_dims, Mapping):
+            raise ConfigurationError(
+                "[workspace.content].processor_dims must be a table"
+            )
+        processor_dims = {str(k): int(v) for k, v in raw_dims.items()}
+    else:
+        processor_dims = dict(DEFAULT_PROCESSOR_DIMS)
+
+    return ContentLevel(
+        processor_dims,
+        code_dim=code_dim,
+        encoder_lr=encoder_lr,
+        decoder_lr=decoder_lr,
+    )
 
 
 def make_workspace_feedback(
@@ -70,4 +114,6 @@ def make_workspace_feedback(
     if settings.arm == "matched_random" and seed is None:
         raise ConfigurationError("the matched_random feedback arm needs the run seed")
 
-    return FeedbackController(settings, seed=seed, clock=clock)
+    content = make_content_level(kaine_config)
+
+    return FeedbackController(settings, content=content, seed=seed, clock=clock)

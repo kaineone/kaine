@@ -638,6 +638,11 @@ class Vision(BaseModule):
                 if self._feedback_channel is not None
                 else None
             )
+            cpred = (
+                self._feedback_channel.content_prediction
+                if self._feedback_channel is not None
+                else None
+            )
             # Offload the MLP forward/backward step to a thread so the event loop
             # stays responsive during vision processing (performance-test-coverage).
             formed_stamp: tuple[Optional[int], Optional[float]] = (None, None)
@@ -648,7 +653,8 @@ class Vision(BaseModule):
                 formed_stamp = self._context.last_reading
                 if self._feedback_channel is not None:
                     prediction_error = await asyncio.to_thread(
-                        self._forward_model.step, embedding, ctx, null, sequence_prediction=seq
+                        self._forward_model.step, embedding, ctx, null,
+                        sequence_prediction=seq, content_prediction=cpred,
                     )
                 else:
                     prediction_error = await asyncio.to_thread(
@@ -656,7 +662,8 @@ class Vision(BaseModule):
                     )
             elif self._feedback_channel is not None:
                 prediction_error = await asyncio.to_thread(
-                    self._forward_model.step, embedding, sequence_prediction=seq
+                    self._forward_model.step, embedding,
+                    sequence_prediction=seq, content_prediction=cpred,
                 )
             else:
                 prediction_error = await asyncio.to_thread(self._forward_model.step, embedding)

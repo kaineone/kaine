@@ -355,17 +355,23 @@ class Audition(BaseModule):
             if self._feedback_channel is not None
             else None
         )
+        cpred = (
+            self._feedback_channel.content_prediction
+            if self._feedback_channel is not None
+            else None
+        )
         if getattr(self._acoustic_forward_model, "context_dim", 0) > 0:
             ctx, null = self._context.context_and_null(("audition",))
             if self._feedback_channel is not None:
                 prediction_error = self._acoustic_forward_model.step(
-                    embedding, ctx, null, sequence_prediction=seq
+                    embedding, ctx, null,
+                    sequence_prediction=seq, content_prediction=cpred,
                 )
             else:
                 prediction_error = self._acoustic_forward_model.step(embedding, ctx, null)
         elif self._feedback_channel is not None:
             prediction_error = self._acoustic_forward_model.step(
-                embedding, sequence_prediction=seq
+                embedding, sequence_prediction=seq, content_prediction=cpred,
             )
         else:
             prediction_error = self._acoustic_forward_model.step(embedding)
@@ -458,7 +464,13 @@ class Audition(BaseModule):
             if skipped or not getattr(self._acoustic_forward_model, "last_error_defined", True)
             else prediction_error
         )
+        latent = (
+            list(embedding)
+            if not skipped and all(math.isfinite(v) for v in embedding)
+            else None
+        )
         payload: dict[str, Any] = {
+            "latent": latent,
             "source_label": source_label,
             "change_score": change,
             "prediction_error": published_error,

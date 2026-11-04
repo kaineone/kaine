@@ -588,6 +588,8 @@ async def test_perception_event_is_content_free(bus: AsyncBus):
             # Entity-time gating: count only reports after learning while awake.
             "entity_time_s",
             "awake",
+            # Processor latent (numeric embedding) for the content workspace level.
+            "latent",
         }
         # The energy channel is a single number, never samples.
         assert isinstance(perc.payload["energy_dbfs"], float)

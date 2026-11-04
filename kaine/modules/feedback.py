@@ -39,6 +39,47 @@ def blend_weights(own_mean: float, top_mean: float | None) -> tuple[float, float
     return (raw_own / total, raw_top / total)
 
 
+def blend_weights_3(
+    own_mean: float,
+    top_mean: float | None,
+    content_mean: float | None,
+) -> tuple[float, float, float]:
+    """3-way precision blend: (own, head, content), inverse-square weighting."""
+    if top_mean is None and content_mean is None:
+        return (1.0, 0.0, 0.0)
+    if content_mean is None:
+        w_own, w_top = blend_weights(own_mean, top_mean)
+        return (w_own, w_top, 0.0)
+    if top_mean is None:
+        if own_mean <= 0.0:
+            return (0.0, 0.0, 1.0) if content_mean > 0.0 else (1.0, 0.0, 0.0)
+        if content_mean <= 0.0:
+            return (1.0, 0.0, 0.0)
+        raw_own = 1.0 / (own_mean * own_mean)
+        raw_c = 1.0 / (content_mean * content_mean)
+        total = raw_own + raw_c
+        return (raw_own / total, 0.0, raw_c / total)
+    if own_mean <= 0.0:
+        entries = []
+        if top_mean > 0.0:
+            entries.append(("top", 1.0 / (top_mean * top_mean)))
+        if content_mean > 0.0:
+            entries.append(("content", 1.0 / (content_mean * content_mean)))
+        if not entries:
+            return (1.0, 0.0, 0.0)
+        total = sum(v for _, v in entries)
+        w_top = next((v / total for k, v in entries if k == "top"), 0.0)
+        w_c = next((v / total for k, v in entries if k == "content"), 0.0)
+        return (0.0, w_top, w_c)
+    raw_own = 1.0 / (own_mean * own_mean)
+    raw_top = 1.0 / (top_mean * top_mean) if top_mean > 0.0 else 0.0
+    raw_c = 1.0 / (content_mean * content_mean) if content_mean > 0.0 else 0.0
+    total = raw_own + raw_top + raw_c
+    if total <= 0.0:
+        return (1.0, 0.0, 0.0)
+    return (raw_own / total, raw_top / total, raw_c / total)
+
+
 def _l2(a: Sequence[float], b: Sequence[float]) -> float:
     """Euclidean distance between two equal-length float sequences."""
     return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))
@@ -159,6 +200,7 @@ class FeedbackChannel:
     def __init__(self, processor: str):
         self.processor = processor
         self.sequence_prediction: tuple[float, ...] | None = None
+        self.content_prediction: list[float] | None = None
         self.gain: float = 1.0
 
     def observe(self, snapshot: WorkspaceSnapshot) -> bool:
@@ -197,6 +239,17 @@ class FeedbackChannel:
             ):
                 self.gain = float(value)
 
+        content = fb.get("content")
+        if isinstance(content, dict):
+            preds = content.get("predictions")
+            if isinstance(preds, dict):
+                pred = preds.get(self.processor)
+                if isinstance(pred, list) and all(
+                    isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+                    for v in pred
+                ):
+                    self.content_prediction = [float(v) for v in pred]
+
         return True
 
 
@@ -219,6 +272,7 @@ class TopDownBlend:
 
         self._own_errors: deque[float] = deque(maxlen=self._window)
         self._top_errors: deque[float] = deque(maxlen=self._window)
+        self._content_errors: deque[float] = deque(maxlen=self._window)
         self._blend_errors: deque[float] = deque(maxlen=self._window)
 
         self._head: TopDownHead | None = None
@@ -234,7 +288,9 @@ class TopDownBlend:
         self.last_disagreement = None
         self.last_own_error = None
         self.last_top_error = None
+        self.last_content_error = None
         self.last_top_weight = 0.0
+        self.last_content_weight = 0.0
 
     @property
     def last_scored_had_context(self):
@@ -283,9 +339,11 @@ class TopDownBlend:
         self._blend = None
         self._blend_null = None
         self._top = None
+        self._content = None
         self._regressor = None
         self._pending_gap = None
         self.last_top_weight = 0.0
+        self.last_content_weight = 0.0
 
     def step(
         self,
@@ -295,6 +353,7 @@ class TopDownBlend:
         *,
         timespan=None,
         sequence_prediction=None,
+        content_prediction=None,
     ) -> float:
         """Step the inner model, score the previous blend, and form the next blend."""
         own_prev = self._inner._last_prediction
@@ -320,6 +379,9 @@ class TopDownBlend:
         if own_prev is not None and self._blend is not None:
             error = _l2(feature, self._blend)
             top_error = _l2(feature, self._top)
+            content_error = (
+                _l2(feature, self._content) if self._content is not None else None
+            )
 
             self.last_null_error = (
                 _l2(feature, self._blend_null) if self._blend_null is not None else None
@@ -327,10 +389,13 @@ class TopDownBlend:
             self.last_residuals = tuple(a - b for a, b in zip(feature, self._blend))
             self.last_own_error = own_error
             self.last_top_error = top_error
+            self.last_content_error = content_error
 
             if defined:
                 self._own_errors.append(own_error)
                 self._top_errors.append(top_error)
+                if content_error is not None:
+                    self._content_errors.append(content_error)
                 self._blend_errors.append(error)
 
             mean_blend = _mean_window(self._blend_errors)
@@ -378,31 +443,44 @@ class TopDownBlend:
         top_next = self._head.predict(x)
 
         top_mean = _mean_window(self._top_errors) if self._top_errors else None
-        w_own, w_top = blend_weights(_mean_window(self._own_errors), top_mean)
+        content_mean = _mean_window(self._content_errors) if self._content_errors else None
+        content_next = list(content_prediction) if content_prediction is not None else None
+        if content_next is not None and len(content_next) != len(own_next):
+            content_next = None
 
-        if w_top == 0.0:
-            blend = list(own_next)
-        elif w_own == 0.0:
-            blend = list(top_next)
+        if content_next is not None:
+            w_own, w_top, w_content = blend_weights_3(
+                _mean_window(self._own_errors), top_mean, content_mean,
+            )
         else:
-            blend = [w_own * o + w_top * t for o, t in zip(own_next, top_next)]
+            w_own, w_top = blend_weights(_mean_window(self._own_errors), top_mean)
+            w_content = 0.0
+
+        blend = [0.0] * len(own_next)
+        for i in range(len(own_next)):
+            v = w_own * own_next[i] + w_top * top_next[i]
+            if content_next is not None and w_content > 0.0:
+                v += w_content * content_next[i]
+            blend[i] = v
 
         blend_null = None
         if own_null_next is not None and null_context is not None:
             top_null = self._head.predict(self._head.regressor(null_context, sequence_prediction))
-            if w_top == 0.0:
-                blend_null = list(own_null_next)
-            elif w_own == 0.0:
-                blend_null = list(top_null)
-            else:
-                blend_null = [w_own * o + w_top * t for o, t in zip(own_null_next, top_null)]
+            blend_null = [0.0] * len(own_null_next)
+            for i in range(len(own_null_next)):
+                v = w_own * own_null_next[i] + w_top * top_null[i]
+                if content_next is not None and w_content > 0.0:
+                    v += w_content * content_next[i]
+                blend_null[i] = v
 
         self._blend = blend
         self._blend_null = blend_null
         self._top = top_next
+        self._content = content_next
         self._regressor = x
         self._pending_gap = _l2(top_next, own_next)
         self.last_top_weight = w_top
+        self.last_content_weight = w_content
 
         return error
 
@@ -415,6 +493,7 @@ class TopDownBlend:
             state["head"] = self._head.state_dict()
         state["own_errors"] = list(self._own_errors)
         state["top_errors"] = list(self._top_errors)
+        state["content_errors"] = list(self._content_errors)
         state["blend_errors"] = list(self._blend_errors)
         return state
 
@@ -436,6 +515,7 @@ class TopDownBlend:
         for key, deq in [
             ("own_errors", self._own_errors),
             ("top_errors", self._top_errors),
+            ("content_errors", self._content_errors),
             ("blend_errors", self._blend_errors),
         ]:
             values = state.get(key)

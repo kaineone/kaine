@@ -190,6 +190,22 @@ refractory_s = 10.0
 # (design value).
 head_learning_rate = 0.001
 
+[workspace.content]
+# Content-bearing second level of the workspace (option F). Per-source encoders
+# map processor latents into a shared code z_k; per-processor decoders produce
+# descending predictions that enter each processor's TopDownBlend as the content
+# channel. Trained by processors' own prediction errors (prediction arm) or
+# cross-modal cycle-consistency (translation arm). Ships off; set enabled = true
+# when the feedback extension is also on.
+enabled = false
+code_dim = 32
+encoder_lr = 0.001
+decoder_lr = 0.001
+# Per-processor latent dimensions. Defaults match the shipped encoder outputs:
+# vision = 768 (InternVideoNext-B), audition = 64 (spectral-logband-32),
+# interoception = 8 (system metrics feature vector).
+# processor_dims = {vision = 768, audition = 64, interoception = 8}
+
 [experiment]
 # Per-run identity, seeding, and manifest (research reproducibility).
 # At boot the cycle pins the global RNGs from `seed`, mints a unique run id, and
