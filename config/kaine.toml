@@ -674,6 +674,10 @@ alert_salience = 0.6
 # leaves the stores above it, the weakest traces are deleted first until they
 # fit. The paper gives no value; 10 GiB is a safe default, not a recommendation.
 storage_budget_bytes = 10737418240
+recall_exclude_recent_s = 30.0
+recall_content = false
+recall_render_max = 3
+familiarity_window = 100
 
 [episodic_memory.qdrant]
 host = "127.0.0.1"

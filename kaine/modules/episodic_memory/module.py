@@ -70,6 +70,9 @@ class EpisodicMemory(BaseModule):
         recall_on_workspace: bool = True,
         recall_cooldown_s: float = 5.0,
         recall_exclude_recent_s: float = 30.0,
+        recall_content: bool = False,
+        recall_render_max: int = 3,
+        familiarity_window: int = 100,
         # Replay config
         replay_selection_top_k: int = 5,
         replay_affect_weight: float = 0.7,
@@ -107,6 +110,10 @@ class EpisodicMemory(BaseModule):
             raise ValueError("recall_cooldown_s must be >= 0")
         if recall_exclude_recent_s < 0:
             raise ValueError("recall_exclude_recent_s must be >= 0")
+        if recall_render_max <= 0:
+            raise ValueError("recall_render_max must be positive")
+        if familiarity_window <= 0:
+            raise ValueError("familiarity_window must be positive")
         association = AssociationParams(
             n_pair=association_n_pair,
             sim_min=association_sim_min,
@@ -120,6 +127,9 @@ class EpisodicMemory(BaseModule):
         self._recall_on_workspace = bool(recall_on_workspace)
         self._recall_cooldown_s = float(recall_cooldown_s)
         self._recall_exclude_recent_s = float(recall_exclude_recent_s)
+        self._recall_content = bool(recall_content)
+        self._recall_render_max = int(recall_render_max)
+        self._familiarity_window = int(familiarity_window)
         self._clock = entity_clock or EntityClock()
         # Subjective-time timestamp of the last spontaneous recall; None until
         # the first recall fires so the very first cued tick is not suppressed.
@@ -420,14 +430,22 @@ class EpisodicMemory(BaseModule):
         salience = (
             self._alert_salience if summary.max_affect_intensity >= 0.5 else self._baseline_salience
         )
+        event_payload: dict[str, Any] = {
+            "count": summary.count,
+            "collection": summary.collection,
+            "query_length": len(query_text),
+            "max_affect_intensity": summary.max_affect_intensity,
+            "top_similarity": summary.top_similarity,
+        }
+        if self._recall_content and results:
+            content = _recall_content_for(
+                results[0], self._core.sleeps, self._recall_render_max
+            )
+            if content is not None:
+                event_payload["content"] = content
         await self.publish(
             "episodic_memory.recall",
-            {
-                "count": summary.count,
-                "collection": summary.collection,
-                "query_length": len(query_text),
-                "max_affect_intensity": summary.max_affect_intensity,
-            },
+            event_payload,
             salience=salience,
         )
         return results
@@ -627,6 +645,32 @@ def _replay_entry(point_id: str, memory: Any) -> ReplayEntry:
         affect=dict(affect) if affect else None,
         collection=None,
     )
+
+
+def _age_band(born_sleep: Any, current_sleeps: int) -> str:
+    if not isinstance(born_sleep, int) or isinstance(born_sleep, bool):
+        return "this_wake"
+    if born_sleep >= current_sleeps:
+        return "this_wake"
+    if born_sleep == current_sleeps - 1:
+        return "before_last_sleep"
+    return "earlier"
+
+
+def _recall_content_for(
+    best: RecalledMemory, current_sleeps: int, render_max: int
+) -> dict[str, Any] | None:
+    members = best.payload.get("members")
+    if not members:
+        return None
+    if any(m.get("heard") for m in members):
+        return None
+    band = _age_band(best.payload.get("born_sleep"), current_sleeps)
+    return {
+        "members": members[:render_max],
+        "age_band": band,
+        "trace_ref": best.point_id,
+    }
 
 
 def _serialize_snapshot(snapshot: WorkspaceSnapshot) -> str:

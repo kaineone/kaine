@@ -117,6 +117,7 @@ class RecallSummary:
     count: int
     collection: str
     max_affect_intensity: float
+    top_similarity: float = 0.0
     affects: tuple[dict[str, Any], ...] = field(default_factory=tuple)
 
 
@@ -1763,8 +1764,11 @@ def _summarize(results: Iterable[RecalledMemory], collection: str) -> RecallSumm
     affects: list[dict[str, Any]] = []
     max_intensity = 0.0
     count = 0
+    top_sim = 0.0
     for r in results:
         count += 1
+        if r.similarity is not None and float(r.similarity) > top_sim:
+            top_sim = float(r.similarity)
         if r.affect:
             affects.append(dict(r.affect))
             try:
@@ -1777,6 +1781,7 @@ def _summarize(results: Iterable[RecalledMemory], collection: str) -> RecallSumm
         count=count,
         collection=collection,
         max_affect_intensity=max_intensity,
+        top_similarity=top_sim,
         affects=tuple(affects),
     )
 
