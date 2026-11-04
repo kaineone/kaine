@@ -178,6 +178,10 @@ def test_single_gpu_overlay_pins_study_to_card_zero():
         else:
             assert device_ids, f"{svc} has no GPU reservation"
             for did in device_ids:
-                assert did.startswith("${KAINE_ORGAN_GPU:-0}") or did.startswith(
-                    "${KAINE_TRAINER_GPU:-${KAINE_ORGAN_GPU:-0}}"
+                assert did.startswith(
+                    (
+                        "${KAINE_ORGAN_GPU:-0}",
+                        "${KAINE_TRAINER_GPU:-${KAINE_ORGAN_GPU:-0}}",
+                        "${KAINE_DECISION_GPU:-${KAINE_ORGAN_GPU:-0}}",
+                    )
                 ), f"{svc} device id does not default to card 0: {did}"
