@@ -172,6 +172,10 @@ class StimulusController:
     def gain_db(self) -> float:
         return self._gain_db
 
+    def reset_gain(self) -> None:
+        with self._lock:
+            self._gain_db = 0.0
+
     def state(self) -> StimulusState:
         with self._lock:
             holders = self._clock.holders
