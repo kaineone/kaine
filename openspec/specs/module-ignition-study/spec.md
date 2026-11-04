@@ -1,23 +1,32 @@
-## ADDED Requirements
+# Spec Delta
 
-### Requirement: Every study step runs the module supervisor
-`build_overlay` SHALL set `[supervisor].enabled = true` and `[supervisor.incident_log].enabled = true` for every step kind, overriding the operator config, with the incident log path relative to the step's working directory. A test SHALL build the merged config of each step kind (shipped config plus study overlay, no operator overlay) and assert that every config-level research-gate requirement, including the supervisor's, passes.
+## REMOVED Requirements
 
-#### Scenario: An operator config turns the supervisor off
-- **WHEN** the operator config sets `[supervisor].enabled = false`
-- **THEN** every step's overlay sets it to true
+### Requirement: branch-and-accumulate-plan
+The study runner no longer generates branch, repeat, or accumulate lines. The branching plan types and their line isolation are removed.
 
-#### Scenario: The incident log stays inside the step
-- **WHEN** an overlay is built for branch step 3
-- **THEN** the incident log path resolves inside that step's directory
+### Requirement: noise-reference
+The repeat step (noise reference) is no longer part of the protocol.
 
-### Requirement: A supervisor escalation is its own step outcome
-After a step's cycle exits, the study runner SHALL read the step's `state/cycle/escalation.json`. When it exists, the step's outcome SHALL be `failed:supervisor`, the record SHALL carry the escalation record's content-free fields, and the run SHALL halt for the operator. A step that completes SHALL record `supervisor_restarts`, the number of restart transitions in the step's incident log, and the analysis SHALL list steps with at least one restart.
+## MODIFIED Requirements
 
-#### Scenario: A step escalates
-- **WHEN** the supervisor escalates during a step and the cycle exits non-zero
-- **THEN** the step is recorded as `failed:supervisor`, not `failed:exit:<code>`, and the next step does not start
+### Requirement: plan-generator-produces-progressive-sequence
+The plan generator SHALL produce a single linear sequence of progressive steps instead of a branch/repeat/accumulate grid. Each step SHALL add one module and revive the previous step's preservation.
 
-#### Scenario: A restart that recovered
-- **WHEN** the supervisor restarted one module once during a step and the step completed
-- **THEN** the step record carries `supervisor_restarts: 1` and the step is listed as having a restart
+#### Scenario: plan output
+- **WHEN** a plan is generated
+- **THEN** the plan is a list of steps [seed, +module_1, +module_2, ...] with no branch or accumulate entries
+
+### Requirement: step-manifest-includes-module-delta
+Each step manifest SHALL include `modules_added` (the list of modules new to this step) and `step_index` (the zero-based position in the progressive sequence), alongside existing fields.
+
+#### Scenario: manifest fields
+- **WHEN** step 2 completes with world-model added
+- **THEN** the manifest contains `step_index: 2` and `modules_added: ["world-model"]`
+
+### Requirement: analysis-uses-progressive-comparison
+The analysis SHALL compare each step against the previous step instead of branch-vs-branch or branch-vs-repeat comparisons. The noise floor comparison SHALL be removed.
+
+#### Scenario: analysis structure
+- **WHEN** a development run with 4 steps completes
+- **THEN** the analysis reports 3 pairwise comparisons (step 1 vs 0, 2 vs 1, 3 vs 2) and no branch-vs-branch or noise-floor sections
