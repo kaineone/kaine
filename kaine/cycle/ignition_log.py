@@ -140,6 +140,18 @@ class IgnitionLog:
             "time_scale": payload.get("time_scale"),
         }
 
+        metadata = payload.get("metadata") or {}
+        fb = metadata.get("workspace_feedback")
+        if isinstance(fb, dict):
+            record["feedback_arm"] = fb.get("arm")
+            record["feedback_gains"] = fb.get("gains")
+            content = fb.get("content")
+            if isinstance(content, dict):
+                record["content_losses"] = content.get("losses")
+                z_k = content.get("z_k")
+                if isinstance(z_k, list):
+                    record["content_code_dim"] = len(z_k)
+
         await self._sink.write(record)
 
     async def close(self) -> None:

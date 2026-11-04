@@ -34,7 +34,7 @@
 
 - [x] 6.1 `config/kaine.toml`: `[workspace.content]` section with defaults (`enabled = false`, `arm = "prediction"`, `code_dim = 32`, `encoder_lr = 1e-3`, `decoder_lr = 1e-3`).
 - [ ] 6.2 Docs: workspace chapter update (content level, shared code, descending predictions), configuration appendix.
-- [ ] 6.3 Research-log integration: log content presence, code dimension, per-processor reconstruction error.
+- [x] 6.3 Research-log integration: log content presence, code dimension, per-processor reconstruction error.
 
 ## 7. Review
 
