@@ -27,6 +27,7 @@ Nothing is attached to inhibited broadcasts.
 """
 from __future__ import annotations
 
+import logging
 import math
 import random
 import time
@@ -415,7 +416,9 @@ class FeedbackController:
                         if pred is not None:
                             content_predictions[proc_name] = pred
                 except (ValueError, IndexError):
-                    pass
+                    logging.getLogger(__name__).debug(
+                        "content code training skipped (lattice not ready)"
+                    )
 
         eligible: dict[str, dict[str, Any]] = {}
         for processor in PROCESSORS:

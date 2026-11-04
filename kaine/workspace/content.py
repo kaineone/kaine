@@ -67,8 +67,6 @@ class ContentEncoder:
         self._weights = weights
         saved_lr = state.get("lr")
         if saved_lr is not None and saved_lr != self._lr:
-            import logging
-
             logging.getLogger(__name__).info(
                 "ContentEncoder: snapshot lr=%s differs from construction lr=%s",
                 saved_lr,
@@ -141,8 +139,6 @@ class ContentDecoder:
         self._weights = weights
         saved_lr = state.get("lr")
         if saved_lr is not None and saved_lr != self._lr:
-            import logging
-
             logging.getLogger(__name__).info(
                 "ContentDecoder: snapshot lr=%s differs from construction lr=%s",
                 saved_lr,
