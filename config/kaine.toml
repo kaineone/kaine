@@ -1306,6 +1306,20 @@ gain_max_db = 6.0               # G_max: gain within +/- this of the programme l
 channels = []                   # further programme channels (manifest paths); channel 0 is
                                 # [perception_feed].playlist_manifest
 
+[decision]
+# The decision server: a second on-demand llama-server that serves K1-Jev
+# (or the bake-off winner) on loopback for typed questions about external
+# speech. The instruments and welfare signals call it through
+# kaine/decision/client.py. It is separate from the language organ
+# (see the inference-backend spec). It runs only while an entity runs and
+# this section is enabled. Shipped disabled: nothing starts or changes.
+enabled = false
+url = "http://127.0.0.1:11436"     # loopback or the compose service name only
+model = "k1-jev"                     # the GGUF model the server loads
+timeout_s = 5.0                      # per-request timeout in seconds
+thresholds_path = ""                 # path to a K1-Jev thresholds sidecar JSON;
+                                     # empty means no thresholds
+
 [vocal]
 chatterbox_url = "http://127.0.0.1:8883"
 # backend selects the speech synthesiser:
