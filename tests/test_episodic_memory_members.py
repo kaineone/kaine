@@ -26,7 +26,7 @@ from kaine.modules.episodic_memory import (
     FakeEmbedder,
     InMemoryStorage,
 )
-from kaine.modules.episodic_memory.module import _build_members, _serialize_snapshot
+from kaine.modules.episodic_memory.module import _build_members
 
 
 def _ev(source: str, type_: str, payload: dict[str, Any]) -> Event:
