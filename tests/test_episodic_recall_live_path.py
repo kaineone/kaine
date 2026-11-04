@@ -92,6 +92,10 @@ async def test_planted_thought_recalled_with_content(bus: AsyncBus):
 
         rendered = _f_episodic_memory_recall(last_recall.payload)
         assert rendered.startswith("I remember")
+
+        state = em.serialize()
+        assert state["recall_total"] == 2
+        assert state["recall_with_content"] >= 1
     finally:
         await em.shutdown()
 
@@ -124,5 +128,10 @@ async def test_planted_thought_recalled_without_content(bus: AsyncBus):
 
         rendered = _f_episodic_memory_recall(last_recall.payload)
         assert not rendered.startswith("I remember")
+
+        state = em.serialize()
+        assert state["recall_total"] == 2
+        assert state["recall_with_content"] == 0
+        assert state["recall_accessed"] >= 1
     finally:
         await em.shutdown()

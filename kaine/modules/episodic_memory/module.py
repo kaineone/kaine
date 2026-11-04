@@ -137,6 +137,11 @@ class EpisodicMemory(BaseModule):
         # the first recall fires so the very first cued tick is not suppressed.
         self._last_recall_monotonic: float | None = None
 
+        # Per-run recall counters (research-log, task 6.2).
+        self._recall_total: int = 0
+        self._recall_with_content: int = 0
+        self._recall_accessed: int = 0
+
         # Affect state cache — updated whenever affect.state arrives.
         # Stored as plain numerics (intensity + VAD) — no raw sense data.
         self._cached_affect: dict[str, Any] | None = None
@@ -441,6 +446,7 @@ class EpisodicMemory(BaseModule):
                 },
                 salience=self._baseline_salience,
             )
+            self._recall_total += 1
             return []
         salience = (
             self._alert_salience if summary.max_affect_intensity >= 0.5 else self._baseline_salience
@@ -454,12 +460,19 @@ class EpisodicMemory(BaseModule):
         }
         if summary.count > 0:
             event_payload["familiarity"] = self._familiarity_grade(summary.top_similarity)
+        has_content = False
         if self._recall_content and results:
             content = _recall_content_for(
                 results[0], self._core.sleeps, self._recall_render_max
             )
             if content is not None:
                 event_payload["content"] = content
+                has_content = True
+        self._recall_total += 1
+        if has_content:
+            self._recall_with_content += 1
+        elif summary.count > 0:
+            self._recall_accessed += 1
         await self.publish(
             "episodic_memory.recall",
             event_payload,
@@ -529,6 +542,9 @@ class EpisodicMemory(BaseModule):
         result: dict[str, Any] = {
             "short_term_size": self._core.short_term_size,
             "collection_prefix": self._core._prefix,
+            "recall_total": self._recall_total,
+            "recall_with_content": self._recall_with_content,
+            "recall_accessed": self._recall_accessed,
         }
         try:
             result["embedding_space"] = self._core.embedder.space
