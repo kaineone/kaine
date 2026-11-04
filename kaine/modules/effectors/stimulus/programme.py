@@ -168,6 +168,7 @@ class ProgrammeClock(PlaylistClock):
         *,
         segments: Sequence[tuple[int, int]] | None = None,
         clock: Callable[[], float] = time.monotonic,
+        continue_mode: bool = False,
     ) -> None:
         super().__init__(item_count, clock=clock)
         segs = tuple(segments) if segments else ((0, int(item_count)),)
@@ -183,6 +184,7 @@ class ProgrammeClock(PlaylistClock):
         self._anchor_perceived = 0.0
         self._anchor_presented = 0.0
         self._repositions = 0
+        self._continue_mode = bool(continue_mode)
 
     # -- channel arithmetic (all *_locked helpers expect self._lock held) --
 
@@ -241,8 +243,21 @@ class ProgrammeClock(PlaylistClock):
         return lap + 1, first, 0.0
 
     def _ended_locked(self, perceived: float) -> bool:
+        if self._continue_mode:
+            return False
         length = self._channel_length_locked(0)
         return length is not None and perceived >= length
+
+    @property
+    def pass_number(self) -> int:
+        with self._lock:
+            if not self._continue_mode:
+                return 0
+            length = self._channel_length_locked(0)
+            if length is None or length <= 0:
+                return 0
+            perceived = self._elapsed_locked()
+            return int(perceived // length)
 
     def locate(self, elapsed: float | None = None) -> tuple[int, float]:
         with self._lock:

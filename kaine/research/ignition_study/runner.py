@@ -93,6 +93,7 @@ HOLD_REASONS = (
     "incomplete_coverage",
     "indicator_crossing",
     "protective_response",
+    "stimulus_control_first_hours",
 )
 
 #: Hold reasons that show the welfare net acted or an indicator crossed during
@@ -100,7 +101,7 @@ HOLD_REASONS = (
 #: it, because the review must happen before the entity is booted again. The
 #: other reasons (a record missing after a crash, for example) are shown in
 #: ``status`` but do not block a retry.
-REVIEW_HOLD_REASONS = ("indicator_crossing", "protective_response")
+REVIEW_HOLD_REASONS = ("indicator_crossing", "protective_response", "stimulus_control_first_hours")
 
 #: A step recorded while its child was still running (a failed timeout or
 #: disk-low preservation). Its child writes the exposure record only when it
@@ -115,6 +116,8 @@ EXPOSURE_ARCHIVE_DIR = "welfare_exposure_archive"
 REFERENCE_COMPLETE = "complete"
 REFERENCE_MISSING = "missing"
 REFERENCE_NOT_ENABLED = "not_enabled"
+
+_STIMULUS_FIRST_HOURS_RELPATH = "state/lifecycle/stimulus_control_first_hours.json"
 
 
 class StudyComplete(Exception):
@@ -1367,6 +1370,25 @@ class StudyRunner:
         if welfare_held is not None and outcome != "complete":
             outcome = "failed:welfare"
         (line_dir / WELFARE_FREEZE_FILE).unlink(missing_ok=True)
+        stimulus_first_hours_verdict: dict[str, Any] | None = None
+        stimulus_path = line_dir / _STIMULUS_FIRST_HOURS_RELPATH
+        try:
+            if stimulus_path.stat().st_mtime < step_started_wall - VIABILITY_MTIME_SLACK_S:
+                raise FileNotFoundError("verdict predates this step")
+            stimulus_data = json.loads(stimulus_path.read_text())
+        except FileNotFoundError:
+            stimulus_data = None
+        except Exception:
+            log.warning(
+                "stimulus_control_first_hours verdict for %s step %s could not be read",
+                line,
+                k,
+                exc_info=True,
+            )
+            stimulus_data = None
+        if isinstance(stimulus_data, dict) and stimulus_data.get("verdict") == "stopped":
+            stimulus_first_hours_verdict = stimulus_data
+            outcome = "failed:stimulus_control_first_hours"
         world_model_captured: bool | None = None
         if "world_model" in modules_set:
             world_model_captured = False
@@ -1407,6 +1429,14 @@ class StudyRunner:
 
         if supervisor_escalation is not None:
             record["supervisor_escalation"] = supervisor_escalation
+
+        if stimulus_first_hours_verdict is not None:
+            record["stimulus_control_first_hours"] = stimulus_first_hours_verdict
+            hold = record.get("welfare_hold")
+            if isinstance(hold, dict) and isinstance(hold.get("reasons"), list):
+                hold["reasons"].append("stimulus_control_first_hours")
+            else:
+                record["welfare_hold"] = {"reasons": ["stimulus_control_first_hours"]}
 
         if outcome == "complete":
             # A module restart is the architecture's own fault handling and does
