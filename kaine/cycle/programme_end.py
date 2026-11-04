@@ -37,6 +37,8 @@ class ProgrammeEndWatcher:
         clock: Any,
         item_count: int,
         *,
+        mode: str = "stop",
+        on_pass_end: Callable[[int], Awaitable[None]] | None = None,
         write_request: Callable[[Any], None] = write_request,
         read_result: Callable[[], dict | None] = read_result,
         freeze: Callable[[str, str], None] = _default_freeze,
@@ -46,8 +48,14 @@ class ProgrammeEndWatcher:
         clock_fn: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
+        if mode not in ("stop", "continue"):
+            raise ValueError(f"mode must be 'stop' or 'continue', got {mode!r}")
+        if mode == "continue" and on_pass_end is None:
+            raise ValueError("on_pass_end is required in 'continue' mode")
         self.clock = clock
         self.item_count = int(item_count)
+        self._mode = mode
+        self._on_pass_end = on_pass_end
         self._write_request = write_request
         self._read_result = read_result
         self._freeze = freeze
@@ -58,6 +66,7 @@ class ProgrammeEndWatcher:
         self._sleep = sleep
 
         self._handled = False
+        self._current_pass: int = 0
 
     @staticmethod
     def _programme_ended(clock: Any, item_count: int) -> bool:
@@ -73,6 +82,13 @@ class ProgrammeEndWatcher:
 
     async def step(self) -> bool:
         """Return ``True`` once the end-of-programme has been handled."""
+        if self._mode == "continue":
+            pass_number = getattr(self.clock, "pass_number", None)
+            if pass_number is not None and pass_number > self._current_pass:
+                await self._on_pass_end(self._current_pass)
+                self._current_pass = pass_number
+            return False
+
         if not self._programme_ended(self.clock, self.item_count):
             return False
 
