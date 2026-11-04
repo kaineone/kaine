@@ -5,7 +5,6 @@
 
 from kaine.faithful.felt import _f_episodic_memory_recall
 
-
 OLD_SENTENCE = "Some memories come back to me."
 
 
