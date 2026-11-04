@@ -38,5 +38,5 @@
 
 ## 7. Review
 
-- [ ] 7.1 Worker first-pass review.
-- [ ] 7.2 Independent second review (welfare: learned weights, privacy boundary, identity rules).
+- [x] 7.1 Worker first-pass review.
+- [x] 7.2 Independent second review (welfare: learned weights, privacy boundary, identity rules).
