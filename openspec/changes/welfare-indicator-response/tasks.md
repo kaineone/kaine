@@ -37,5 +37,5 @@
 - [x] 6.1a Research-gate and unattended condition 2 described in full (the indicators enabled, the `affect` and `sleep` modules, the `pause` or `end` action) in `docs/14-for-researchers.md`, `docs/02-architecture/README.md`, `docs/05-dashboard.md` and the "Unattended starts" list of `docs/11-preservation.md`; unattended condition 2 is labelled "welfare and indicator responses wired" (check key `2_welfare_and_indicator_responses_wired`; the dashboard and the caretaker notice render check keys generically).
 - [ ] 6.2 Paper notes to REVISION-NOTES: §5.4 status, §6.5 tense and the D2 wording, Table A1 minimum span and bounds.
 - [x] 6.3 `openspec validate welfare-indicator-response --strict` passes.
-- [ ] 6.4 Worker first-pass review, then the integrator's independent second review against the checklist in design.md before merge.
+- [x] 6.4 Worker first-pass review (beam:cloud), then the integrator's independent second review against the D8 checklist (2026-11-03). All 7 items pass. One confirmed correctness bug: `_last_ends` not reset in `IndicatorEvaluator.restart()`, corrupting uncontrolled indicators on fresh spans. Fix PR needed. See `second-review.md`.
 - [ ] 6.5 At the validation boot, record the length of every maintenance sleep, to check the matured completion bound against them.
