@@ -1,0 +1,70 @@
+# Development run: progressive module addition over the four-film programme.
+#
+# Apply:  KAINE_PROFILE=development_run python -m kaine.research.ignition_study
+#
+# Starts from the first_configuration base set and adds one module per step in the
+# declared order. Each step revives the previous step's preserved entity with one
+# more module enabled, then plays the film programme.
+
+[development_run]
+# The order in which modules are added after the base set. Each step adds exactly
+# one module from this list. The base set (interoception, sequence, vision,
+# audition, language, affect, sleep) is always present.
+module_order = [
+    "episodic_memory",
+    "world_model",
+    "planning",
+    "self_model",
+    "social_cognition",
+    "vocal",
+]
+
+# Workspace broadcast capacity (K simultaneous winners per broadcast). The default
+# is the value from the shipped kaine.toml. Override here to set K for all steps.
+# broadcast_capacity = 1
+
+[modules]
+# Base set — same as first_configuration.
+interoception = true
+sequence = true
+vision = true
+audition = true
+language = true
+affect = true
+sleep = true
+# Richer faculties — gated OFF; the runner enables them progressively.
+recorder = false
+planning = false
+episodic_memory = false
+self_model = false
+effectors = false
+vocal = false
+social_cognition = false
+world_model = false
+perceptual_locus = false
+embodiment = false
+
+[perception_feed]
+mode = "seeded"
+seed = 0
+
+[vision]
+foveation = true
+
+[audition]
+transcription_enabled = false
+general_audition = true
+
+[workspace]
+salience_goal_factor = "interest"
+
+[action_selection]
+policy = "self_initiated_report"
+drive_initiative = false
+sig_expiry_s = 300.0
+
+[language]
+awareness_rendering = "felt"
+
+[sequence]
+forward_prediction = true

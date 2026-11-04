@@ -34,6 +34,7 @@ from kaine.research.ignition_study.plan import (
     STEPS_FILE,
     ensure_line_dir,
     load_plan,
+    validate_progressive_redis_db,
     validate_redis_base_url,
     validate_redis_dbs,
 )
@@ -315,12 +316,18 @@ class StudyRunner:
                 self.stopped_lines |= _lines_ended_by(ack.get("line"), ack.get("step"))
 
     def _step_sequence(self) -> list[tuple[str, int]]:
+        if self.plan.get("protocol") == "progressive":
+            return self._progressive_step_sequence()
         k = len(self.plan["order"])
         seq: list[tuple[str, int]] = [("development", 0), ("branch", 0), ("repeat", 0)]
         for i in range(1, k + 1):
             seq.append(("branch", i))
             seq.append(("accumulate", i))
         return seq
+
+    def _progressive_step_sequence(self) -> list[tuple[str, int]]:
+        steps = self.plan["steps"]
+        return [(s["kind"], s["step_index"]) for s in steps]
 
     def _disk_floor_bytes(self, total: float) -> float:
         """Minimum free bytes the study requires on its filesystem."""
@@ -337,8 +344,6 @@ class StudyRunner:
                     f"{rec.get('line')} step {rec.get('step')} is not retried: its line "
                     f"was stopped after a welfare review"
                 )
-            # A critical step's child may have crossed after the runner gave up
-            # on it: read its exposure record before the retry boots again.
             self._resolve_critical_exposure()
             held = self.failed_welfare_hold() or self.pending_welfare_hold()
             if held is not None:
@@ -351,20 +356,56 @@ class StudyRunner:
             }
 
         if self.last_failed and self.last_failed.get("line") not in self.stopped_lines:
-            # A failed step halts the study until it is retried, unless a person
-            # stopped its line after a welfare review.
             raise StudyHalted(self.last_failed)
 
         held = self.pending_welfare_hold()
         if held is not None:
             raise StudyWelfareHold(held)
 
+        if self.plan.get("protocol") == "progressive":
+            return self._next_progressive_step(sequence)
+        return self._next_branching_step(sequence)
+
+    def _next_progressive_step(
+        self, sequence: list[tuple[str, int]]
+    ) -> dict[str, Any]:
+        steps = self.plan["steps"]
+        steps_by_index = {s["step_index"]: s for s in steps}
+        for kind, step_index in sequence:
+            if (kind, step_index) in self.completed_steps:
+                continue
+            if kind in self.stopped_lines:
+                continue
+            step_def = steps_by_index[step_index]
+            if step_index == 0:
+                revived_from: str | None = None
+            else:
+                prior_bundle = self.line_bundles.get(
+                    (steps_by_index[step_index - 1]["kind"], step_index - 1)
+                )
+                if prior_bundle is None:
+                    raise StudyError(
+                        f"step {step_index - 1} has not completed; "
+                        f"cannot start step {step_index}"
+                    )
+                revived_from = prior_bundle
+            return {
+                "line": kind,
+                "k": step_index,
+                "revived_from": revived_from,
+                "progressive_step": step_def,
+                "is_retry": False,
+            }
+        raise StudyComplete()
+
+    def _next_branching_step(
+        self, sequence: list[tuple[str, int]]
+    ) -> dict[str, Any]:
         seed = self.line_bundles.get(("development", 0))
         for line, k in sequence:
             if (line, k) in self.completed_steps:
                 continue
             if line in self.stopped_lines:
-                # The operator ended this line after a welfare hold.
                 continue
 
             if line == "development":
@@ -437,11 +478,19 @@ class StudyRunner:
             self._release_lock()
 
     def _line_dir(self, line: str, k: int) -> Path:
+        if self.plan.get("protocol") == "progressive":
+            from kaine.research.ignition_study.plan import step_dir_name
+            return self.study_dir / step_dir_name(self.plan, k)
         if line == "branch":
             return self.study_dir / "branch" / str(k)
         return self.study_dir / line
 
     def _ensure_step_dir(self, line: str, k: int) -> Path:
+        if self.plan.get("protocol") == "progressive":
+            from kaine.research.ignition_study.plan import step_dir_name
+            d = self.study_dir / step_dir_name(self.plan, k)
+            d.mkdir(parents=True, exist_ok=True)
+            return d
         return ensure_line_dir(
             self.study_dir, line, k, Path(self.plan["repo_root"])
         )
@@ -550,12 +599,27 @@ class StudyRunner:
             seconds = MATURATION_BLOOM_MAX_SECONDS
         return seconds + self.maturation_bloom_margin_seconds
 
+    def _resolve_redis_db(self, line: str) -> int:
+        """Return the Redis database number for a step on *line*.
+
+        Progressive plans store a single int; branching plans store a
+        per-line dict.
+        """
+        db = self.plan["redis"]["db"]
+        if isinstance(db, int):
+            return db
+        return db[line]
+
     def _check_operator_bus(self) -> None:
         """Refuse when a study database is the operator's bus database, as the
         bus itself resolves it from the operator's configuration now."""
         operator_dbs = _operator_bus_dbs(Path(self.plan["repo_root"]), os.environ)
+        db = self.plan["redis"]["db"]
         try:
-            validate_redis_dbs(self.plan["redis"]["db"], operator_dbs)
+            if isinstance(db, int):
+                validate_progressive_redis_db(db, operator_dbs)
+            else:
+                validate_redis_dbs(db, operator_dbs)
         except ValueError as exc:
             raise StudyError(f"study.json: {exc}") from None
 
@@ -843,7 +907,7 @@ class StudyRunner:
         line = step["line"]
         k = step["k"]
         line_dir = self._ensure_step_dir(line, k)
-        step_kind = "development" if line == "development" else "viewing"
+        step_kind = "development" if line in ("development", "seed") else "viewing"
         repo_root = Path(self.plan["repo_root"])
 
         # Nothing is flushed, adopted or started while a cycle the study
@@ -860,6 +924,7 @@ class StudyRunner:
             repo_root,
             repo_root / "config" / "kaine.toml",
             repo_root / "config" / "kaine.operator.toml",
+            progressive_step=step.get("progressive_step"),
         )
 
         # A runner that died after the seed's maturation preservation succeeded,
@@ -872,6 +937,10 @@ class StudyRunner:
         ):
             adopted = self._adopt_maturation_preservation(line_dir, modules_set)
             if adopted is not None:
+                prog = step.get("progressive_step")
+                if prog is not None:
+                    adopted["step_index"] = prog["step_index"]
+                    adopted["modules_added"] = sorted(prog.get("modules_added", []))
                 log.info("Adopting the recorded maturation preservation %s", adopted["bundle"])
                 return self._finish_record(adopted)
 
@@ -906,7 +975,7 @@ class StudyRunner:
             auth = f":{quoted_password}@"
         redis_url = (
             f"{parsed.scheme}://{auth}{parsed.netloc}/"
-            f"{self.plan['redis']['db'][line]}"
+            f"{self._resolve_redis_db(line)}"
         )
         env["KAINE_REDIS_URL"] = redis_url
         env["KAINE_MODELS_DIR"] = models_dir
@@ -937,16 +1006,14 @@ class StudyRunner:
         # Every step starts on an empty bus: flush the step's own study
         # database (never the operator's; see validate_redis_dbs), which this
         # study claims on the server so no other study flushes it.
-        db = self.plan["redis"]["db"][line]
         try:
             self.flush_db(redis_url)
         except StudyError:
             raise
         except Exception as exc:
-            # The URL carries the password: name the database, not the URL.
             raise StudyError(
-                f"could not flush bus database {db} before {line} step {k}: "
-                f"{type(exc).__name__}"
+                f"could not flush bus database {self._resolve_redis_db(line)} "
+                f"before {line} step {k}: {type(exc).__name__}"
             ) from None
 
         argv = list(self.cycle_command)
@@ -1309,6 +1376,7 @@ class StudyRunner:
                     outcome = extra_outcome
                 world_model_captured = captured
 
+        progressive = step.get("progressive_step")
         record: dict[str, Any] = {
             "line": line,
             "step": k,
@@ -1326,6 +1394,10 @@ class StudyRunner:
             "outcome": outcome,
             "pid": child_pid,
         }
+
+        if progressive is not None:
+            record["step_index"] = progressive["step_index"]
+            record["modules_added"] = sorted(progressive.get("modules_added", []))
 
         if extra_viability is not None:
             record["viability"] = extra_viability

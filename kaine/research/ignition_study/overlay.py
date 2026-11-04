@@ -29,6 +29,8 @@ def build_overlay(
     repo_root: Path,
     base_config_path: Path,
     operator_config_path: Path,
+    *,
+    progressive_step: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], set[str], str]:
     """Return ``(overlay_dict, enabled_modules, models_dir)`` for one step.
 
@@ -37,6 +39,11 @@ def build_overlay(
     settings for the line and step.  Study settings always win so every other
     known module is disabled and every isolation key is step-specific.
     ``viewing_index`` is the step's k.
+
+    For progressive plans, pass ``progressive_step`` — a step dict with
+    ``modules`` (the full enabled set) and ``step_index``.  The overlay then
+    uses ``progressive_step["modules"]`` instead of deriving the module set
+    from line and viewing_index.
     """
     base_config = _load_toml(base_config_path)
     operator_config = (
@@ -44,11 +51,14 @@ def build_overlay(
     )
 
     all_modules = set(kaine.boot.known_module_names())
-    # Branch k and accumulate k gain order[:k]; the seed and the repeat keep
-    # the base set whatever index they are given.
-    enabled = set(plan["base_modules"])
-    if step_kind == "viewing" and line in ("branch", "accumulate"):
-        enabled.update(plan["order"][:viewing_index])
+    if progressive_step is not None:
+        enabled = set(progressive_step["modules"])
+    else:
+        # Branch k and accumulate k gain order[:k]; the seed and the repeat keep
+        # the base set whatever index they are given.
+        enabled = set(plan["base_modules"])
+        if step_kind == "viewing" and line in ("branch", "accumulate"):
+            enabled.update(plan["order"][:viewing_index])
 
     modules = {name: (name in enabled) for name in all_modules}
 
@@ -71,9 +81,15 @@ def build_overlay(
 
     # Every branch step is its own being, so each gets its own collections;
     # the repeat and the accumulate line use their line prefix as-is.
-    collection_prefix = plan["collections"][line]
-    if line == "branch":
-        collection_prefix = f"{collection_prefix}{viewing_index}_"
+    # Progressive plans use a single prefix with step index.
+    if progressive_step is not None:
+        base_prefix = plan["collections"].get("progressive", plan["study_id"] + "_prog_")
+        step_idx = progressive_step["step_index"]
+        collection_prefix = f"{base_prefix}{step_idx}_" if step_idx > 0 else base_prefix
+    else:
+        collection_prefix = plan["collections"][line]
+        if line == "branch":
+            collection_prefix = f"{collection_prefix}{viewing_index}_"
 
     study_overlay: dict[str, Any] = {
         "modules": modules,
@@ -131,8 +147,16 @@ def build_overlay(
         "workspace": {"arm": "competitive"},
     }
 
+    # Progressive plans can set broadcast_capacity (the K decision).
+    bc = plan.get("broadcast_capacity")
+    if bc is not None:
+        study_overlay["workspace"]["broadcast_capacity"] = bc
+
     registered_steps = plan.get("voice_alignment_steps", voice_alignment_steps(plan))
-    current_step = {"line": line, "k": viewing_index}
+    if progressive_step is not None:
+        current_step = {"step_index": progressive_step["step_index"]}
+    else:
+        current_step = {"line": line, "k": viewing_index}
     voice_alignment_enabled = current_step in registered_steps
     voice_alignment: dict[str, Any] = {"enabled": voice_alignment_enabled}
     if voice_alignment_enabled:

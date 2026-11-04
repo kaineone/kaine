@@ -623,3 +623,131 @@ def test_constant_profiles_have_undefined_correlation():
 
     assert _pearson([1] * 30, [1] * 30) is None
     assert _pearson([1, 2, 3] * 10, [1, 2, 3] * 10) == pytest.approx(1.0)
+
+
+# ------------------------------------------------------------------ #
+# Progressive analysis tests
+# ------------------------------------------------------------------ #
+
+PROGRESSIVE_ORDER = ["episodic_memory", "world_model"]
+PROGRESSIVE_BASE = ["interoception", "sequence", "vision", "audition", "language"]
+
+
+def _make_progressive_study_dir(tmp_path: Path) -> Path:
+    study_dir = tmp_path / "study"
+    study_dir.mkdir()
+    manifest = tmp_path / "programme.toml"
+    manifest.write_text("items = []\n")
+    plan: dict[str, Any] = {
+        "protocol": "progressive",
+        "study_id": "prog-analysis-test",
+        "repo_root": str(tmp_path / "repo"),
+        "base_modules": list(PROGRESSIVE_BASE),
+        "order": list(PROGRESSIVE_ORDER),
+        "programme": {
+            "manifest": str(manifest),
+            "sha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),
+        },
+        "redis": {"base_url": "redis://127.0.0.1:6479", "db": 10},
+        "collections": {"progressive": "devrun_"},
+    }
+    (study_dir / "study.json").write_text(json.dumps(plan, indent=2, sort_keys=True))
+    return study_dir
+
+
+def test_progressive_analysis_step_over_step(tmp_path: Path):
+    """Progressive analysis produces step_over_step comparisons with expected fields."""
+    study_dir = _make_progressive_study_dir(tmp_path)
+
+    log_dir_1 = study_dir / "step_1" / "data" / "ignition"
+    records_1 = [
+        _record("r1", i, offset=float(i * 30), members=[_member("vision"), _member("episodic_memory")])
+        for i in range(1, 11)
+    ]
+    _write_log(log_dir_1, records_1)
+
+    log_dir_2 = study_dir / "step_2" / "data" / "ignition"
+    records_2 = [
+        _record("r2", i, offset=float(i * 30), members=[_member("vision"), _member("world_model")])
+        for i in range(1, 11)
+    ]
+    _write_log(log_dir_2, records_2)
+
+    _write_steps(study_dir, [
+        {
+            "line": "progressive",
+            "step": 1,
+            "outcome": "complete",
+            "run_id": "r1",
+            "ignition_log_dir": str(log_dir_1),
+            "modules": PROGRESSIVE_BASE + ["episodic_memory"],
+            "modules_added": ["episodic_memory"],
+        },
+        {
+            "line": "progressive",
+            "step": 2,
+            "outcome": "complete",
+            "run_id": "r2",
+            "ignition_log_dir": str(log_dir_2),
+            "modules": PROGRESSIVE_BASE + ["episodic_memory", "world_model"],
+            "modules_added": ["world_model"],
+        },
+    ])
+
+    report = _load_report(study_dir)
+    assert report["protocol"] == "progressive"
+    assert len(report["per_viewing"]) == 2
+    assert report["per_viewing"][0]["modules_added"] == ["episodic_memory"]
+    assert report["per_viewing"][1]["modules_added"] == ["world_model"]
+
+    comps = report["comparisons"]
+    assert "step_over_step" in comps
+    deltas = comps["step_over_step"]
+    assert len(deltas) == 1
+
+    delta = deltas[0]
+    assert delta["step_index"] == 2
+    assert delta["modules_added"] == ["world_model"]
+    assert delta["status"] == "complete"
+    assert "new_module_ignition_rate" in delta
+    assert "world_model" in delta["new_module_ignition_rate"]
+    assert delta["difference"] is not None
+
+
+def test_progressive_limits_differ_from_branching(tmp_path: Path):
+    """Progressive reports use progressive-specific limits."""
+    study_dir = _make_progressive_study_dir(tmp_path)
+    _write_steps(study_dir, [])
+
+    report = _load_report(study_dir)
+    limits_text = " ".join(report["limits"])
+    assert "one entity" in limits_text
+    assert "familiarity and history are confounded" in limits_text
+    assert "noise floor" not in limits_text
+
+
+def test_progressive_markdown_contains_step_sections(tmp_path: Path):
+    """Progressive markdown report contains step-over-step section."""
+    study_dir = _make_progressive_study_dir(tmp_path)
+
+    log_dir = study_dir / "step_1" / "data" / "ignition"
+    records = [_record("r1", i, offset=float(i * 30)) for i in range(1, 6)]
+    _write_log(log_dir, records)
+
+    _write_steps(study_dir, [
+        {
+            "line": "progressive",
+            "step": 1,
+            "outcome": "complete",
+            "run_id": "r1",
+            "ignition_log_dir": str(log_dir),
+            "modules": PROGRESSIVE_BASE + ["episodic_memory"],
+            "modules_added": ["episodic_memory"],
+        },
+    ])
+
+    json_path, md_path = run_analysis(study_dir)
+    md_text = md_path.read_text()
+    assert "Step-over-step comparison" in md_text
+    assert "Module effect from the seed" not in md_text
+    assert "Noise floor" not in md_text
