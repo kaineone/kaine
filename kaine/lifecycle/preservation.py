@@ -272,27 +272,33 @@ async def preserve_live(
         elif module_states[module.name].get("adapters"):
             adapters = list(module_states[module.name]["adapters"])
 
+    # Capture workspace feedback gains if the controller is available on the registry.
+    snap_metadata: dict[str, Any] = {
+        "kind": "preservation",
+        "reason": reason,
+        "preservation_id": preservation_id,
+        "run_id": run_id,
+        "world_model_captured": world_model_captured,
+        # The entity this bundle preserves (entity-identity); absent for
+        # callers that run without an identity.
+        **({"identity": identity.to_dict()} if identity is not None else {}),
+        **(
+            {"identity_unreadable": identity_unreadable}
+            if identity_unreadable is not None
+            else {}
+        ),
+    }
+    fb_ctrl = getattr(registry, "workspace_feedback_controller", None)
+    if fb_ctrl is not None and hasattr(fb_ctrl, "state_dict"):
+        snap_metadata["workspace_feedback"] = fb_ctrl.state_dict()
+
     snap = ForkSnapshot(
         parent_id=None,
         label=label or f"preservation:{reason}",
         timestamp=time.time(),
         modules=module_states,
         adapters=adapters,
-        metadata={
-            "kind": "preservation",
-            "reason": reason,
-            "preservation_id": preservation_id,
-            "run_id": run_id,
-            "world_model_captured": world_model_captured,
-            # The entity this bundle preserves (entity-identity); absent for
-            # callers that run without an identity.
-            **({"identity": identity.to_dict()} if identity is not None else {}),
-            **(
-                {"identity_unreadable": identity_unreadable}
-                if identity_unreadable is not None
-                else {}
-            ),
-        },
+        metadata=snap_metadata,
     )
     # Snapshot json+encrypt+write is synchronous disk/crypto work; run it off the
     # event loop so a preservation (which fires during distress/divergence) does
@@ -680,6 +686,11 @@ async def revive(bundle: Path, registry: Any) -> ForkSnapshot:
                 f"revive failed restoring module {name!r}: "
                 f"{type(exc).__name__}: {exc}"
             ) from exc
+
+    # Store workspace feedback gains for the workspace phase to pick up.
+    fb_state = snap.metadata.get("workspace_feedback")
+    if fb_state is not None:
+        registry.pending_feedback_state = fb_state
 
     log.info(
         "revive: restored individual from preservation bundle %s "
