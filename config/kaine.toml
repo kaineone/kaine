@@ -201,10 +201,10 @@ enabled = false
 code_dim = 32
 encoder_lr = 0.001
 decoder_lr = 0.001
-# Per-processor latent dimensions. Defaults match the standard encoder outputs:
-# vision = 64 (CLIP ViT-B/32), audition = 9 (7 emotion + duration + energy),
+# Per-processor latent dimensions. Defaults match the shipped encoder outputs:
+# vision = 768 (InternVideoNext-B), audition = 64 (spectral-logband-32),
 # interoception = 8 (system metrics feature vector).
-# processor_dims = {vision = 64, audition = 9, interoception = 8}
+# processor_dims = {vision = 768, audition = 64, interoception = 8}
 
 [experiment]
 # Per-run identity, seeding, and manifest (research reproducibility).

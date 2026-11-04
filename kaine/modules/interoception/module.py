@@ -586,6 +586,7 @@ class Interoception(BaseModule):
         if self._feedback_channel is not None:
             self._ensure_feedback_wrap()
             feedback_kw["sequence_prediction"] = self._feedback_channel.sequence_prediction
+            feedback_kw["content_prediction"] = self._feedback_channel.content_prediction
 
         ctx = null = None
         scored_stamp = self._prediction_stamp
@@ -758,6 +759,7 @@ class Interoception(BaseModule):
 
         # --- Build payload ---
         payload: dict[str, Any] = {
+            "latent": list(feature_vec),
             "metrics": metrics,
             "wellness": wellness,
             "alerts": list(alert.keys),

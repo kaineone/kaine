@@ -25,10 +25,10 @@
 
 ## 5. Processor integration
 
-- [ ] 5.1 Vision: the content decoder's prediction feeds into vision's TopDownBlend; training uses vision's latent as the reconstruction target.
-- [ ] 5.2 Audition: same integration for the audition processor.
-- [ ] 5.3 Interoception: same integration for the interoception processor.
-- [ ] 5.4 Tests: `tests/test_content_processor_integration.py` — each processor's TopDownBlend receives the content prediction and blends correctly; content-off matches content-absent.
+- [x] 5.1 Vision: the content decoder's prediction feeds into vision's TopDownBlend; training uses vision's latent as the reconstruction target.
+- [x] 5.2 Audition: same integration for the audition processor.
+- [x] 5.3 Interoception: same integration for the interoception processor.
+- [x] 5.4 Tests: `tests/test_content_processor_integration.py` — each processor's TopDownBlend receives the content prediction and blends correctly; content-off matches content-absent.
 
 ## 6. Configuration and docs
 

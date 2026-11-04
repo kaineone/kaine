@@ -56,8 +56,8 @@ SEQUENCE_PREDICTION_DIM = 24
 FEEDBACK_KEY = "workspace_feedback"
 LATENT_KEYS: dict[str, str] = {
     "vision": "latent",
-    "audition": "feature_vector",
-    "interoception": "feature_vector",
+    "audition": "latent",
+    "interoception": "latent",
 }
 ALLOWED_KEYS: frozenset[str] = frozenset({
     "enabled", "arm", "pi_min", "pi_max", "disagreement_threshold",

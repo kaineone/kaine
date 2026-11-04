@@ -20,8 +20,8 @@ from kaine.workspace.feedback import FeedbackController, WorkspaceFeedbackSettin
 
 FEEDBACK_SECTION_KEY = "workspace_feedback"
 DEFAULT_PROCESSOR_DIMS: dict[str, int] = {
-    "vision": 64,
-    "audition": 9,
+    "vision": 768,
+    "audition": 64,
     "interoception": 8,
 }
 

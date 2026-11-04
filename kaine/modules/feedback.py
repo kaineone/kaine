@@ -200,6 +200,7 @@ class FeedbackChannel:
     def __init__(self, processor: str):
         self.processor = processor
         self.sequence_prediction: tuple[float, ...] | None = None
+        self.content_prediction: list[float] | None = None
         self.gain: float = 1.0
 
     def observe(self, snapshot: WorkspaceSnapshot) -> bool:
@@ -237,6 +238,17 @@ class FeedbackChannel:
                 and value > 0.0
             ):
                 self.gain = float(value)
+
+        content = fb.get("content")
+        if isinstance(content, dict):
+            preds = content.get("predictions")
+            if isinstance(preds, dict):
+                pred = preds.get(self.processor)
+                if isinstance(pred, list) and all(
+                    isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+                    for v in pred
+                ):
+                    self.content_prediction = [float(v) for v in pred]
 
         return True
 
