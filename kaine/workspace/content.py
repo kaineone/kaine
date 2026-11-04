@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import itertools
+import logging
 import math
 from typing import Any
 
 import numpy as np
+
+_log = logging.getLogger(__name__)
 
 
 class ContentEncoder:
@@ -259,10 +262,18 @@ class ContentLevel:
                 f"ContentLevel code_dim mismatch: expected "
                 f"{self._code_dim}, got {state['code_dim']}"
             )
-        for name, s in state.get("encoders", {}).items():
+        saved_enc = state.get("encoders", {})
+        dropped_enc = set(saved_enc) - set(self._encoders)
+        if dropped_enc:
+            _log.warning("ContentLevel: dropping saved encoder weights for %s", dropped_enc)
+        for name, s in saved_enc.items():
             if name in self._encoders:
                 self._encoders[name].load_state_dict(s)
-        for name, s in state.get("decoders", {}).items():
+        saved_dec = state.get("decoders", {})
+        dropped_dec = set(saved_dec) - set(self._decoders)
+        if dropped_dec:
+            _log.warning("ContentLevel: dropping saved decoder weights for %s", dropped_dec)
+        for name, s in saved_dec.items():
             if name in self._decoders:
                 self._decoders[name].load_state_dict(s)
         z_data = state.get("z_k")

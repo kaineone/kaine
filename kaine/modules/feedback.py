@@ -445,6 +445,8 @@ class TopDownBlend:
         top_mean = _mean_window(self._top_errors) if self._top_errors else None
         content_mean = _mean_window(self._content_errors) if self._content_errors else None
         content_next = list(content_prediction) if content_prediction is not None else None
+        if content_next is not None and len(content_next) != len(own_next):
+            content_next = None
 
         if content_next is not None:
             w_own, w_top, w_content = blend_weights_3(

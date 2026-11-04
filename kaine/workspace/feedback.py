@@ -407,12 +407,15 @@ class FeedbackController:
                     continue
 
             if latents:
-                self._content.update_code(latents, intensities)
-                content_losses = self._content.train_step(latents)
-                for proc_name in latents:
-                    pred = self._content.predict(proc_name)
-                    if pred is not None:
-                        content_predictions[proc_name] = pred
+                try:
+                    self._content.update_code(latents, intensities)
+                    content_losses = self._content.train_step(latents)
+                    for proc_name in latents:
+                        pred = self._content.predict(proc_name)
+                        if pred is not None:
+                            content_predictions[proc_name] = pred
+                except (ValueError, IndexError):
+                    pass
 
         eligible: dict[str, dict[str, Any]] = {}
         for processor in PROCESSORS:
