@@ -609,6 +609,20 @@ Section: `[vocal.mirroring]`.
 | `mirror_ceiling` | float | `0.5` | Hard ceiling on the mirror influence. |
 | `decay_s` | float | `10.0` | Seconds after the last `audition.prosody` event before the mirror residual decays to zero. |
 
+## Decision
+
+Section: `[decision]`.
+
+The decision server client sends typed questions about external speech to a second on-demand llama-server on loopback. It returns typed answers; on any failure it returns no answer and never raises into a caller's loop. The decision server is separate from the language organ (see the inference-backend spec) and runs only while an entity runs and this section is enabled.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | boolean | `false` | Start the decision server with the entity. |
+| `url` | string | `"http://127.0.0.1:11436"` | HTTP address of the decision server. Must be loopback or the compose service name. |
+| `model` | string | `"k1-jev"` | GGUF model the server loads. |
+| `timeout_s` | float | `5.0` | Per-request timeout in seconds. |
+| `thresholds_path` | string | `""` | Path to a K1-Jev thresholds sidecar JSON file. Empty means no thresholds file. |
+
 ## Social cognition
 
 Section: `[social_cognition]`.

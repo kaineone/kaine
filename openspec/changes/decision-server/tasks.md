@@ -17,7 +17,7 @@
 - [ ] 2.4 Test that an organ window (`run_with_organ_window`) stops only the organ service and never the decision server, and that the client keeps answering (against a real local fake server) while the window is open.
 
 ## 3. Shared files (integrator)
-- [ ] 3.1 `[decision]` in `config/kaine.toml` (shipped `enabled = false`), and its config-appendix rows.
+- [x] 3.1 `[decision]` in `config/kaine.toml` (shipped `enabled = false`), and its config-appendix rows.
 - [x] 3.2 `kaine.decision` in the boundary-neutral import-linter contract.
 - [ ] 3.3 The `kaine-decision-model` compose and quadlet service, started only with an entity when enabled.
 
