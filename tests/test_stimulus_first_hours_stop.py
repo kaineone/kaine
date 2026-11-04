@@ -25,7 +25,6 @@ from kaine.research.ignition_study.runner import (
     HOLD_REASONS,
     REVIEW_HOLD_REASONS,
     VIABILITY_MTIME_SLACK_S,
-    StudyRunner,
 )
 
 pytestmark = pytest.mark.asyncio
