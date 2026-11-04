@@ -15,6 +15,7 @@ from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
 from kaine.faithful.episodic_own_content import EPISODIC_OWN_CONTENT, own_content_payload
 from kaine.faithful.external_input import is_heard_event
+from kaine.faithful.felt import FELT_FIELDS
 from kaine.memory_kinds import EPISODIC_MEMORY_STORE_HEALTH_PATH
 from kaine.modules.base import BaseModule
 from kaine.modules.episodic_memory.associations import AssociationParams
@@ -231,11 +232,14 @@ class EpisodicMemory(BaseModule):
         if self._recall_on_workspace and self._recall_cooldown_due():
             await self.recall(text, collection="short_term")
             self._last_recall_monotonic = self._clock.now()
-        payload = {
+        members = _build_members(snapshot)
+        payload: dict[str, Any] = {
             "tick_index": snapshot.tick_index,
             "inhibited": snapshot.inhibited,
             "selected_count": len(snapshot.selected_events),
         }
+        if members:
+            payload["members"] = members
         # Tag the stored trace with the current cached affect (intensity + VAD
         # as plain numerics — no raw sense data, per zero-persistence invariant).
         await self._core.store(
@@ -670,3 +674,31 @@ def _serialize_snapshot(snapshot: WorkspaceSnapshot) -> str:
         kept = own_content_payload(event.source, event.type, event.payload)
         pieces.append(f"{event.source}:{event.type}={strip_vectors(kept)}")
     return " | ".join(pieces) if pieces else ""
+
+
+def _build_members(snapshot: WorkspaceSnapshot) -> list[dict[str, Any]]:
+    """Build the coalition member list for a new trace."""
+    members: list[dict[str, Any]] = []
+    for _entry_id, event in snapshot.selected_events or []:
+        if event.type in _RAW_PERCEPTUAL_EVENT_TYPES:
+            continue
+        if event.source == EpisodicMemory.name and event.type == "episodic_memory.replay":
+            members.append({"source": event.source, "type": event.type})
+            continue
+        if is_heard_event(event):
+            members.append({"source": event.source, "type": event.type, "heard": True})
+            continue
+        if (event.source, event.type) not in EPISODIC_OWN_CONTENT:
+            members.append({"source": event.source, "type": event.type})
+            continue
+        felt_keys = FELT_FIELDS.get((event.source, event.type), frozenset())
+        felt_fields = {
+            k: event.payload[k]
+            for k in felt_keys
+            if k in event.payload
+        }
+        member: dict[str, Any] = {"source": event.source, "type": event.type}
+        if felt_fields:
+            member["felt_fields"] = strip_vectors(felt_fields)
+        members.append(member)
+    return members
