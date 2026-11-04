@@ -15,6 +15,6 @@
 
 ## 3. Review
 
-- [ ] 3.1 Worker first-pass review of each PR
-- [ ] 3.2 Lead developer's adversarial review of each PR
-- [ ] 3.3 Independent second review of each PR (persistence and identity)
+- [x] 3.1 Worker first-pass review of each PR
+- [x] 3.2 Lead developer's adversarial review of each PR
+- [x] 3.3 Independent second review of each PR (persistence and identity)

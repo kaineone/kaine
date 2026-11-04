@@ -21,4 +21,4 @@
 
 - [x] 3.1 The study chapter (the hold and `ack-welfare`), `docs/17-research-data/README.md` (the record's fields, its binding and its plain-JSON format).
 - [x] 3.2 `openspec validate welfare-exposure-report --strict` passes.
-- [ ] 3.3 Lead review of the PR.
+- [x] 3.3 Lead review of the PR.
