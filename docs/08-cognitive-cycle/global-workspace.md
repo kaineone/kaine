@@ -256,6 +256,36 @@ Feedback never acts on an inhibited broadcast: the workspace attaches nothing an
 
 `make_workspace_feedback` refuses feedback with `[oscillator].enabled = true`, with `[workspace].arm` other than `"competitive"`, with `[positive_control].enabled = true`, and for `matched_random` without a run seed. The `Workspace` constructor refuses it with the coherence layer or a non-competitive arm, and the processors refuse it when their positive control is enabled.
 
+## Content level (held extension)
+
+`kaine/workspace/content.py` · `kaine/boot/feedback.py`
+
+The content level adds a second, latent layer to the workspace (paper §3.2, option F). Where the top-down heads predict the next broadcast from the 24-component featurization, the content level works directly on each processor's internal representation: vision's 768-dimensional InternVideoNext embedding, audition's 64-dimensional acoustic embedding, and interoception's 8-dimensional feature vector. A shared code `z_k` — a lower-dimensional summary of the current sensory state — is the meeting point: per-source encoders compress each processor's latent into `z_k`, and per-processor decoders expand `z_k` back into descending predictions that enter each processor's `TopDownBlend` as a third signal alongside the processor's own prediction and the top-down head's. It ships off: `[workspace.content].enabled = false`.
+
+### Shared code and encoders
+
+`ContentLevel` holds one `ContentEncoder` per processor (a linear map from the processor's latent dimension to `code_dim`, followed by tanh) and one `ContentDecoder` per processor (linear from `code_dim` back to the processor's dimension, followed by tanh). The shared code `z_k` is updated on each accessed broadcast as the intensity-weighted centroid of the encoded latents: for each accessed processor whose event payload carries a `"latent"` key, the encoder maps the latent into code space, the result is weighted by the processor's gain, and the weighted sum is normalized. `z_k` starts as zeros and is preserved across boots.
+
+### Training
+
+Each tick that updates `z_k` also trains the encoders and decoders by reconstruction error. For each accessed processor, the decoder maps the current `z_k` back to the processor's latent space, and the mean squared error between the reconstruction and the true latent drives one stochastic-gradient step on both the encoder and decoder weights. The per-processor reconstruction loss is logged to the ignition record as `content_losses`.
+
+A second arm, `arm = "translation"`, adds cycle-consistency training: for each pair of accessed processors, the latent of one is encoded, decoded into the other's space, re-encoded, and decoded back, and the round-trip reconstruction loss updates the weights of all four maps. The prediction arm and translation arm produce different weight trajectories on the same data.
+
+### Descending predictions
+
+After training, the content level predicts each processor's next latent by decoding `z_k` through that processor's decoder. The `FeedbackController` attaches these predictions to the broadcast metadata under `metadata["workspace_feedback"]["content"]`, which carries `z_k`, the per-processor predictions, and the per-processor reconstruction losses. Each processor's `FeedbackChannel` extracts its own content prediction from the broadcast, and its `TopDownBlend` blends it as a third source using the same precision-weighting scheme as the 2-way blend: the inverse square of the windowed mean error of each source (own, head, content) determines the blend weights (`blend_weights_3`). When no content prediction is present, the blend falls back to the 2-way formula unchanged.
+
+### Preservation
+
+`ContentLevel.state_dict()` captures encoder weights, decoder weights, and the current `z_k`. `FeedbackController.state_dict()` includes the content state when the content level is set. The existing `preserve_live`/`revive` pipeline carries the content state without additional wiring. On load, a shape mismatch (from a config change) causes the content level to re-initialize from scratch rather than crash.
+
+### What reaches the modules
+
+On each accessed broadcast with content enabled, the workspace attaches `metadata["workspace_feedback"]["content"] = {"z_k", "predictions", "losses"}`. `z_k` is the shared code as a list of floats. `predictions` maps each processor name to the content decoder's prediction for that processor's latent. `losses` maps each processor name to its reconstruction error. The ignition log records `content_losses` and `content_code_dim` (the length of `z_k`).
+
+Content never changes the scores, ranking, access, or gain of a tick. It adds a prediction signal but does not gate, override, or modify the top-down head or gain system.
+
 ## Action selection and the report rule
 
 `kaine/workspace/action_selection.py` · `kaine/workspace/report_policy.py`
@@ -357,6 +387,7 @@ The level-gain floor and ceiling (0.2 and 1.0) are constructor defaults of `Stat
 - `CoherenceScorer` phase windows live in memory only and start again from the neutral phase after a restart.
 - `WorkspaceSnapshot` objects are not persisted. The `workspace.broadcast` stream holds the serialized payload and is trimmed to 100,000 entries by approximate `MAXLEN` (`[bus.per_stream_maxlen]`, applied in `kaine/bus/client.py`).
 - A `BroadcastContext` is held in memory; after a restart a processor starts with no context until the next accessed broadcast.
+- `ContentLevel` encoder/decoder weights and the shared code `z_k` are preserved via `FeedbackController.state_dict()` and restored on revive. A shape mismatch (from a config change) causes re-initialization rather than a crash.
 
 ## Key files
 
@@ -372,7 +403,12 @@ The level-gain floor and ceiling (0.2 and 1.0) are constructor defaults of `Stat
 | `kaine/workspace/coherence.py` | `CoherenceScorer`, `phase_locking_value`, `mean_pairwise_plv` |
 | `kaine/workspace/feedback.py` | `FeedbackController`, settings |
 | `kaine/modules/feedback.py` | `TopDownHead`, `TopDownBlend`, `FeedbackChannel` |
-| `kaine/boot/feedback.py` | Workspace feedback boot helpers |
+| `kaine/boot/feedback.py` | Workspace feedback boot helpers, content level factory |
+| `kaine/workspace/content.py` | `ContentLevel`, `ContentEncoder`, `ContentDecoder` |
+| `tests/test_content_level.py` | Content level unit tests |
+| `tests/test_content_broadcast.py` | Content broadcast integration tests |
+| `tests/test_content_processor_integration.py` | Content processor blend tests |
+| `tests/test_content_translation_arm.py` | Translation arm tests |
 | `tests/test_workspace_feedback_*.py` | Workspace feedback tests |
 | `kaine/workspace/action_selection.py` | `ActionSelection`, `DefaultActionSelectionPolicy`, `Intent` |
 | `kaine/workspace/report_policy.py` | `SelfInitiatedReportPolicy` |

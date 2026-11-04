@@ -216,6 +216,18 @@ Workspace feedback is a held extension (paper §3.2 "Workspace feedback (held ex
 | `refractory_s` | float | `10.0` | Refractory period after an episode, in entity seconds; design value. |
 | `head_learning_rate` | float | `0.001` | Top-down head stochastic-gradient step size; design value. |
 
+### Workspace content
+
+Content level (held extension, paper §3.2 option F). Adds a shared latent code `z_k` built from per-processor encoders, with descending predictions through each processor's `TopDownBlend`. Ships disabled: `[workspace.content].enabled = false`. The content level requires workspace feedback to be enabled; `make_content_level` returns `None` when `enabled` is false. See [Content level](../08-cognitive-cycle/global-workspace.md#content-level-held-extension) for the mechanism.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | bool | `false` | Switch. |
+| `code_dim` | int | `32` | Dimensionality of the shared code `z_k`. |
+| `encoder_lr` | float | `0.001` | Encoder stochastic-gradient step size. |
+| `decoder_lr` | float | `0.001` | Decoder stochastic-gradient step size. |
+| `processor_dims` | table | `{vision = 768, audition = 64, interoception = 8}` | Per-processor latent dimensions. The default matches the shipped processor encoders: InternVideoNext-B (768), spectral acoustic encoder (2 × 32 = 64), interoceptive feature vector (8). Override when swapping an encoder. |
+
 ### Action selection
 
 Executive action selection (`kaine/workspace/action_selection.py`). When the section is absent, the action selection module falls back to `DriveBiasedActionSelectionPolicy`.
