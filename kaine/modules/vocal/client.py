@@ -26,6 +26,7 @@ class TTSRequest:
     speed_factor: Optional[float] = None
     language: Optional[str] = None
     split_text: bool = True
+    instruct: Optional[str] = None
 
 
 @dataclass(frozen=True)

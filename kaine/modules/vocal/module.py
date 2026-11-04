@@ -411,6 +411,11 @@ class Vocal(BaseModule):
         return params
 
     def _build_request(self, text: str, params: ChatterboxParams) -> TTSRequest:
+        instruct = None
+        if self._backend == "qwen3_tts":
+            from kaine.modules.vocal.mapping import affect_to_instruct
+
+            instruct = affect_to_instruct(self._current_state)
         return TTSRequest(
             text=text,
             voice_mode=self._voice_mode,
@@ -420,6 +425,7 @@ class Vocal(BaseModule):
             exaggeration=params.exaggeration,
             cfg_weight=params.cfg_weight,
             speed_factor=params.speed_factor,
+            instruct=instruct,
         )
 
     async def _sink_audio(self, text: str, result: SynthesisResult) -> None:

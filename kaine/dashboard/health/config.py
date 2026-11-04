@@ -196,6 +196,18 @@ def build_dependency_specs(
                 ),
             )
         )
+    elif vocal_backend == "qwen3_tts":
+        qwen3_mid = str(vocal_cfg.get("qwen3_model_id") or "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice")
+        speech_rows.append(
+            DependencySpec(
+                name=f"Qwen3-TTS ({qwen3_mid.rsplit('/', 1)[-1]})",
+                role="Vocal",
+                module="vocal",
+                probe=lambda: _async_not_configured(
+                    "qwen3_tts health probe runs at model load time"
+                ),
+            )
+        )
     else:
         speech_rows.append(
             DependencySpec(
@@ -203,7 +215,8 @@ def build_dependency_specs(
                 role="Vocal",
                 module="vocal",
                 probe=lambda: _async_degraded(
-                    f"unknown [vocal].backend {vocal_backend!r}; expected \"chatterbox\" or \"sherpa_onnx\""
+                    f"unknown [vocal].backend {vocal_backend!r}; "
+                    "expected \"chatterbox\", \"sherpa_onnx\" or \"qwen3_tts\""
                 ),
             )
         )

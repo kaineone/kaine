@@ -5,6 +5,7 @@
 from kaine.modules.affect.state import DimensionalState
 from kaine.modules.vocal.mapping import (
     affect_to_chatterbox,
+    affect_to_instruct,
 )
 
 
@@ -66,3 +67,57 @@ def test_to_request_kwargs_returns_floats():
     assert set(kwargs.keys()) == {"temperature", "exaggeration", "cfg_weight", "speed_factor"}
     for v in kwargs.values():
         assert isinstance(v, float)
+
+
+# --- affect_to_instruct (Qwen3-TTS) ---
+
+
+def test_instruct_neutral_returns_empty():
+    assert affect_to_instruct(DimensionalState()) == ""
+
+
+def test_instruct_high_valence_high_arousal():
+    s = DimensionalState(valence=0.8, arousal=0.8)
+    result = affect_to_instruct(s)
+    assert "enthusiasm" in result.lower()
+
+
+def test_instruct_low_valence_high_arousal():
+    s = DimensionalState(valence=-0.8, arousal=0.8)
+    result = affect_to_instruct(s)
+    assert "distress" in result.lower() or "urgency" in result.lower()
+
+
+def test_instruct_low_valence_low_arousal():
+    s = DimensionalState(valence=-0.8, arousal=0.2)
+    result = affect_to_instruct(s)
+    assert "sad" in result.lower()
+
+
+def test_instruct_high_valence_low_arousal():
+    s = DimensionalState(valence=0.8, arousal=0.2)
+    result = affect_to_instruct(s)
+    assert "content" in result.lower() or "gently" in result.lower()
+
+
+def test_instruct_high_arousal_neutral_valence():
+    s = DimensionalState(valence=0.0, arousal=0.8)
+    result = affect_to_instruct(s)
+    assert "energy" in result.lower() or "intensity" in result.lower()
+
+
+def test_instruct_high_dominance_appends_confidence():
+    s = DimensionalState(valence=0.8, arousal=0.8, dominance=0.8)
+    result = affect_to_instruct(s)
+    assert "confidence" in result.lower()
+
+
+def test_instruct_low_dominance_no_confidence():
+    s = DimensionalState(valence=0.8, arousal=0.8, dominance=0.2)
+    result = affect_to_instruct(s)
+    assert "confidence" not in result.lower()
+
+
+def test_instruct_mild_state_returns_empty():
+    s = DimensionalState(valence=0.1, arousal=0.3)
+    assert affect_to_instruct(s) == ""

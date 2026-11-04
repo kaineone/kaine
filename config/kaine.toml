@@ -1292,25 +1292,35 @@ channels = []                   # further programme channels (manifest paths); c
 
 [vocal]
 chatterbox_url = "http://127.0.0.1:8883"
-# backend selects the speech synthesiser: "chatterbox" (default; the Chatterbox
-# service above) or "sherpa_onnx" (Kokoro through sherpa-onnx; no torch, no
-# service; install the speech-edge extra and fetch the model with
-# python -m kaine.setup.speech_models --tts kokoro-en).
-# Kokoro honours only speed_factor from the affect/mirroring prosody; the other
-# voice parameters are fixed by the model and speaker preset.
+# backend selects the speech synthesiser:
+#   "chatterbox" (default) — the Chatterbox HTTP service above
+#   "sherpa_onnx" — Kokoro through sherpa-onnx (no torch, no service;
+#       install the speech-edge extra and fetch the model with
+#       python -m kaine.setup.speech_models --tts kokoro-en)
+#   "qwen3_tts" — Qwen3-TTS in-process via the qwen-tts package (torch,
+#       GPU; install the speech-qwen3 extra). Supports affect-driven
+#       instruct prosody and built-in speakers.
+# Kokoro honours only speed_factor; Qwen3-TTS honours instruct +
+# speed_factor + language.
 backend = "chatterbox"
 # sherpa_model_id = "kokoro-en"
 # sherpa_speaker_id = 0   # a Kokoro preset speaker; unset, the vocal module picks one
 #                           # (see voice_gender and default_voice below)
 # sherpa_model_dir = ""   # default: <models dir>/sherpa-onnx/<id>
 # sherpa_num_threads = 2
+# qwen3_model_id = "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice"
+# qwen3_tokenizer_id = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
+# qwen3_device = "cuda:1"   # GPU for the Qwen3-TTS model
+# qwen3_dtype = "bfloat16"  # bfloat16 | float16 | float32
+# qwen3_speaker = ""         # empty = auto-pick first from the model's speaker list
 voice_mode = "predefined"
 # Voice choice. The shipped config names no voice and the project ships no
 # voice files: voice choice is operator-local. With no voice configured the
 # vocal module picks one the engine itself ships, the first in sorted order:
 #   chatterbox: from the server's list (curl -s http://127.0.0.1:8883/get_predefined_voices),
 #               read once at startup;
-#   sherpa_onnx: from the speaker table of the pinned Kokoro model.
+#   sherpa_onnx: from the speaker table of the pinned Kokoro model;
+#   qwen3_tts: from model.get_supported_speakers() (or qwen3_speaker).
 # It logs the voice it chose. If the list is empty or the server is unreachable,
 # the vocal module stays silent and the health surface says why.
 # An explicit voice wins, in this order: predefined_voice_id (Chatterbox) or

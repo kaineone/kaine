@@ -658,6 +658,7 @@ def test_value_sets_match_the_producer_constants():
     from kaine.modules.planning import generative_model as gm
     from kaine.modules.planning.module import _ACTION_TO_PROPOSAL_KIND
     from kaine.modules.vocal.module import CHATTERBOX_PROSODY
+    from kaine.modules.vocal.qwen3_tts import APPLIED_PROSODY as QWEN3_PROSODY
     from kaine.modules.vocal.sherpa_tts import APPLIED_PROSODY
     from kaine.modules.world_model import ENCODER_VERSION
     from kaine.perception_state import LOCI
@@ -680,7 +681,7 @@ def test_value_sets_match_the_producer_constants():
     }
     assert own.EMBODIMENT_CHANNELS == set(CONTINUOUS_CHANNEL_RANGE)
     assert own.MEMORY_COLLECTIONS == set(EPISODIC_MEMORY_COLLECTION_KINDS)
-    assert own.VOCAL_PROSODY == set(CHATTERBOX_PROSODY) | set(APPLIED_PROSODY)
+    assert own.VOCAL_PROSODY == set(CHATTERBOX_PROSODY) | set(APPLIED_PROSODY) | set(QWEN3_PROSODY)
     assert ENCODER_VERSION in own.WORLD_MODEL_ENCODER_VERSIONS
 
 
