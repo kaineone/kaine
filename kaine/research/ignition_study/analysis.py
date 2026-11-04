@@ -46,7 +46,14 @@ LIMITS = [
     "Effectors, Perceptual locus and Embodiment have no input channel on this host and are expected nulls; they are flagged when their share is zero.",
 ]
 
-VIEWING_LINES = ("branch", "repeat", "accumulate")
+PROGRESSIVE_LIMITS = [
+    "There is one entity; nothing is tested for significance.",
+    "Modules are added in one fixed order, so each effect is conditional on the earlier ones.",
+    "Each step revives the prior step's preservation; familiarity and history are confounded.",
+    "Effectors, Perceptual locus and Embodiment have no input channel on this host and are expected nulls; they are flagged when their share is zero.",
+]
+
+VIEWING_LINES = ("branch", "repeat", "accumulate", "progressive")
 
 EXPECTED_NULL_MODULES = {"effectors", "perceptual_locus", "embodiment"}
 _INTERNAL_SOURCES = {"workspace", "action_selection"}
@@ -87,6 +94,7 @@ class ViewingResult:
     modules: list[str]
     measures: dict[str, Any]
     film_minute_bins: dict[str, PerFilmBins]
+    modules_added: list[str] = field(default_factory=list)
 
 
 def _film_key(programme: dict[str, Any] | None) -> str:
@@ -261,6 +269,7 @@ def _analyse_viewing(
                 "expected_null_modules_flagged": [],
             },
             film_minute_bins={},
+            modules_added=sorted(step.get("modules_added", [])),
         )
 
     records, unreadable_lines, dropped_records = _load_ignition_records(run_id, log_dir)
@@ -415,6 +424,7 @@ def _analyse_viewing(
         modules=modules,
         measures=measures,
         film_minute_bins=film_bins,
+        modules_added=sorted(step.get("modules_added", [])),
     )
 
 
@@ -543,13 +553,51 @@ def _build_comparisons(
     }
 
 
+def _new_module_ignition_rate(
+    v: ViewingResult,
+    modules_added: list[str],
+) -> dict[str, float | None]:
+    """Share of coalitions containing each newly added module."""
+    shares = v.measures.get("module_shares", {})
+    return {m: shares.get(m) for m in modules_added}
+
+
+def _build_progressive_comparisons(
+    viewings: list[ViewingResult],
+) -> dict[str, Any]:
+    """Step-over-step comparisons for progressive plans."""
+    by_step: dict[int, ViewingResult] = {v.step: v for v in viewings}
+    steps_sorted = sorted(by_step.keys())
+
+    step_deltas: list[dict[str, Any]] = []
+    for i, step_idx in enumerate(steps_sorted):
+        if i == 0:
+            continue
+        prev_idx = steps_sorted[i - 1]
+        v = by_step[step_idx]
+        entry = _compare(
+            f"step {step_idx} minus step {prev_idx}",
+            (v.line, step_idx),
+            (by_step[prev_idx].line, prev_idx),
+            {(vr.line, vr.step): vr for vr in viewings},
+        )
+        entry["step_index"] = step_idx
+        entry["modules_added"] = v.modules_added
+        entry["new_module_ignition_rate"] = _new_module_ignition_rate(
+            v, v.modules_added
+        )
+        step_deltas.append(entry)
+
+    return {"step_over_step": step_deltas}
+
+
 def _viewing_to_dict(v: ViewingResult) -> dict[str, Any]:
     film_bins_out: dict[str, dict[str, int]] = {}
     for title, per in v.film_minute_bins.items():
         film_bins_out[title] = {
             str(m): c for m, c in sorted(per.bins.items()) if c != 0
         }
-    return {
+    d: dict[str, Any] = {
         "line": v.line,
         "step": v.step,
         "run_id": v.run_id,
@@ -557,6 +605,9 @@ def _viewing_to_dict(v: ViewingResult) -> dict[str, Any]:
         "measures": v.measures,
         "film_minute_bins": film_bins_out,
     }
+    if v.modules_added:
+        d["modules_added"] = v.modules_added
+    return d
 
 
 def _fmt(value: Any) -> str:
@@ -682,19 +733,31 @@ def _build_markdown(report: dict[str, Any], viewings: list[ViewingResult]) -> st
             lines.extend(_measures_diff_lines(entry["difference"]))
         lines.append("")
 
-    lines.append("## Module effect from the seed (branch k − branch 0)")
-    lines.append("")
-    for entry in comparisons["module_effect_from_seed"]:
-        _emit(f"Branch {entry['k']} − branch 0", entry)
+    if report.get("protocol") == "progressive":
+        lines.append("## Step-over-step comparison")
+        lines.append("")
+        for entry in comparisons.get("step_over_step", []):
+            added = ", ".join(entry.get("modules_added", []))
+            _emit(f"Step {entry['step_index']} (+{added})", entry)
+            if entry["status"] == "complete":
+                nmir = entry.get("new_module_ignition_rate", {})
+                for mod, share in nmir.items():
+                    lines.append(f"  - New-module ignition rate ({mod}): {_fmt(share)}")
+                lines.append("")
+    else:
+        lines.append("## Module effect from the seed (branch k − branch 0)")
+        lines.append("")
+        for entry in comparisons["module_effect_from_seed"]:
+            _emit(f"Branch {entry['k']} − branch 0", entry)
 
-    lines.append("## Noise floor (branch 0 − repeat)")
-    lines.append("")
-    _emit("Branch 0 − repeat", comparisons["noise_floor"])
+        lines.append("## Noise floor (branch 0 − repeat)")
+        lines.append("")
+        _emit("Branch 0 − repeat", comparisons["noise_floor"])
 
-    lines.append("## Familiarity and history (accumulate k − branch k)")
-    lines.append("")
-    for entry in comparisons["familiarity_and_history"]:
-        _emit(f"Accumulate {entry['k']} − branch {entry['k']}", entry)
+        lines.append("## Familiarity and history (accumulate k − branch k)")
+        lines.append("")
+        for entry in comparisons["familiarity_and_history"]:
+            _emit(f"Accumulate {entry['k']} − branch {entry['k']}", entry)
 
     lines.append("## Welfare exposure")
     lines.append("")
@@ -827,6 +890,9 @@ def _welfare_exposure_rows(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def _step_dir(study_dir: Path, line: Any, step: Any) -> Path:
     if line == "branch":
         return study_dir / "branch" / str(step)
+    if line in ("seed", "progressive"):
+        from kaine.research.ignition_study.plan import step_dir_name
+        return study_dir / step_dir_name({}, int(step))
     return study_dir / str(line)
 
 
@@ -902,13 +968,20 @@ def run_analysis(study_dir: Path | str) -> tuple[Path, Path]:
         viewings.append(_analyse_viewing(step, faculty_modules))
         step.pop("_study_dir", None)
 
-    comparisons = _build_comparisons(viewings, module_count)
+    is_progressive = plan.get("protocol") == "progressive"
+    if is_progressive:
+        comparisons = _build_progressive_comparisons(viewings)
+        limits = PROGRESSIVE_LIMITS
+    else:
+        comparisons = _build_comparisons(viewings, module_count)
+        limits = LIMITS
     restart_steps = _supervisor_restart_steps(study_dir, steps)
     exposure_rows = _welfare_exposure_rows(steps)
 
     report: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "study_id": plan.get("study_id"),
+        "protocol": "progressive" if is_progressive else "branching",
         "plan_hash": plan_hash,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "module_count": module_count,
@@ -917,7 +990,7 @@ def run_analysis(study_dir: Path | str) -> tuple[Path, Path]:
         "comparisons": comparisons,
         "supervisor_restarts": restart_steps,
         "welfare_exposure": exposure_rows,
-        "limits": LIMITS,
+        "limits": limits,
     }
 
     analysis_dir = study_dir / "analysis"
