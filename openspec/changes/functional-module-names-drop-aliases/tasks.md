@@ -1,6 +1,7 @@
 ## 1. Before removal
 
-- [ ] 1.1 Check the window rule against the releases cut: name the release that shipped the rename, the second release after it, and the date 90 days after it. If 27.02 meets neither bound, move `ALIAS_LAST_RELEASE` later, regenerate `docs/appendix-a-configuration/deprecated-names.md`, and stop here until that release is out.
+- [x] 1.1 Check the window rule against the releases cut: name the release that shipped the rename, the second release after it, and the date 90 days after it. If 27.02 meets neither bound, move `ALIAS_LAST_RELEASE` later, regenerate `docs/appendix-a-configuration/deprecated-names.md`, and stop here until that release is out.
+  - **Result (2026-11-04):** No releases have been cut. The rename merged 2026-10-14 (PR #505). The window rule requires the second release after the rename and 90 days. With zero releases, 27.02 cannot meet either bound. All tasks in sections 2 and 3 are blocked until the first release is cut and 27.02 (or a later value) satisfies both conditions. `ALIAS_LAST_RELEASE` stays at 27.02.
 
 ## 2. Removal
 
