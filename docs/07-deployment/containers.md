@@ -13,6 +13,7 @@ With no profile selected, the configuration loader applies the `first_configurat
 | `kaine-redis` | event bus (Redis Streams) | `127.0.0.1:6479` (`KAINE_REDIS_HOST_PORT`) | none |
 | `kaine-qdrant` | vector store | `127.0.0.1:6533` (`KAINE_QDRANT_HOST_PORT`) | none |
 | `kaine-model-server` | OpenAI-compatible language organ (llama.cpp `llama-server`) | `127.0.0.1:11434` (`KAINE_MODEL_SERVER_HOST_PORT`) | card 0 (`KAINE_ORGAN_GPU`) |
+| `kaine-decision-model` | decision model server (K1-Jev welfare grader, llama.cpp `llama-server`) | `127.0.0.1:11436` (`KAINE_DECISION_SERVER_HOST_PORT`) | `KAINE_DECISION_GPU`, defaulting to `KAINE_ORGAN_GPU` |
 | `kaine-speaches` | speech-to-text (faster-distil-Whisper) | `127.0.0.1:8000` (`KAINE_SPEACHES_HOST_PORT`) | none, CPU only |
 | `kaine-chatterbox` | text-to-speech | `127.0.0.1:8883` (`KAINE_CHATTERBOX_HOST_PORT`) | card 1 (`KAINE_VISION_GPU`) |
 | `kaine-dashboard` | dashboard (`python -m kaine.dashboard`, served by uvicorn) | `127.0.0.1:8088` (`KAINE_DASHBOARD_HOST_PORT`) | none |
@@ -141,6 +142,27 @@ A run whose system changes in the middle of a study is not admissible. After cha
 The `kaine-trainer` service can run voice alignment next to the organ in its container, so no organ server on the host is needed. For `hot_swap_mode = "organ_adapter"`, mount `kaine-organ-adapters` at `organ_adapters_dir` (default `/organ-adapters`). When an activation raises the adapter generation, the launcher restarts `llama-server` in the same container with the adapter loaded at scale 0 (`--lora-scaled <path>:0 --no-cache-prompt`): requests without a `lora` field get the base organ, requests with one apply the adapter, and prompt caching is off while an adapter is loaded. This mode works only in Compose, because the quadlet model-server unit does not use the launcher or the adapter volume.
 
 To use an organ server on the host instead, such as an Unsloth server that shares one process for inference and training, add `compose/kaine.organ-host.yml`, which disables `kaine-model-server` and maps `host.docker.internal` to the host gateway for the dashboard and the cycle. Point `[language].chat_url` at `http://host.docker.internal:11434/v1` (`host.containers.internal` on Podman). When `model_server` is declared a shared service (`[services.model_server].shared = true`), KAINE forces `[sleep.voice_alignment].hot_swap_mode` to `"manual"`, because the cycle cannot manage the adapters of a server it does not own. A host server that is not declared shared does not trigger that override.
+
+## Where the decision server runs
+
+`kaine-decision-model` is a second on-demand `llama-server` that serves K1-Jev, the welfare and self-model grader. It is separate from the language organ and has its own model, port, key and GPU setting. It uses the same pinned llama.cpp image as the organ (`ghcr.io/ggml-org/llama.cpp@sha256:ef08b5a98b1170f2b62177be0a4027c88a84043c55afbf190dd18b9e7cdcfebf`), because the behaviour of `/v1/systemone` must match between the two servers. It listens on `127.0.0.1:11436` on the host (`KAINE_DECISION_SERVER_HOST_PORT`) and on 8080 inside the container.
+
+The entrypoint runs `/app/llama-server` directly. It does not use `docker/organ-launcher.sh`, so there is no adapter hot-swap. The model is the K1-Jev GGUF in the `kaine-models` volume, `K1-Jev-4B/K1-Jev-4B.Q4_K_M.gguf` by default, about 3 GB at Q4_K_M. The quadlet unit `quadlet/kaine-decision-model.container` deploys the same service under Podman systemd, and its entrypoint validates the required environment variables before it starts the server.
+
+The launch flags are explicit:
+
+- `--model` points at the GGUF, `--alias k1-jev` names it, and the server binds `--host 0.0.0.0 --port 8080` inside the container;
+- the server unloads after 600 idle seconds (`--sleep-idle-seconds 600`) and reloads on the next request;
+- every model layer goes on the GPU, with automatic fitting off (`--fit off`) and `-ngl` set to 999 by default;
+- the prompt cache in RAM is capped at 512 MiB by default (`--cache-ram`);
+- the context is 4096 tokens (`-c`) shared by 2 slots (`-np`);
+- the KV cache is f16 (`-ctk f16 -ctv f16`).
+
+The server runs on `KAINE_DECISION_GPU`, falling back to `KAINE_ORGAN_GPU`, then to card 0. Its footprint is small, about 3 GB, so it fits beside the organ on one card. The API key comes from `KAINE_DECISION_SERVER_API_KEY` in `compose/.env` and is never placed on the command line. The Compose service and the quadlet unit check health with `curl -fsS http://127.0.0.1:8080/health` every 15 seconds, with 10 retries. `compose/kaine.cpu.yml` drops the GPU reservation and uses the CPU llama.cpp image.
+
+The server starts only when `[decision].enabled = true` in `kaine.toml`, and it stops with the entity's services. Nothing runs without an entity.
+
+The decision server is independent of the sleep module's organ window. That window stops only the language organ, to free memory for voice-alignment training. It does not stop the decision server, because the refusal veto's second judge needs it while the organ is unloaded.
 
 ## Voice alignment
 
