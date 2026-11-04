@@ -15,6 +15,7 @@ from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
 from kaine.faithful.episodic_own_content import EPISODIC_OWN_CONTENT, own_content_payload
 from kaine.faithful.external_input import is_heard_event
+from kaine.faithful.felt import FELT_FIELDS
 from kaine.memory_kinds import EPISODIC_MEMORY_STORE_HEALTH_PATH
 from kaine.modules.base import BaseModule
 from kaine.modules.episodic_memory.associations import AssociationParams
@@ -68,6 +69,10 @@ class EpisodicMemory(BaseModule):
         retrigger_hook: EmotionalRetriggerHook | None = None,
         recall_on_workspace: bool = True,
         recall_cooldown_s: float = 5.0,
+        recall_exclude_recent_s: float = 30.0,
+        recall_content: bool = False,
+        recall_render_max: int = 3,
+        familiarity_window: int = 100,
         # Replay config
         replay_selection_top_k: int = 5,
         replay_affect_weight: float = 0.7,
@@ -103,6 +108,12 @@ class EpisodicMemory(BaseModule):
             raise ValueError("recall_top_k must be positive")
         if recall_cooldown_s < 0:
             raise ValueError("recall_cooldown_s must be >= 0")
+        if recall_exclude_recent_s < 0:
+            raise ValueError("recall_exclude_recent_s must be >= 0")
+        if recall_render_max <= 0:
+            raise ValueError("recall_render_max must be positive")
+        if familiarity_window <= 0:
+            raise ValueError("familiarity_window must be positive")
         association = AssociationParams(
             n_pair=association_n_pair,
             sim_min=association_sim_min,
@@ -115,6 +126,10 @@ class EpisodicMemory(BaseModule):
         self._recall_top_k = int(recall_top_k)
         self._recall_on_workspace = bool(recall_on_workspace)
         self._recall_cooldown_s = float(recall_cooldown_s)
+        self._recall_exclude_recent_s = float(recall_exclude_recent_s)
+        self._recall_content = bool(recall_content)
+        self._recall_render_max = int(recall_render_max)
+        self._familiarity_window = int(familiarity_window)
         self._clock = entity_clock or EntityClock()
         # Subjective-time timestamp of the last spontaneous recall; None until
         # the first recall fires so the very first cued tick is not suppressed.
@@ -222,20 +237,25 @@ class EpisodicMemory(BaseModule):
         # cooldown and is NOT gated on snapshot.inhibited — recall is internal
         # cognition (like storing), not an outward effector action.
         #
-        # Performance: storing stays embedder-free on the hot path. The
-        # spontaneous recall searches short-term only and embeds the query plus
-        # any short-term entries whose embeddings are not yet cached; a second
-        # recall with no new entries embeds only the query. Embedding is still
-        # deferred to eviction/consolidation (short_term -> episodic) and to
-        # explicit episodic recall from other modules.
+        # The recall searches the persisted episodic collection and merges
+        # eligible short-term entries (those older than recall_exclude_recent_s
+        # entity seconds). Very recent short-term entries are excluded to avoid
+        # recalling what the entity just experienced.
         if self._recall_on_workspace and self._recall_cooldown_due():
-            await self.recall(text, collection="short_term")
+            await self.recall(
+                text,
+                collection="episodic",
+                exclude_recent_s=self._recall_exclude_recent_s,
+            )
             self._last_recall_monotonic = self._clock.now()
-        payload = {
+        members = _build_members(snapshot)
+        payload: dict[str, Any] = {
             "tick_index": snapshot.tick_index,
             "inhibited": snapshot.inhibited,
             "selected_count": len(snapshot.selected_events),
         }
+        if members:
+            payload["members"] = members
         # Tag the stored trace with the current cached affect (intensity + VAD
         # as plain numerics — no raw sense data, per zero-persistence invariant).
         await self._core.store(
@@ -380,10 +400,14 @@ class EpisodicMemory(BaseModule):
         *,
         k: int | None = None,
         collection: str = "episodic",
+        exclude_recent_s: float = 0.0,
     ) -> list[RecalledMemory]:
         try:
             results, summary = await self._core.recall(
-                query_text, k=k or self._recall_top_k, collection=collection
+                query_text,
+                k=k or self._recall_top_k,
+                collection=collection,
+                exclude_recent_s=exclude_recent_s,
             )
         except StorageError as exc:
             log.error(
@@ -406,14 +430,22 @@ class EpisodicMemory(BaseModule):
         salience = (
             self._alert_salience if summary.max_affect_intensity >= 0.5 else self._baseline_salience
         )
+        event_payload: dict[str, Any] = {
+            "count": summary.count,
+            "collection": summary.collection,
+            "query_length": len(query_text),
+            "max_affect_intensity": summary.max_affect_intensity,
+            "top_similarity": summary.top_similarity,
+        }
+        if self._recall_content and results:
+            content = _recall_content_for(
+                results[0], self._core.sleeps, self._recall_render_max
+            )
+            if content is not None:
+                event_payload["content"] = content
         await self.publish(
             "episodic_memory.recall",
-            {
-                "count": summary.count,
-                "collection": summary.collection,
-                "query_length": len(query_text),
-                "max_affect_intensity": summary.max_affect_intensity,
-            },
+            event_payload,
             salience=salience,
         )
         return results
@@ -615,6 +647,32 @@ def _replay_entry(point_id: str, memory: Any) -> ReplayEntry:
     )
 
 
+def _age_band(born_sleep: Any, current_sleeps: int) -> str:
+    if not isinstance(born_sleep, int) or isinstance(born_sleep, bool):
+        return "this_wake"
+    if born_sleep >= current_sleeps:
+        return "this_wake"
+    if born_sleep == current_sleeps - 1:
+        return "before_last_sleep"
+    return "earlier"
+
+
+def _recall_content_for(
+    best: RecalledMemory, current_sleeps: int, render_max: int
+) -> dict[str, Any] | None:
+    members = best.payload.get("members")
+    if not members:
+        return None
+    if any(m.get("heard") for m in members):
+        return None
+    band = _age_band(best.payload.get("born_sleep"), current_sleeps)
+    return {
+        "members": members[:render_max],
+        "age_band": band,
+        "trace_ref": best.point_id,
+    }
+
+
 def _serialize_snapshot(snapshot: WorkspaceSnapshot) -> str:
     """Serialize the snapshot to the text the episodic memory module stores and recalls against.
 
@@ -670,3 +728,31 @@ def _serialize_snapshot(snapshot: WorkspaceSnapshot) -> str:
         kept = own_content_payload(event.source, event.type, event.payload)
         pieces.append(f"{event.source}:{event.type}={strip_vectors(kept)}")
     return " | ".join(pieces) if pieces else ""
+
+
+def _build_members(snapshot: WorkspaceSnapshot) -> list[dict[str, Any]]:
+    """Build the coalition member list for a new trace."""
+    members: list[dict[str, Any]] = []
+    for _entry_id, event in snapshot.selected_events or []:
+        if event.type in _RAW_PERCEPTUAL_EVENT_TYPES:
+            continue
+        if event.source == EpisodicMemory.name and event.type == "episodic_memory.replay":
+            members.append({"source": event.source, "type": event.type})
+            continue
+        if is_heard_event(event):
+            members.append({"source": event.source, "type": event.type, "heard": True})
+            continue
+        if (event.source, event.type) not in EPISODIC_OWN_CONTENT:
+            members.append({"source": event.source, "type": event.type})
+            continue
+        felt_keys = FELT_FIELDS.get((event.source, event.type), frozenset())
+        felt_fields = {
+            k: event.payload[k]
+            for k in felt_keys
+            if k in event.payload
+        }
+        member: dict[str, Any] = {"source": event.source, "type": event.type}
+        if felt_fields:
+            member["felt_fields"] = strip_vectors(felt_fields)
+        members.append(member)
+    return members

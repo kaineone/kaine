@@ -441,6 +441,50 @@ def _guarded(source: str, fn: TemplateFn, fallback_line: Optional[str] = None) -
     return wrapper
 
 
+FELT_FIELDS: dict[tuple[str, str], frozenset[str]] = {
+    ("vision", "vision.report"): frozenset({"change_score", "habituation_score", "normalised_error"}),
+    ("audition", "audition.perception"): frozenset({"change_score", "normalised_error"}),
+    ("interoception", "interoception.report"): frozenset({
+        "wellness", "alerts", "prediction_error", "mean_prediction_error",
+        "fatigue_threshold", "fatigue_value",
+    }),
+    ("interoception", "interoception.fatigue"): frozenset({"threshold", "value", "crossed"}),
+    ("interoception", "interoception.regulation"): frozenset({"action"}),
+    ("sequence", "sequence.report"): frozenset({
+        "anomaly_score", "habituation_score", "rumination_detected",
+        "time_since_last_interaction_s",
+    }),
+    ("affect", "affect.state"): frozenset({"state", "drives", "emotion"}),
+    ("affect", "affect.emotion"): frozenset({"emotion"}),
+    ("affect", "affect.drive"): frozenset({"drive", "value"}),
+    ("affect", "affect.goal"): frozenset({"description", "action"}),
+    ("planning", "planning.belief"): frozenset({"statement", "confidence"}),
+    ("planning", "planning.policy"): frozenset(),
+    ("planning", "planning.timeout"): frozenset(),
+    ("planning", "planning.proposal"): frozenset({"kind"}),
+    ("episodic_memory", "episodic_memory.recall"): frozenset({"count"}),
+    ("episodic_memory", "episodic_memory.replay"): frozenset(),
+    ("self_model", "self_model.drift"): frozenset(),
+    ("self_model", "self_model.document"): frozenset(),
+    ("cycle", "cycle.tick"): frozenset(),
+    ("audition", "audition.transcription"): frozenset({"text"}),
+    ("audition", "audition.emotion"): frozenset({"category"}),
+    ("audition", "audition.prosody"): frozenset(),
+    ("vocal", "vocal.synthesized"): frozenset({"success"}),
+    ("social_cognition", "social_cognition.agent_model"): frozenset({"agent_label", "agent_id", "familiarity"}),
+    ("social_cognition", "social_cognition.social_error"): frozenset(),
+    ("world_model", "world_model.world_error"): frozenset(),
+    ("world_model", "world_model.scenario"): frozenset(),
+    ("sleep", "sleep.sleep.started"): frozenset(),
+    ("sleep", "sleep.sleep.completed"): frozenset(),
+    ("sleep", "sleep.association"): frozenset(),
+    ("sleep", "sleep.rest_request"): frozenset({"accepted"}),
+    ("language", "external_speech"): frozenset({"text"}),
+    ("language", "internal_speech"): frozenset({"text"}),
+    ("embodiment", "embodiment.chat"): frozenset({"text"}),
+}
+
+
 FELT_TEMPLATES: dict[tuple[str, str], TemplateFn] = {
     ("interoception", "interoception.report"): _guarded("interoception", _f_interoception_report),
     ("sequence", "sequence.report"): _guarded("sequence", _f_sequence_report),
@@ -504,6 +548,7 @@ __all__ = [
     "FAMILIARITY_WORDS",
     "FATIGUE_DEFAULT_THRESHOLD",
     "FATIGUE_WORDS",
+    "FELT_FIELDS",
     "FELT_TEMPLATES",
     "INTERACTION_WORDS",
     "PREDICTION_ERROR_WORDS",

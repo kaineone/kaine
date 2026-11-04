@@ -24,11 +24,11 @@
 
 ## 4. Members, search and the recall event (PR 2)
 
-- [ ] 4.1 `FELT_FIELDS` per felt template in `kaine/faithful/felt.py`; `members` on new traces, a heard member as `{source, type, heard: true}` with no payload (classified with `is_heard_event`)
-- [ ] 4.2 Live recall over the persisted collection and the short-term buffer with `recall_exclude_recent_s`
-- [ ] 4.3 `top_similarity` on every recall; `content` behind `recall_content`; republication filter
-- [ ] 4.4 Config keys `recall_content = false`, `recall_exclude_recent_s = 30.0`, `recall_render_max = 3`, `familiarity_window = 100`
-- [ ] 4.5 Tests: `tests/test_episodic_memory_members.py` (felt fields only, no vectors, legacy traces untouched); `tests/test_episodic_memory_recall_scope.py` (earlier wake recalled, recent excluded, schema node yields no content); `tests/test_episodic_memory_recall_content.py` (content shape, age bands, republication filter on a legacy trace holding heard text); `tests/test_dashboard_privacy.py` passes with the new payload
+- [x] 4.1 `FELT_FIELDS` per felt template in `kaine/faithful/felt.py`; `members` on new traces, a heard member as `{source, type, heard: true}` with no payload (classified with `is_heard_event`)
+- [x] 4.2 Live recall over the persisted collection and the short-term buffer with `recall_exclude_recent_s`
+- [x] 4.3 `top_similarity` on every recall; `content` behind `recall_content`; republication filter
+- [x] 4.4 Config keys `recall_content = false`, `recall_exclude_recent_s = 30.0`, `recall_render_max = 3`, `familiarity_window = 100`
+- [x] 4.5 Tests: `tests/test_episodic_memory_members.py` (felt fields only, no vectors, legacy traces untouched); `tests/test_episodic_memory_recall_scope.py` (earlier wake recalled, recent excluded, schema node yields no content); `tests/test_episodic_memory_recall_content.py` (content shape, age bands, republication filter on a legacy trace holding heard text); `tests/test_dashboard_privacy.py` passes with the new payload
 - [ ] 4.6 Worker first-pass review, lead review, independent second review
 
 ## 5. Rendering (PR 3)

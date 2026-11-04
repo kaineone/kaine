@@ -117,6 +117,7 @@ class RecallSummary:
     count: int
     collection: str
     max_affect_intensity: float
+    top_similarity: float = 0.0
     affects: tuple[dict[str, Any], ...] = field(default_factory=tuple)
 
 
@@ -1220,6 +1221,7 @@ class EpisodicMemoryCore:
         *,
         k: int = 5,
         collection: str = "episodic",
+        exclude_recent_s: float = 0.0,
     ) -> tuple[list[RecalledMemory], RecallSummary]:
         if collection not in DEFAULT_COLLECTIONS:
             raise ValueError(f"unknown collection {collection!r}")
@@ -1275,9 +1277,49 @@ class EpisodicMemoryCore:
             if bool(self._assoc) and k > 0:
                 results = await self._recall_associations(vec, results, k, collection)
 
+        if exclude_recent_s > 0.0 and self._short_term:
+            st_candidates = await self._short_term_candidates(vec, exclude_recent_s)
+            if st_candidates:
+                merged = list(results) + st_candidates
+                merged.sort(key=lambda r: (r.score, r.similarity or 0.0), reverse=True)
+                results = merged[:k]
+
         summary = _summarize(results, collection)
         await self._invoke_hook(summary)
         return results, summary
+
+    async def _short_term_candidates(
+        self, query_vector: list[float], exclude_recent_s: float
+    ) -> list[RecalledMemory]:
+        """Return short-term entries outside the recency exclusion window."""
+        self._rebuild_embeddings_if_desynced()
+        now = self.entity_now()
+        current_space = dict(self._embedder.space)
+        candidates: list[RecalledMemory] = []
+        for idx, memory in enumerate(self._short_term):
+            age = now - memory.entity_time
+            if age < exclude_recent_s:
+                continue
+            slot = self._short_term_embeddings[idx]
+            if slot is None or not same_space(slot[0], current_space):
+                vec = await self._embedder.encode(memory.text)
+                slot = (current_space, vec)
+                self._short_term_embeddings[idx] = slot
+            score = _cosine_similarity(query_vector, slot[1])
+            if score <= 0.0:
+                continue
+            candidates.append(
+                RecalledMemory(
+                    point_id=f"short_term:{idx}",
+                    score=float(score),
+                    text=memory.text,
+                    payload=dict(memory.payload),
+                    affect=dict(memory.affect) if memory.affect else None,
+                    similarity=float(score),
+                    strength=1.0,
+                )
+            )
+        return candidates
 
     async def _recall_associations(
         self,
@@ -1722,8 +1764,11 @@ def _summarize(results: Iterable[RecalledMemory], collection: str) -> RecallSumm
     affects: list[dict[str, Any]] = []
     max_intensity = 0.0
     count = 0
+    top_sim = 0.0
     for r in results:
         count += 1
+        if r.similarity is not None and float(r.similarity) > top_sim:
+            top_sim = float(r.similarity)
         if r.affect:
             affects.append(dict(r.affect))
             try:
@@ -1736,6 +1781,7 @@ def _summarize(results: Iterable[RecalledMemory], collection: str) -> RecallSumm
         count=count,
         collection=collection,
         max_affect_intensity=max_intensity,
+        top_similarity=top_sim,
         affects=tuple(affects),
     )
 

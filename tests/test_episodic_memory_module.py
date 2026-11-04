@@ -395,21 +395,19 @@ async def test_recall_cooldown_negative_rejected(bus: AsyncBus):
 @pytest.mark.asyncio
 async def test_hot_path_store_never_embeds_and_recall_embeds_query_and_new_entries(bus: AsyncBus):
     """Storing into short_term never embeds; spontaneous on_workspace recall
-    embeds the query plus each uncached entry once, so after 100 ticks with no
-    eviction the total encode_count is 2 per tick after the first."""
+    embeds the query for the persisted search plus eligible short-term entries.
+    With the default 30 s recency exclusion all short-term entries are too
+    recent (entity clock advances slowly), so only the query is embedded."""
     episodic_memory = await _new_episodic_memory(bus, capacity=128, recall_cooldown_s=0.0)
     await episodic_memory.initialize()
     try:
         for i in range(100):
             await episodic_memory.on_workspace(_snapshot([_event(eid=f"e{i}")]))
         assert episodic_memory.core.short_term_size == 100
-        # Tick 0: empty short_term, no embedding. Ticks 1..99: one query embed
-        # plus one embed for the entry stored in the previous tick.
-        assert episodic_memory.core.embedder.encode_count == 2 * 99
+        assert episodic_memory.core.embedder.encode_count == 100
         recalls = await _recall_events(bus)
         assert len(recalls) == 100
-        # Every spontaneous recall reports the short_term collection.
-        assert all(r.payload.get("collection") == "short_term" for r in recalls)
+        assert all(r.payload.get("collection") == "episodic" for r in recalls)
     finally:
         await episodic_memory.shutdown()
 
@@ -417,16 +415,18 @@ async def test_hot_path_store_never_embeds_and_recall_embeds_query_and_new_entri
 @pytest.mark.asyncio
 async def test_embedding_deferred_to_eviction(bus: AsyncBus):
     """Only when the short-term buffer overflows and a trace moves to episodic
-    does the embedder run; spontaneous recall is suppressed so it does not add
-    embed calls here."""
+    does the embedder run; the first tick's recall adds one query embed (the
+    persisted collection is empty but the query is still embedded), and the
+    60 s cooldown suppresses all subsequent recalls."""
     episodic_memory = await _new_episodic_memory(bus, capacity=4, recall_cooldown_s=60.0)
     await episodic_memory.initialize()
     try:
         for i in range(6):
             await episodic_memory.on_workspace(_snapshot([_event(eid=f"e{i}")]))
         assert episodic_memory.core.short_term_size == 4
-        # Two entries were evicted to episodic; each required one embed call.
-        assert episodic_memory.core.embedder.encode_count == 2
+        # First tick: 1 query embed (persisted search on empty collection).
+        # Two evictions: 1 embed each. Total = 3.
+        assert episodic_memory.core.embedder.encode_count == 3
         episodic = episodic_memory.core.collection_name("episodic")
         assert await episodic_memory.core.storage.count(episodic) == 2
     finally:

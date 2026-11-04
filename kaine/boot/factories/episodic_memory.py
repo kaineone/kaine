@@ -37,6 +37,10 @@ def make_episodic_memory(
         "alert_salience",
         "recall_on_workspace",
         "recall_cooldown_s",
+        "recall_exclude_recent_s",
+        "recall_content",
+        "recall_render_max",
+        "familiarity_window",
         "storage_budget_bytes",  # operator's persisted memory budget in bytes
         "qdrant",
         "replay",  # nested sub-table: selection_top_k, affect_weight, recency_weight, redact_content
