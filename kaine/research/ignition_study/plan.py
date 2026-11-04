@@ -34,8 +34,8 @@ def generate_progressive_plan(
       step 0: kind="seed",        modules=base_modules, modules_added=[]
       step k: kind="progressive", modules=base+order[:k], modules_added=[order[k-1]]
 
-    Each step also carries ``step_index`` and ``start_bundle`` (None for step 0,
-    placeholder for later steps — the runner fills the real path at execution time).
+    Each step also carries ``step_index`` and ``start_bundle`` (always None in the
+    generated plan; the runner tracks revival paths via ``revived_from``).
     """
     known = set(known_module_names())
     for m in base_modules + module_order:
