@@ -2147,3 +2147,143 @@ def test_an_unreadable_incident_log_makes_the_count_unknown(tmp_path: Path):
     )
     assert count is None
     assert unreadable == 1
+
+
+# ------------------------------------------------------------------ #
+# Progressive plan tests
+# ------------------------------------------------------------------ #
+
+PROGRESSIVE_ORDER = ["episodic_memory", "world_model"]
+
+
+def _create_progressive_study(
+    tmp_path: Path,
+    order: list[str] | None = None,
+    broadcast_capacity: int | None = None,
+) -> Path:
+    repo_root = tmp_path / "repo"
+    _write_repo(repo_root)
+    manifest = repo_root / "programme.toml"
+    manifest.write_text("[programme]\n")
+    sha = hashlib.sha256(manifest.read_bytes()).hexdigest()
+    plan = {
+        "protocol": "progressive",
+        "study_id": "prog-test",
+        "repo_root": str(repo_root),
+        "base_modules": BASE_MODULES,
+        "order": order or PROGRESSIVE_ORDER,
+        "programme": {"manifest": str(manifest), "sha256": sha},
+        "redis": {"base_url": "redis://127.0.0.1:6479", "db": 10},
+        "viewing_budget_seconds": 5.0,
+        "development_budget_seconds": 5.0,
+    }
+    if broadcast_capacity is not None:
+        plan["broadcast_capacity"] = broadcast_capacity
+    study_dir = tmp_path / "study"
+    init_study(study_dir, validate_plan(plan))
+    return study_dir
+
+
+def test_progressive_run_e2e(tmp_path: Path, known_modules):
+    """A 3-step progressive run (seed + 2 modules) completes with correct records."""
+    study_dir = _create_progressive_study(tmp_path)
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+    flush_log: list[str] = []
+    runner = _runner(study_dir, script, flush_log=flush_log)
+    result = _run(runner)
+    assert result == "complete"
+
+    steps = _load_steps(study_dir)
+    assert len(steps) == 3
+
+    seed = steps[0]
+    assert seed["line"] == "seed"
+    assert seed["step"] == 0
+    assert seed["outcome"] == "complete"
+    assert seed["step_index"] == 0
+    assert seed["modules_added"] == []
+    assert seed["revived_from"] is None
+    assert set(seed["modules"]) == set(BASE_MODULES)
+    _all_bundles_exist([seed])
+
+    step1 = steps[1]
+    assert step1["line"] == "progressive"
+    assert step1["step"] == 1
+    assert step1["outcome"] == "complete"
+    assert step1["step_index"] == 1
+    assert step1["modules_added"] == ["episodic_memory"]
+    assert step1["revived_from"] == seed["bundle"]
+    assert set(step1["modules"]) == set(BASE_MODULES) | {"episodic_memory"}
+
+    step2 = steps[2]
+    assert step2["line"] == "progressive"
+    assert step2["step"] == 2
+    assert step2["outcome"] == "complete"
+    assert step2["step_index"] == 2
+    assert step2["modules_added"] == ["world_model"]
+    assert step2["revived_from"] == step1["bundle"]
+    assert set(step2["modules"]) == set(BASE_MODULES) | {"episodic_memory", "world_model"}
+
+    assert len(flush_log) == 3
+    for url in flush_log:
+        assert url.endswith("/10")
+
+
+def test_progressive_step_directories(tmp_path: Path, known_modules):
+    """Progressive steps use seed/ and step_N/ directories."""
+    study_dir = _create_progressive_study(tmp_path)
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+    _run(_runner(study_dir, script))
+
+    assert (study_dir / "seed").is_dir()
+    assert (study_dir / "step_1").is_dir()
+    assert (study_dir / "step_2").is_dir()
+    assert not (study_dir / "branch").exists()
+    assert not (study_dir / "development").exists()
+
+
+def test_progressive_preservation_chain(tmp_path: Path, known_modules):
+    """Each progressive step revives from the prior step's bundle."""
+    study_dir = _create_progressive_study(tmp_path)
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+    _run(_runner(study_dir, script))
+
+    steps = _load_steps(study_dir)
+    for i in range(1, len(steps)):
+        assert steps[i]["revived_from"] == steps[i - 1]["bundle"]
+        assert Path(steps[i]["revived_from"]).is_dir()
+
+
+def test_progressive_resume_skips_completed(tmp_path: Path, known_modules, monkeypatch):
+    """A progressive runner resumes from the first incomplete step."""
+    monkeypatch.setenv("IGNITION_STANDIN_SCENARIO", "revive_refused")
+    study_dir = _create_progressive_study(tmp_path)
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+
+    rec = _run(_runner(study_dir, script))
+    assert isinstance(rec, dict)
+    assert rec["step"] == 1
+
+    monkeypatch.delenv("IGNITION_STANDIN_SCENARIO")
+    result = _run(_runner(study_dir, script), retry=True)
+    assert result == "complete"
+
+    steps = _load_steps(study_dir)
+    completed = [s for s in steps if s["outcome"] == "complete"]
+    assert len(completed) == 3
+
+
+def test_progressive_single_redis_db(tmp_path: Path, known_modules):
+    """All progressive steps share a single Redis db number."""
+    study_dir = _create_progressive_study(tmp_path)
+    script = tmp_path / "standin.py"
+    script.write_text(STANDIN_SCRIPT)
+    flush_log: list[str] = []
+    _run(_runner(study_dir, script, flush_log=flush_log))
+
+    dbs = {urlsplit(url).path.lstrip("/") for url in flush_log}
+    assert dbs == {"10"}

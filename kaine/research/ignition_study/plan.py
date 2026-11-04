@@ -171,6 +171,11 @@ def _validate_progressive_plan(plan: dict[str, Any]) -> dict[str, Any]:
 
     plan.setdefault("collection_prefix", "devrun")
 
+    plan["steps"] = generate_progressive_plan(
+        order, base, broadcast_capacity=bc,
+    )
+    plan["collections"] = {"progressive": plan["collection_prefix"] + "_"}
+
     return plan
 
 
