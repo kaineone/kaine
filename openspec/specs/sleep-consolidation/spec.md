@@ -1,4 +1,4 @@
-# hypnos-consolidation Specification
+# sleep-consolidation Specification
 
 ## Purpose
 Sleep-time memory work: synaptic downscaling, offline replay behind a suspended perceptual locus, and the welfare-gated voice-alignment phase.

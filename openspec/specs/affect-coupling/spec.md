@@ -1,4 +1,4 @@
-# thymos-affect-coupling Specification
+# affect-coupling Specification
 
 ## Purpose
 This capability controls how the affect module couples perceived speaker emotion into appraisal, using a base weight when familiarity is unknown and persisting the familiarity cache. The coupling can be disabled gracefully, and the perceived-emotion contribution is routed through appraisal.

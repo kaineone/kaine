@@ -235,5 +235,5 @@ The offline suite's memory-coherence battery (`kaine/evaluation/benchmarks/instr
 ## Spec and related
 
 - Primary spec: [`openspec/specs/episodic-memory/spec.md`](../../openspec/specs/episodic-memory/spec.md)
-- Replay spec: [`openspec/specs/mnemos-replay/spec.md`](../../openspec/specs/mnemos-replay/spec.md)
+- Replay spec: [`openspec/specs/episodic-memory-replay/spec.md`](../../openspec/specs/episodic-memory-replay/spec.md)
 - Related modules: [Sleep](./sleep.md) runs the consolidation phases; [Affect](./affect.md) supplies the affect tag; [World model](./world-model.md) turns replay cues into scenarios.

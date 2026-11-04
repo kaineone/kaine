@@ -45,7 +45,7 @@ behavior.
 ### Requirement: ModuleOscillator.set_frequency interface
 `ModuleOscillator` SHALL expose a `set_frequency(scale)` method that scales the
 LIF population's drive frequency by `scale`. This method SHALL be a no-op on
-`FakeOscillator` (used in tests). It SHALL be called by `hypnos-fatigue-phases`
+`FakeOscillator` (used in tests). It SHALL be called by `sleep-fatigue-phases`
 phase 1 to slow oscillators during maintenance.
 
 #### Scenario: set_frequency scales drive in live oscillator

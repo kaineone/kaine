@@ -1,4 +1,4 @@
-# hypnos-fatigue-phases Specification
+# sleep-fatigue-phases Specification
 
 ## Purpose
 How fatigue drives the sleep module: maintenance starts when fatigue crosses its threshold or a maximum interval passes, the phases slow the oscillators and downscale activity during deep consolidation, and fatigue resets at the end, without interrupting sleep.

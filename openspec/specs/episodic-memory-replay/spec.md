@@ -1,4 +1,4 @@
-# mnemos-replay Specification
+# episodic-memory-replay Specification
 
 ## Purpose
 This capability extends the episodic memory module so stored memory traces are tagged with the latest affect state, and recall selects traces by affect intensity and recency for re-injection into the workspace during maintenance windows only. It also lets logs redact sensitive memory content.
