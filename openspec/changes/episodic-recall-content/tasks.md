@@ -20,7 +20,7 @@
 - [x] 3.12 The playlist media file name never reaches the organ, the intent log or the voice-alignment pairs, in either rendering (operator decision 2026-10-31): one list `MEDIA_METADATA_FIELDS` (`kaine/faithful/media_metadata.py`) applied in `FaithfulRenderer.render_event`, `redact_heard_speech` and `fallback_template`; a numeric template for `audition.perception`; tests `tests/test_faithful_media_metadata.py` (both renderings, the language module with a fake organ, its intent log, the bus and the pair builder)
 - [x] 3.13 Second-review fixes: the security chapter states the legacy limit (earlier traces and intent logs can hold `item`; a voice-alignment run over a numeric-mode log builds pairs holding it); `speaker_label` is documented as persisted in traces (design table, social cognition chapter, config comment); `source_label` is a fixed channel set and agent ids are `media:<channel>` or the configured label, with a structural provenance test; numeric-list invariant and a test that `strip_vectors` runs on the allowlist branch; a pinned inventory of every playlist-position read in `kaine/modules`; the scan counts intent-log records holding a rendered `item=` (`--intent-log`)
 - [ ] 3.8 Run the scan on the operator's stores and preservation bundles and report the result to the operator before speech recognition or the embodiment module is enabled; rewriting a preserved entity is the operator's decision
-- [ ] 3.4 Worker first-pass review, lead review, independent second review (privacy boundary)
+- [x] 3.4 Worker first-pass review, lead review, independent second review (privacy boundary)
 
 ## 4. Members, search and the recall event (PR 2)
 
@@ -29,21 +29,21 @@
 - [x] 4.3 `top_similarity` on every recall; `content` behind `recall_content`; republication filter
 - [x] 4.4 Config keys `recall_content = false`, `recall_exclude_recent_s = 30.0`, `recall_render_max = 3`, `familiarity_window = 100`
 - [x] 4.5 Tests: `tests/test_episodic_memory_members.py` (felt fields only, no vectors, legacy traces untouched); `tests/test_episodic_memory_recall_scope.py` (earlier wake recalled, recent excluded, schema node yields no content); `tests/test_episodic_memory_recall_content.py` (content shape, age bands, republication filter on a legacy trace holding heard text); `tests/test_dashboard_privacy.py` passes with the new payload
-- [ ] 4.6 Worker first-pass review, lead review, independent second review
+- [x] 4.6 Worker first-pass review, lead review, independent second review
 
 ## 5. Rendering (PR 3)
 
-- [ ] 5.1 Past-tense templates for vision, audition, interoception, affect state and emotion, sequence; the unknown-type line
-- [ ] 5.2 Familiarity by rank; the zero-count line; removal of "Some memories come back to me."
-- [ ] 5.3 Replay rendering with members
-- [ ] 5.4 Tests: `tests/test_felt_recall_content.py`; `tests/test_felt_recall_familiarity.py`; `tests/test_felt_no_content_claim.py` (no output equals the old sentence; "I remember" only with content); digit guard over every new template
+- [x] 5.1 Past-tense templates for vision, audition, interoception, affect state and emotion, sequence; the unknown-type line
+- [x] 5.2 Familiarity by rank; the zero-count line; removal of "Some memories come back to me."
+- [x] 5.3 Replay rendering with members
+- [x] 5.4 Tests: `tests/test_felt_recall_content.py`; `tests/test_felt_recall_familiarity.py`; `tests/test_felt_no_content_claim.py` (no output equals the old sentence; "I remember" only with content); digit guard over every new template
 
 ## 6. Live path, records and docs (PR 4)
 
-- [ ] 6.1 `tests/test_episodic_recall_live_path.py` (planted thought comes back with content on, not with it off)
-- [ ] 6.2 Research-log counts per run: recalls, recalls with content, recalls accessed (content-free)
-- [ ] 6.3 Docs: episodic memory chapter (outputs, recall, members), faithful renderer chapter, the memory-coherence battery described as testing the store's retrieval in isolation, configuration appendix; paper notes for §4, §6.4, A.10, Table A1 and §9 in the paper's revision notes
-- [ ] 6.4 Worker first-pass review, lead review, independent second review
+- [x] 6.1 `tests/test_episodic_recall_live_path.py` (planted thought comes back with content on, not with it off)
+- [x] 6.2 Research-log counts per run: recalls, recalls with content, recalls accessed (content-free)
+- [x] 6.3 Docs: episodic memory chapter (outputs, recall, members), faithful renderer chapter, the memory-coherence battery described as testing the store's retrieval in isolation, configuration appendix; paper notes for §4, §6.4, A.10, Table A1 and §9 in the paper's revision notes
+- [x] 6.4 Worker first-pass review, lead review, independent second review
 
 ## 7. Before any entity run with recall content on
 
