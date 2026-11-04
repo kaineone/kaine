@@ -84,6 +84,17 @@ x-gpu-trainer: &gpu-trainer
             device_ids: ["${KAINE_TRAINER_GPU:-${KAINE_ORGAN_GPU:-0}}"]
             capabilities: [gpu]
 
+# GPU reservation for the decision model server. Defaults to the organ card;
+# residency picks a different device when the fit report says so.
+x-gpu-decision: &gpu-decision
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            device_ids: ["${KAINE_DECISION_GPU:-${KAINE_ORGAN_GPU:-0}}"]
+            capabilities: [gpu]
+
 services:
   # ---- existing containerized services (event bus + vector store) --------
   kaine-redis:
@@ -193,6 +204,58 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
+
+  # ---- decision model server: K1-Jev (welfare + self-model grader) ------
+  # The decision server is independent of the organ's sleep window: the refusal
+  # veto needs it while the organ is unloaded (design §2). It serves the K1-Jev
+  # GGUF on /v1/systemone; the client (kaine.decision.client) talks to it on
+  # port 11436. Started only when [decision].enabled = true.
+  kaine-decision-model:
+    <<: *gpu-decision
+    image: ${KAINE_MODEL_SERVER_IMAGE:-ghcr.io/ggml-org/llama.cpp@sha256:ef08b5a98b1170f2b62177be0a4027c88a84043c55afbf190dd18b9e7cdcfebf}
+    container_name: kaine-decision-model
+    ports:
+      - "127.0.0.1:${KAINE_DECISION_SERVER_HOST_PORT:-11436}:8080"
+    environment:
+      LLAMA_API_KEY: ${KAINE_DECISION_SERVER_API_KEY:-}
+    entrypoint: ["/app/llama-server"]
+    command:
+      - --model
+      - /models/${KAINE_DECISION_SERVER_MODEL:-K1-Jev-4B/K1-Jev-4B.Q4_K_M.gguf}
+      - --alias
+      - k1-jev
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --sleep-idle-seconds
+      - "${KAINE_DECISION_SERVER_SLEEP_IDLE_SECONDS:-600}"
+      - --fit
+      - "off"
+      - -ngl
+      - "${KAINE_DECISION_SERVER_NGL:-999}"
+      - --cache-ram
+      - "${KAINE_DECISION_SERVER_CACHE_RAM_MIB:-512}"
+      - -c
+      - "${KAINE_DECISION_SERVER_CTX:-4096}"
+      - -np
+      - "${KAINE_DECISION_SERVER_PARALLEL:-2}"
+      - -ctk
+      - f16
+      - -ctv
+      - f16
+    volumes:
+      - kaine-models:/models:ro
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'curl -fsS http://127.0.0.1:8080/health >/dev/null'
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    logging: *default-logging
 
   # ---- speech-to-text: Speaches / faster-distil-Whisper ------------------
   # Runs on CPU with medium.en — running Speaches on GPU triggers a cuDNN crash
