@@ -69,6 +69,7 @@ class EpisodicMemory(BaseModule):
         retrigger_hook: EmotionalRetriggerHook | None = None,
         recall_on_workspace: bool = True,
         recall_cooldown_s: float = 5.0,
+        recall_exclude_recent_s: float = 30.0,
         # Replay config
         replay_selection_top_k: int = 5,
         replay_affect_weight: float = 0.7,
@@ -104,6 +105,8 @@ class EpisodicMemory(BaseModule):
             raise ValueError("recall_top_k must be positive")
         if recall_cooldown_s < 0:
             raise ValueError("recall_cooldown_s must be >= 0")
+        if recall_exclude_recent_s < 0:
+            raise ValueError("recall_exclude_recent_s must be >= 0")
         association = AssociationParams(
             n_pair=association_n_pair,
             sim_min=association_sim_min,
@@ -116,6 +119,7 @@ class EpisodicMemory(BaseModule):
         self._recall_top_k = int(recall_top_k)
         self._recall_on_workspace = bool(recall_on_workspace)
         self._recall_cooldown_s = float(recall_cooldown_s)
+        self._recall_exclude_recent_s = float(recall_exclude_recent_s)
         self._clock = entity_clock or EntityClock()
         # Subjective-time timestamp of the last spontaneous recall; None until
         # the first recall fires so the very first cued tick is not suppressed.
@@ -223,14 +227,16 @@ class EpisodicMemory(BaseModule):
         # cooldown and is NOT gated on snapshot.inhibited — recall is internal
         # cognition (like storing), not an outward effector action.
         #
-        # Performance: storing stays embedder-free on the hot path. The
-        # spontaneous recall searches short-term only and embeds the query plus
-        # any short-term entries whose embeddings are not yet cached; a second
-        # recall with no new entries embeds only the query. Embedding is still
-        # deferred to eviction/consolidation (short_term -> episodic) and to
-        # explicit episodic recall from other modules.
+        # The recall searches the persisted episodic collection and merges
+        # eligible short-term entries (those older than recall_exclude_recent_s
+        # entity seconds). Very recent short-term entries are excluded to avoid
+        # recalling what the entity just experienced.
         if self._recall_on_workspace and self._recall_cooldown_due():
-            await self.recall(text, collection="short_term")
+            await self.recall(
+                text,
+                collection="episodic",
+                exclude_recent_s=self._recall_exclude_recent_s,
+            )
             self._last_recall_monotonic = self._clock.now()
         members = _build_members(snapshot)
         payload: dict[str, Any] = {
@@ -384,10 +390,14 @@ class EpisodicMemory(BaseModule):
         *,
         k: int | None = None,
         collection: str = "episodic",
+        exclude_recent_s: float = 0.0,
     ) -> list[RecalledMemory]:
         try:
             results, summary = await self._core.recall(
-                query_text, k=k or self._recall_top_k, collection=collection
+                query_text,
+                k=k or self._recall_top_k,
+                collection=collection,
+                exclude_recent_s=exclude_recent_s,
             )
         except StorageError as exc:
             log.error(
