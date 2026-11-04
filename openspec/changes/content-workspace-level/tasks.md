@@ -8,12 +8,12 @@
 
 ## 2. Translation-loss arm
 
-- [ ] 2.1 Cycle-consistency training in `ContentLevel`: for each pair of accessed processors, compute round-trip reconstruction loss and update encoder/decoder weights. Selectable via `arm = "translation"`.
+- [x] 2.1 Cycle-consistency training in `ContentLevel`: for each pair of accessed processors, compute round-trip reconstruction loss and update encoder/decoder weights. Selectable via `arm = "translation"`.
 - [ ] 2.2 Tests: `tests/test_content_translation_arm.py` — cycle loss decreases over steps for two synthetic processors, the prediction arm and translation arm produce different weight trajectories on the same data.
 
 ## 3. TopDownBlend integration
 
-- [ ] 3.1 `TopDownBlend.hindsight_step` accepts an optional `content_prediction` argument; `blend_weights` becomes a 3-way blend (own, head, content) when content is present, with precision weights from windowed errors.
+- [x] 3.1 `TopDownBlend.hindsight_step` accepts an optional `content_prediction` argument; `blend_weights` becomes a 3-way blend (own, head, content) when content is present, with precision weights from windowed errors.
 - [ ] 3.2 Tests: `tests/test_feedback_content_blend.py` — 3-way blend with known precisions matches expected weights; content_prediction=None falls back to 2-way blend; state_dict/load_state_dict includes content error window.
 
 ## 4. FeedbackController and broadcast wiring
