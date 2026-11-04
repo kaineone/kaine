@@ -136,6 +136,18 @@ Vector fields are also removed at every nesting depth. `latent`, `peripheral`, `
 
 `dev_content_override = true` lets content fields through to the diagnostics surface, but vectors are still removed. It also shows a "dev mode" banner on every page load so operators cannot forget they are in this mode. The shipped default is `false`. Do not set `dev_content_override = true` on a shared machine or in production.
 
+## Latent-derived content
+
+Latent-derived content is any value derived from the entity's internal predictive model: decoded predictions, workspace content vectors, or top-down feedback signals. The rule is: **latent-derived content is never logged, never an episode, and stripped by the privacy filter.**
+
+The constant `LATENT_CONTENT_FIELDS` in `kaine/privacy_filter.py` names the fields that carry latent content. It starts empty (the current architecture does not yet produce decoded content); option F (the content workspace) will add its field names there. The privacy filter strips `LATENT_CONTENT_FIELDS` alongside `CONTENT_FIELDS` from every surface, so adding a field to the set is all that is needed to protect it.
+
+Three CI guards enforce the rule structurally:
+
+1. `test_latent_content_privacy.py::test_no_latent_field_in_research_taxonomy` — no key in `LATENT_CONTENT_FIELDS` appears in the research event log's taxonomy allowlist.
+2. `test_latent_content_privacy.py::test_no_latent_field_event_type_in_internal_event_types` — no event type whose payload carries a latent field is in the episodic memory module's `INTERNAL_EVENT_TYPES` (the gate that controls which payloads are stored in traces).
+3. `test_dashboard_privacy.py::test_no_uncovered_latent_key_in_module_publishers` — any module payload key whose name suggests latent content (`latent`, `prediction`, `decoded`, `top_down`, `top-down`) must be classified in one of the three field sets or in `VECTOR_EXEMPT_KEYS`.
+
 ## Two-layer gates
 
 Several sensitive operations require two independent conditions before they fire. This prevents a single misconfiguration from activating them.
