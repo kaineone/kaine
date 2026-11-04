@@ -345,7 +345,12 @@ def _write_spec(tmp_path, pairs):
     job_dir = tmp_path / "job"
     job_dir.mkdir()
     write_job_spec(
-        job_dir, pairs, config, base_path="dummy/base", adapter_output_dir=str(tmp_path / "out")
+        job_dir,
+        pairs,
+        config,
+        base_path="dummy/base",
+        adapter_output_dir=str(tmp_path / "out"),
+        entity_id="ent-00000000000000000000000000000000",
     )
     return job_dir
 
