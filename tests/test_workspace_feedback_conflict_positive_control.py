@@ -1,19 +1,13 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
-import pytest
 from datetime import datetime, timezone
 
 from kaine.bus.schema import Event
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.workspace.feedback import (
     FEEDBACK_KEY,
-    PROCESSORS,
     REPORT_TYPES,
-    SEQUENCE_PREDICTION_DIM,
-    SEQUENCE_PREDICTION_KEY,
-    SEQUENCE_REPORT_TYPE,
-    SEQUENCE_SOURCE,
     FeedbackController,
     WorkspaceFeedbackSettings,
 )

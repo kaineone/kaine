@@ -13,11 +13,9 @@ import pytest
 from kaine.modules.context import CONTEXT_DIM
 from kaine.modules.feedback import TopDownBlend, TopDownHead
 from kaine.workspace.feedback import (
-    PROCESSORS,
     FeedbackController,
     WorkspaceFeedbackSettings,
 )
-
 
 # ---------------------------------------------------------------------------
 # Minimal mock forward model (same contract as FakeForwardModel in
