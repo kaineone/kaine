@@ -39,7 +39,7 @@ speech-edge = [
     "sherpa-onnx>=2.0.1,<3",
 ]
 speech-qwen3 = [
-    "qwen-tts>=0.1",
+    "qwen-tts>=0.1.1",
 ]
 dashboard = [
     "fastapi>=0.143.0,<1",
