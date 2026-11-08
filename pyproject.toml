@@ -68,7 +68,7 @@ test = [
     "pytest-asyncio>=1.4.0",
     # Parallel test runs (`pytest -n auto --dist loadfile`), as CI runs them.
     "pytest-xdist>=3.8,<4",
-    "fakeredis>=2.38.0",
+    "fakeredis>=2.40.0",
     # Structural import-boundary contracts (kaine/evaluation sidecar boundary +
     # declared layering). Dev/CI only — NEVER shipped to the entity runtime.
     # Enforced by `lint-imports` (pre-commit, a dedicated CI job, and
