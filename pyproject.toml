@@ -57,7 +57,7 @@ nvidia = [
 vision = [
     "opencv-python-headless>=5.0.0.93,<6",
     "transformers>=5.21.0,<6",
-    "Pillow>=12.3.0,<13",
+    "Pillow>=13.0.0,<14",
     "av>=18.1.0,<19",  # PyAV — playlist-video decode by presentation timestamp (PlaylistSource)
 ]
 full = [
