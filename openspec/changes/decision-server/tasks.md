@@ -1,5 +1,5 @@
 ## 1. Specs
-- [ ] 1.1 `inference-backend` delta (scope of the single-server requirement) and `abliterated-organ` delta (K1-Jev is not the organ); `decision-model` delta (server and client).
+- [x] 1.1 `inference-backend` delta (scope of the single-server requirement) and `abliterated-organ` delta (K1-Jev is not the organ); `decision-model` delta (server and client).
 
 ## 2. Client
 - [x] 2.1 `kaine/decision/client.py` per the design.
