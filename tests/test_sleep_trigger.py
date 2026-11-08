@@ -410,7 +410,7 @@ async def test_non_interruptibility_during_fatigue_sleep(bus: AsyncBus, tmp_path
     await asyncio.sleep(0.02)  # let first start
     with pytest.raises(SleepBusyError):
         await sleep.enter_sleep()
-    await first
+    _ = await first
 
 
 # ---------------------------------------------------------------------------

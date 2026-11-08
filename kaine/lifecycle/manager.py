@@ -241,7 +241,7 @@ class _ModuleLike(Protocol):
 @runtime_checkable
 class _RegistryLike(Protocol):
     def all_modules(self) -> Iterable[_ModuleLike]:
-        ...
+        pass
 
 
 def _artifact_dirs_by_module(root: Path) -> dict[str, Path]:

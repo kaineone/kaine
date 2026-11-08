@@ -395,6 +395,7 @@ class Language(BaseModule):
                 try:
                     await asyncio.wait_for(self._stopped.wait(), timeout=0.2)
                 except asyncio.TimeoutError:
+                    # Backoff elapsed without a stop request; retry the scan.
                     pass
                 continue
             if last_scanned is not None:
@@ -410,6 +411,7 @@ class Language(BaseModule):
                 try:
                     await asyncio.wait_for(self._stopped.wait(), timeout=0.1)
                 except asyncio.TimeoutError:
+                    # Poll interval elapsed without a stop request; loop again.
                     pass
 
     async def _snapshot_cache_loop(self) -> None:

@@ -20,8 +20,10 @@ class DriftResult:
 
 @runtime_checkable
 class DriftDetector(Protocol):
-    def observe(self, sources: Iterable[str]) -> DriftResult: ...
-    def reset(self) -> None: ...
+    def observe(self, sources: Iterable[str]) -> DriftResult:
+        pass
+    def reset(self) -> None:
+        pass
 
 
 class SourceDistributionDrift:

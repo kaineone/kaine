@@ -470,8 +470,6 @@ def test_docker_compose_renders_redis_maxmemory(tmp_path: Path, override):
     if result.returncode != 0 and "is not a docker command" in result.stderr:
         pytest.skip("docker compose plugin not available")
     assert result.returncode == 0, result.stderr
-    import json
-
     cmd = json.loads(result.stdout)["services"]["kaine-redis"]["command"]
     assert cmd[cmd.index("--maxmemory") + 1] == (override or "4gb")
     assert cmd[cmd.index("--maxmemory-policy") + 1] == "noeviction"

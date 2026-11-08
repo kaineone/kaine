@@ -1788,6 +1788,7 @@ async def _phase_stage(ctx: BootContext) -> int | None:
         )
     else:
         log.debug("developmental staging disabled; running un-staged")
+    return None
 
 
 async def _phase_preconditions(ctx: BootContext) -> int | None:
@@ -1933,6 +1934,7 @@ async def _phase_run_identity(ctx: BootContext) -> int | None:
             "devices limited to the operator's allowed set: %s",
             ", ".join(allowed_devices()),
         )
+    return None
 
 
 async def _phase_gates(ctx: BootContext) -> int | None:

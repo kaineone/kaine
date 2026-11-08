@@ -176,7 +176,7 @@ class ActionSelectionPolicy(Protocol):
     """
 
     def __call__(self, snapshot: WorkspaceSnapshot) -> list[Intent]:
-        ...
+        pass
 
 
 class DefaultActionSelectionPolicy:

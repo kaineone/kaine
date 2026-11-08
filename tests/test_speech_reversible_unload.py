@@ -329,7 +329,7 @@ async def test_stt_load_outlasting_close_is_discarded(tmp_path: Path) -> None:
     block.set()
 
     with pytest.raises(RuntimeError, match="closed"):
-        await load_task
+        _ = await load_task
 
     assert not client.loaded
     assert client._recognizer is None
@@ -542,7 +542,7 @@ async def test_tts_load_outlasting_close_is_discarded(tmp_path: Path) -> None:
     block.set()
 
     with pytest.raises(RuntimeError, match="closed"):
-        await load_task
+        _ = await load_task
 
     assert not client.loaded
     assert client._tts is None
@@ -618,7 +618,7 @@ async def test_stt_cancelled_inference_unload_waits_for_worker_thread(tmp_path: 
         await started.wait()
         inference.cancel()
         with pytest.raises(asyncio.CancelledError):
-            await inference
+            _ = await inference
 
         unload_task = asyncio.create_task(client.unload())
         await asyncio.sleep(0.1)
@@ -656,7 +656,7 @@ async def test_tts_cancelled_inference_unload_waits_for_worker_thread(tmp_path: 
         await started.wait()
         inference.cancel()
         with pytest.raises(asyncio.CancelledError):
-            await inference
+            _ = await inference
 
         unload_task = asyncio.create_task(client.unload())
         await asyncio.sleep(0.1)

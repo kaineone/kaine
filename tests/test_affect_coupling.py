@@ -276,7 +276,7 @@ def test_no_direct_vad_write_path_exists():
     # The old direct-write method must no longer exist.
     assert not hasattr(Affect, "_apply_coupling_nudge")
     # The DriftSafeguard that only existed to cap that write must be gone too.
-    import kaine.modules.affect.coupling as coupling_mod
+    from kaine.modules.affect import coupling as coupling_mod
     assert not hasattr(coupling_mod, "DriftSafeguard")
     # CouplingConfig no longer carries the rate cap.
     import dataclasses

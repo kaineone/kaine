@@ -52,7 +52,7 @@ from typing import Any, Callable
 
 from kaine.bus.errors import BusConfigError
 from kaine.lifecycle.decommission import (
-    _STATE_SUBTREES,
+    STATE_SUBTREES,
     _episodic_memory_collection_names,
     _qdrant_client,
     capture_backup,
@@ -565,7 +565,7 @@ def main(
 
     # --- Gate 2.5: entity state must actually be present ----------------
     if not state_root.exists() or not any(
-        _state_subtree_has_content(state_root, sub) for sub in _STATE_SUBTREES
+        _state_subtree_has_content(state_root, sub) for sub in STATE_SUBTREES
     ):
         err.write(
             f"Refusing to decommission: no entity state found under {state_root}. "

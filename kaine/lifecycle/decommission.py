@@ -1005,7 +1005,7 @@ def update_manifest_continuity_note(backup: BackupResult, note: str) -> bool:
 # ---------------------------------------------------------------------------
 
 # Entity state subtrees removed on decommission, relative to state_root.
-_STATE_SUBTREES = tuple(
+STATE_SUBTREES = tuple(
     [
         *legacy_aliases.name_forms("self_model"),
         *legacy_aliases.name_forms("language"),

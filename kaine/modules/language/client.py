@@ -82,11 +82,16 @@ class ChatResponse:
 @runtime_checkable
 class ChatClient(Protocol):
     @property
-    def base_url(self) -> str: ...
+    def base_url(self) -> str:
+        pass
 
-    async def complete(self, request: ChatRequest) -> ChatResponse: ...
+    async def complete(self, request: ChatRequest) -> ChatResponse:
 
-    async def aclose(self) -> None: ...
+        pass
+
+    async def aclose(self) -> None:
+
+        pass
 
 
 # Chat-template kwarg the llama.cpp / Unsloth Studio server forwards to the

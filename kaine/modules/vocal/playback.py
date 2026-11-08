@@ -47,7 +47,8 @@ def wav_duration_s(audio: bytes) -> float:
 
 @runtime_checkable
 class Player(Protocol):
-    async def play(self, audio: bytes, *, output_format: str = "wav") -> None: ...
+    async def play(self, audio: bytes, *, output_format: str = "wav") -> None:
+        pass
 
 
 class NullPlayer:

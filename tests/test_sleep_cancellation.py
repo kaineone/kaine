@@ -115,7 +115,7 @@ async def _completed_events(bus) -> list[dict]:
 async def _cancel_and_expect(task: asyncio.Task) -> None:
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
-        await task
+        _ = await task
 
 
 @pytest.mark.asyncio
@@ -260,7 +260,7 @@ async def test_affective_reset_survives_a_second_cancel(bus, tmp_path):
     await asyncio.wait_for(affect.started.wait(), 5)
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
-        await task
+        _ = await task
 
     assert affect.resets == 0
     gate.set()

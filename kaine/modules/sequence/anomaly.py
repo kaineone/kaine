@@ -10,7 +10,8 @@ from typing import Iterable, Protocol, runtime_checkable
 
 @runtime_checkable
 class AnomalyDetector(Protocol):
-    def observe(self, hidden_state: Iterable[float]) -> float: ...
+    def observe(self, hidden_state: Iterable[float]) -> float:
+        pass
 
 
 class RollingZScoreAnomaly:

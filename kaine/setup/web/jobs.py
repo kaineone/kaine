@@ -31,6 +31,11 @@ class JobConflictError(RuntimeError):
     in the browser; no other exception text is.
     """
 
+    @property
+    def operator_message(self) -> str:
+        """Operator-facing message, safe to display in the browser."""
+        return self.args[0] if self.args else "job conflict"
+
 
 class ActivityHold(Protocol):
     activity_hold: int
@@ -100,6 +105,7 @@ async def _killpg(pgid: int, sig: int) -> None:
     try:
         os.killpg(pgid, sig)
     except ProcessLookupError:
+        # Process group already gone; nothing to signal.
         pass
     except PermissionError as exc:
         _log.debug("os.killpg(%r, %r) raised PermissionError: %s", pgid, sig, exc)
@@ -356,8 +362,9 @@ class JobRunner:
         if job._reader_task is not None and not job._reader_task.done():
             try:
                 await job._reader_task
-            except Exception:
-                pass
+            except Exception as exc:
+                # Reader failures must not mask the process exit status.
+                _log.debug("reader task for job failed: %s", exc)
         job.exit_code = exit_code
         if job._cancelled:
             job.status = "cancelled"
@@ -455,9 +462,10 @@ class JobRunner:
             try:
                 os.killpg(pgid, signal.SIGKILL)
             except ProcessLookupError:
+                # Process group already gone.
                 pass
-            except PermissionError:
-                pass
+            except PermissionError as exc:
+                _log.debug("os.killpg(%r, SIGKILL) raised PermissionError: %s", pgid, exc)
 
     async def shutdown(self) -> None:
         for job in list(self._jobs.values()):
@@ -497,6 +505,7 @@ class JobRunner:
             try:
                 await asyncio.wait_for(job._new_line.wait(), timeout=0.5)
             except asyncio.TimeoutError:
+                # No new output within the poll interval; re-check job state.
                 pass
 
         payload: dict[str, Any] = {"status": job.status}

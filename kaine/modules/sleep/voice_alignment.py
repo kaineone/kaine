@@ -191,7 +191,8 @@ class Trainer(Protocol):
         self,
         pairs: list[DPOPair],
         config: VoiceAlignmentConfig,
-    ) -> TrainingResult: ...
+    ) -> TrainingResult:
+        pass
 
 
 class DPOPairBuilder:

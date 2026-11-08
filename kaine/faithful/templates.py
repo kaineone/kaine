@@ -56,6 +56,7 @@ def felt_drive_phrase(drive: str, value: object) -> str:
             if math.isfinite(f) and f >= STRONG_DRIVE_BAND:
                 return strong
         except (OverflowError, ValueError):
+            # Unconvertible numeric value: fall through to the moderate text.
             pass
     return moderate
 

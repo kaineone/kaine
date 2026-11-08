@@ -27,8 +27,10 @@ def cosine_similarity(a: Iterable[float], b: Iterable[float]) -> float:
 
 @runtime_checkable
 class ChangeDetector(Protocol):
-    def observe(self, embedding: list[float]) -> float: ...
-    def reset(self) -> None: ...
+    def observe(self, embedding: list[float]) -> float:
+        pass
+    def reset(self) -> None:
+        pass
 
 
 class CosineChangeDetector:

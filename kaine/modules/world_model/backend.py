@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import io
 import json
+import math
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
@@ -329,9 +330,7 @@ def _clip01(x: float) -> float:
 
 
 def _isnan(x: float) -> bool:
-    # Self-inequality is the standard NaN test: NaN is the only float value
-    # that compares unequal to itself (IEEE 754). Deliberate, not a typo.
-    return x != x
+    return math.isnan(x)
 
 
 # ---------------------------------------------------------------------------

@@ -472,7 +472,7 @@ async def test_timer_loop_is_own_update(bus):
     task = asyncio.create_task(affect._state_timer_loop())
     await asyncio.sleep(0.3)
     affect._stopped.set()
-    await task
+    _ = await task
     reentries = _reentries(await _drive_events(bus), "curiosity")
     assert len(reentries) == 1
 

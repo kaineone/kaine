@@ -124,7 +124,7 @@ async def test_emotion_unload_waits_for_inflight(monkeypatch):
 
     result = await classify_task
     assert result.category == "happy"
-    await unload_task
+    _ = await unload_task
     assert classifier.loaded is False
 
 
@@ -191,7 +191,7 @@ async def test_emotion_double_cancel_does_not_leak_inflight(monkeypatch):
         entered.set()
 
     with pytest.raises(asyncio.CancelledError):
-        await classify_task
+        _ = await classify_task
 
     await asyncio.wait_for(classifier.unload(), timeout=_HANG_TIMEOUT_S)
     assert classifier._gate.inflight == 0
@@ -223,7 +223,7 @@ async def test_emotion_cancelled_inference_unload_waits_for_worker(monkeypatch):
 
         classify_task.cancel()
         with pytest.raises(asyncio.CancelledError):
-            await classify_task
+            _ = await classify_task
 
         unload_task = asyncio.create_task(asyncio.wait_for(classifier.unload(), timeout=_HANG_TIMEOUT_S))
         await asyncio.sleep(0.1)
@@ -405,7 +405,7 @@ async def test_dinov2_double_cancel_does_not_leak_inflight(monkeypatch):
         entered.set()
 
     with pytest.raises(asyncio.CancelledError):
-        await encode_task
+        _ = await encode_task
 
     await asyncio.wait_for(encoder.unload(), timeout=_HANG_TIMEOUT_S)
     assert encoder._gate.inflight == 0
@@ -471,7 +471,7 @@ async def test_dinov2_cancelled_inference_unload_waits_for_worker(monkeypatch):
 
         encode_task.cancel()
         with pytest.raises(asyncio.CancelledError):
-            await encode_task
+            _ = await encode_task
 
         unload_task = asyncio.create_task(asyncio.wait_for(encoder.unload(), timeout=_HANG_TIMEOUT_S))
         await asyncio.sleep(0.1)
@@ -540,7 +540,7 @@ async def test_internvideo_next_double_cancel_does_not_leak_inflight(monkeypatch
         entered.set()
 
     with pytest.raises(asyncio.CancelledError):
-        await encode_task
+        _ = await encode_task
 
     await asyncio.wait_for(encoder.unload(), timeout=_HANG_TIMEOUT_S)
     assert encoder._gate.inflight == 0

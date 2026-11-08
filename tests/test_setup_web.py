@@ -793,8 +793,6 @@ def _run_terminal(host, shipped_path, tmp_path, **overrides) -> dict:
 
 
 def _load_toml(path: Path) -> dict:
-    import tomllib
-
     with path.open("rb") as fh:
         return tomllib.load(fh)
 
@@ -1106,7 +1104,7 @@ def test_abort_get_returns_405(tmp_path):
 
 
 def test_cycle_running_falls_back_to_bus_when_runtime_missing(tmp_path, monkeypatch):
-    monkeypatch.setattr(guard, "load_bus_config", lambda: object())
+    monkeypatch.setattr(guard, "load_bus_config", object)
     monkeypatch.setattr(guard, "cycle_on_bus", lambda cfg: (True, "cycle connected"))
     assert guard.cycle_running(tmp_path) is True
 
@@ -1138,7 +1136,7 @@ def test_cycle_running_bus_config_error_refuses_when_the_bus_is_up(tmp_path, mon
 
 def test_save_refused_when_cycle_on_bus(tmp_path, monkeypatch):
     app = _mk_app(tmp_path)
-    monkeypatch.setattr(guard, "load_bus_config", lambda: object())
+    monkeypatch.setattr(guard, "load_bus_config", object)
     reason = "containerized cycle connected to bus"
     monkeypatch.setattr(guard, "cycle_on_bus", lambda cfg: (True, reason))
     _drive_web(app, {})
@@ -1771,8 +1769,6 @@ def test_web_cl1_decline_removes_an_earlier_cl1_setup(tmp_path):
     The session is server-side and holds the REMOVE sentinel itself, so the
     save route's merge deletes the table instead of writing a marker string.
     """
-    import tomllib
-
     from kaine.setup import tomlwriter
 
     operator_path = tmp_path / "kaine.operator.toml"

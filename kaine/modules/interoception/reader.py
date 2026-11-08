@@ -13,13 +13,20 @@ log = logging.getLogger(__name__)
 
 @runtime_checkable
 class MetricsReader(Protocol):
-    async def initialize(self) -> None: ...
+    async def initialize(self) -> None:
+        pass
 
-    async def shutdown(self) -> None: ...
+    async def shutdown(self) -> None:
 
-    async def read_metrics(self) -> dict[str, float]: ...
+        pass
 
-    def update_cycle_latency_sample(self, wall_duration_ms: float) -> None: ...
+    async def read_metrics(self) -> dict[str, float]:
+
+        pass
+
+    def update_cycle_latency_sample(self, wall_duration_ms: float) -> None:
+
+        pass
 
 
 class SystemMetricsReader:
