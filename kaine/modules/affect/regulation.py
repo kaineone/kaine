@@ -39,7 +39,7 @@ class RegulationAdjustment:
 @runtime_checkable
 class RegulationPolicy(Protocol):
     async def suggest(self, state: DimensionalState) -> RegulationAdjustment:
-        pass
+        """Protocol method."""
 
 
 class PassiveDecay:

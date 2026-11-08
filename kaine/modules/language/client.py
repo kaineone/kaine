@@ -83,15 +83,13 @@ class ChatResponse:
 class ChatClient(Protocol):
     @property
     def base_url(self) -> str:
-        pass
+        """Protocol method."""
 
     async def complete(self, request: ChatRequest) -> ChatResponse:
-
-        pass
+        """Protocol method."""
 
     async def aclose(self) -> None:
-
-        pass
+        """Protocol method."""
 
 
 # Chat-template kwarg the llama.cpp / Unsloth Studio server forwards to the

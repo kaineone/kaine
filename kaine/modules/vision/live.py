@@ -41,11 +41,11 @@ OnStateChange = Callable[[str, dict], None]
 @runtime_checkable
 class _VideoSource(Protocol):
     def open(self) -> bool:
-        pass
+        """Protocol method."""
     def read(self) -> tuple[bool, Any]:
-        pass
+        """Protocol method."""
     def release(self) -> None:
-        pass
+        """Protocol method."""
 
 
 @dataclass(frozen=True)

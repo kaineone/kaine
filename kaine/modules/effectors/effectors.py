@@ -58,11 +58,10 @@ class ActionResult:
 class Effector(Protocol):
     @property
     def name(self) -> str:
-        pass
+        """Protocol method."""
 
     async def act(self, request: ActionRequest) -> ActionResult:
-
-        pass
+        """Protocol method."""
 
 
 def _now_ms() -> float:

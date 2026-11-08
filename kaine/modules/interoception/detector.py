@@ -21,7 +21,7 @@ class AlertResult:
 @runtime_checkable
 class AnomalyDetector(Protocol):
     def evaluate(self, metrics: dict[str, float]) -> AlertResult:
-        pass
+        """Protocol method."""
 
 
 class ThresholdAnomalyDetector:

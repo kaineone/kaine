@@ -11,9 +11,9 @@ from typing import Protocol, runtime_checkable
 @runtime_checkable
 class SceneHabituator(Protocol):
     def observe(self, embedding: list[float]) -> float:
-        pass
+        """Protocol method."""
     def reset(self) -> None:
-        pass
+        """Protocol method."""
 
 
 class RollingMeanHabituator:

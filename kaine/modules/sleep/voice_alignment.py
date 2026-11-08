@@ -192,7 +192,7 @@ class Trainer(Protocol):
         pairs: list[DPOPair],
         config: VoiceAlignmentConfig,
     ) -> TrainingResult:
-        pass
+        """Protocol method."""
 
 
 class DPOPairBuilder:

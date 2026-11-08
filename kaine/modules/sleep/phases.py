@@ -70,28 +70,25 @@ class _SupportsEpisodicMemory(Protocol):
     """
 
     async def consolidate_now(self) -> int:
-
-        pass
+        """Protocol method."""
 
     async def downscale(self, protect: Sequence[Any] = (), *, prune: bool = True) -> dict[str, Any]:
         """Downscale trace strengths, protecting the replayed traces, then prune unless prune is false (paper A.10)."""
 
     async def replay_now(self) -> list[Any]:
-
-        pass
+        """Protocol method."""
 
 
 class _SupportsAffectiveReset(Protocol):
     async def affective_reset(self) -> None:
-        pass
+        """Protocol method."""
 
 
 class _SupportsTimeReset(Protocol):
     """Anything sequence-module-shaped that exposes a reset/recalibrate entry."""
 
     def reset(self) -> None:
-
-        pass
+        """Protocol method."""
 
 
 # ---------------------------------------------------------------------------

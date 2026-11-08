@@ -21,7 +21,7 @@ class RuminationResult:
 @runtime_checkable
 class RuminationDetector(Protocol):
     def observe(self, hidden_state: Iterable[float]) -> RuminationResult:
-        pass
+        """Protocol method."""
 
 
 class RecurrenceRuminationDetector:
