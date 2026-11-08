@@ -211,7 +211,7 @@ def test_vision_encoder_follows_models_dir_set_after_import(tmp_path: Path, monk
 
 
 def test_vision_loads_float32_on_cpu(monkeypatch: pytest.MonkeyPatch):
-    import kaine.modules.vision.internvideo_next_loader as loader
+    from kaine.modules.vision import internvideo_next_loader as loader
 
     seen = {}
 

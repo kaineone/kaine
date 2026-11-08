@@ -360,8 +360,6 @@ class InternVideoNextEncoder:
     ) -> None:
         if self._model is not None:
             return
-        import asyncio
-
         # No-outbound guarantee: disable telemetry AND forbid hub reachability
         # before any transformers call (the loader hardens the same env too).
         os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")

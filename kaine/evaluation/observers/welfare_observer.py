@@ -122,7 +122,6 @@ from kaine.lifecycle.welfare_signal import (  # noqa: F401  (re-export)
     SilenceTransition,
     SustainedThresholdTracker,
     UndefinedRunTracker,
-    WindowedEventCounter,
 )
 
 log = logging.getLogger(__name__)

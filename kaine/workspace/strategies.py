@@ -26,7 +26,7 @@ class SalienceStrategy(Protocol):
 @runtime_checkable
 class GoalScorer(Protocol):
     async def relevance(self, event: Event) -> float:
-        ...
+        pass
 
 
 @runtime_checkable

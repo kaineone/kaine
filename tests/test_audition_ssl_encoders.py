@@ -436,7 +436,7 @@ def test_factory_passes_the_resolved_device_to_the_encoder(monkeypatch):
         captured.update(kwargs)
         return acoustic_mod.FakeAcousticEncoder(8)
 
-    import kaine.modules.audition.acoustic as acoustic_mod
+    from kaine.modules.audition import acoustic as acoustic_mod
 
     monkeypatch.setattr(acoustic_mod, "build_acoustic_encoder", fake_build)
     section = {"general_audition": True, "acoustic_encoder": "dasheng", "acoustic_device": "cuda:1"}

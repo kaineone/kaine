@@ -57,9 +57,11 @@ class ActionResult:
 @runtime_checkable
 class Effector(Protocol):
     @property
-    def name(self) -> str: ...
+    def name(self) -> str:
+        """Protocol method."""
 
-    async def act(self, request: ActionRequest) -> ActionResult: ...
+    async def act(self, request: ActionRequest) -> ActionResult:
+        """Protocol method."""
 
 
 def _now_ms() -> float:

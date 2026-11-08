@@ -60,7 +60,7 @@ def test_cancelled_while_running():
             assert gate.inflight == 1
 
             blocker.set()
-            await waiter
+            _ = await waiter
             assert gate.inflight == 0
         finally:
             blocker.set()
@@ -212,7 +212,7 @@ def test_two_concurrent_jobs_one_cancelled():
             assert not waiter.done()
 
             blocker1.set()
-            await waiter
+            _ = await waiter
             assert gate.inflight == 0
         finally:
             blocker1.set()
@@ -303,9 +303,8 @@ def test_abandoned_job_never_runs_fn():
             for future, fn, args, kwargs in self._pending:
                 try:
                     result = fn(*args, **kwargs)
-                # Like a real executor: every exception, BaseException included,
-                # is delivered to the future.
-                except BaseException as exc:
+                # Like a real executor: every exception is delivered to the future.
+                except Exception as exc:
                     future.set_exception(exc)
                 else:
                     future.set_result(result)
@@ -328,7 +327,7 @@ def test_abandoned_job_never_runs_fn():
         assert ex._pending
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
-            await task
+            _ = await task
         assert gate.inflight == 0
 
         await asyncio.to_thread(ex.run_pending)

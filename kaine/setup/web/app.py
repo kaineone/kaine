@@ -348,6 +348,7 @@ async def _lifespan(app: FastAPI):
     try:
         await watcher
     except asyncio.CancelledError:
+        # Expected: the watcher was cancelled just above.
         pass
     try:
         await app.state.runner.shutdown()
@@ -632,10 +633,8 @@ def create_setup_app(
         is_helper = step.id in _HELPER_STEP_IDS
         if is_helper:
             fields = _helper_fields(step.id)
-            questions = _helper_questions(step.id)
         else:
             fields = tuple(step.fields(ctx))
-            questions = ()
 
         answers, errors = validate_fields(fields, form)
 
@@ -681,7 +680,7 @@ def create_setup_app(
             )
 
         if is_helper:
-            ctx.extra["input_fn"] = _web_input(form, questions)
+            ctx.extra["input_fn"] = _web_input(form, _helper_questions(step.id))
         else:
             ctx.extra["input_fn"] = _noop_input
 
@@ -844,7 +843,7 @@ def create_setup_app(
             job_id = await request.app.state.runner.start(name, specs[name])
         except JobConflictError as exc:
             return PlainTextResponse(
-                str(exc),
+                exc.operator_message,
                 status_code=409,
                 headers={"Cache-Control": "no-store"},
             )
@@ -1554,4 +1553,5 @@ def serve(
         try:
             sock.close()
         except OSError:
+            # Socket already closed or invalid during shutdown; nothing to do.
             pass

@@ -177,7 +177,7 @@ def test_stream_keys_prefer_new(monkeypatch):
 def test_decommission_deletes_every_form(monkeypatch):
     """decommission recognizes both old and new forms of state subtrees."""
     _keys_done(monkeypatch)
-    subtrees = decommission._STATE_SUBTREES
+    subtrees = decommission.STATE_SUBTREES
     assert "eidolon" in subtrees
     assert "self_model" in subtrees
     assert "lingua" in subtrees

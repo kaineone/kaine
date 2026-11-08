@@ -46,6 +46,13 @@ class PhaseResult:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
+async def _call_hook(hook: Any) -> None:
+    """Invoke a sync or async no-arg hook, awaiting it if it is awaitable."""
+    outcome = hook()
+    if asyncio.iscoroutine(outcome):
+        await outcome
+
+
 def _now_ms() -> float:
     return time.monotonic() * 1000.0
 
@@ -62,22 +69,26 @@ class _SupportsEpisodicMemory(Protocol):
     does; test fakes need not, so they are not part of this protocol.
     """
 
-    async def consolidate_now(self) -> int: ...
+    async def consolidate_now(self) -> int:
+        """Protocol method."""
 
     async def downscale(self, protect: Sequence[Any] = (), *, prune: bool = True) -> dict[str, Any]:
         """Downscale trace strengths, protecting the replayed traces, then prune unless prune is false (paper A.10)."""
 
-    async def replay_now(self) -> list[Any]: ...
+    async def replay_now(self) -> list[Any]:
+        """Protocol method."""
 
 
 class _SupportsAffectiveReset(Protocol):
-    async def affective_reset(self) -> None: ...
+    async def affective_reset(self) -> None:
+        """Protocol method."""
 
 
 class _SupportsTimeReset(Protocol):
     """Anything sequence-module-shaped that exposes a reset/recalibrate entry."""
 
-    def reset(self) -> None: ...
+    def reset(self) -> None:
+        """Protocol method."""
 
 
 # ---------------------------------------------------------------------------
@@ -212,9 +223,7 @@ async def deep_consolidation(
         # Suspend external perception (freeze/locus machinery).
         if suspend_perception is not None:
             try:
-                result = suspend_perception()
-                if asyncio.iscoroutine(result):
-                    await result
+                await _call_hook(suspend_perception)
                 perception_suspended = True
                 metadata["perception_suspended"] = True
                 log.debug("deep_consolidation: external perception suspended")
@@ -255,9 +264,7 @@ async def deep_consolidation(
         # Always restore perception (even on error): safety invariant.
         if restore_perception is not None:
             try:
-                result = restore_perception()
-                if asyncio.iscoroutine(result):
-                    await result
+                await _call_hook(restore_perception)
                 if perception_suspended:
                     metadata["perception_restored"] = True
                 log.debug("deep_consolidation: external perception restored")

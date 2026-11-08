@@ -10,8 +10,10 @@ from typing import Protocol, runtime_checkable
 
 @runtime_checkable
 class SceneHabituator(Protocol):
-    def observe(self, embedding: list[float]) -> float: ...
-    def reset(self) -> None: ...
+    def observe(self, embedding: list[float]) -> float:
+        """Protocol method."""
+    def reset(self) -> None:
+        """Protocol method."""
 
 
 class RollingMeanHabituator:

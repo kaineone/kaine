@@ -260,7 +260,7 @@ async def test_job_queue_rejects_bad_result_and_does_not_promote(
     service_task = asyncio.create_task(fake_service())
     with pytest.raises(SubprocessTrainerError, match="abliteration_passed"):
         await trainer.train([_pair()], cfg)
-    await service_task
+    _ = await service_task
 
     adapters = Path(cfg.adapter_output_dir)
     assert not any(
@@ -323,7 +323,7 @@ async def test_job_queue_appends_abliteration_verdict(tmp_path, monkeypatch):
 
     service_task = asyncio.create_task(fake_service())
     result = await trainer.train([_pair()], cfg)
-    await service_task
+    _ = await service_task
 
     assert result.accepted is False
 
@@ -401,7 +401,7 @@ async def test_job_queue_retention_evicts_after_promotion(tmp_path, monkeypatch)
 
     service_task = asyncio.create_task(fake_service())
     result = await trainer.train([_pair()], cfg)
-    await service_task
+    _ = await service_task
 
     assert result.accepted is True
     assert not old_dir.exists()

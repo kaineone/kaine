@@ -51,13 +51,15 @@ def test_wait_exec_treats_an_unreaped_child_as_dead():
     import sys
     import time
 
+    script = "".join([
+        "import os, sys, time\n",
+        "pid = os.fork()\n",
+        "if pid == 0:\n    os._exit(3)\n",
+        "print(pid, flush=True)\n",
+        "time.sleep(10)\n",
+    ])
     holder = subprocess.Popen(
-        [sys.executable, "-c",
-         "import os, sys, time\n"
-         "pid = os.fork()\n"
-         "if pid == 0:\n    os._exit(3)\n"
-         "print(pid, flush=True)\n"
-         "time.sleep(10)\n"],
+        [sys.executable, "-c", script],
         stdout=subprocess.PIPE, text=True,
     )
     try:

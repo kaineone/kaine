@@ -338,7 +338,7 @@ async def test_concurrent_sleep_rejected(bus: AsyncBus, tmp_path: Path):
     with pytest.raises(SleepBusyError):
         await sleep.enter_sleep()
     hold.set()
-    await first
+    _ = await first
 
 
 @pytest.mark.asyncio

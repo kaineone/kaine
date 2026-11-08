@@ -41,11 +41,16 @@ class SynthesisResult:
 @runtime_checkable
 class TTSClient(Protocol):
     @property
-    def base_url(self) -> str: ...
+    def base_url(self) -> str:
+        pass
 
-    async def synthesize(self, request: TTSRequest) -> SynthesisResult: ...
+    async def synthesize(self, request: TTSRequest) -> SynthesisResult:
 
-    async def aclose(self) -> None: ...
+        pass
+
+    async def aclose(self) -> None:
+
+        pass
 
 
 class ChatterboxClient:

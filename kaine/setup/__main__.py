@@ -493,6 +493,7 @@ def _run_web(
         try:
             webbrowser.open(_launch_redirect_file(url).as_uri())
         except Exception:
+            # Best effort: the URL was already printed for manual opening.
             pass
 
     serve("127.0.0.1", 0, app=app, setup_token=token, on_ready=on_ready)

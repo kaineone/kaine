@@ -1902,7 +1902,7 @@ def test_events_end_when_shutting_down(tmp_path):
             if isinstance(item, dict):
                 break
 
-        await flip_task
+        _ = await flip_task
         assert any(isinstance(i, dict) for i in items)
         await runner.shutdown()
 

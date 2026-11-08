@@ -40,9 +40,12 @@ OnStateChange = Callable[[str, dict], None]
 
 @runtime_checkable
 class _VideoSource(Protocol):
-    def open(self) -> bool: ...
-    def read(self) -> tuple[bool, Any]: ...
-    def release(self) -> None: ...
+    def open(self) -> bool:
+        """Protocol method."""
+    def read(self) -> tuple[bool, Any]:
+        """Protocol method."""
+    def release(self) -> None:
+        """Protocol method."""
 
 
 @dataclass(frozen=True)
@@ -362,7 +365,7 @@ class LiveCamera:
             return
         # Drop the raw BGR ndarray immediately. PIL.Image holds the RGB
         # copy and gets handed off; the input ndarray is GC'd here.
-        frame = None  # noqa: F841
+        del frame
         try:
             await self._sink(image)
         except Exception:

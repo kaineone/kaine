@@ -113,7 +113,7 @@ def test_embedder_encode_loads_if_needed(bert_dir: Path) -> None:
 def test_embedder_unload_waits_for_inflight(
     bert_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import kaine.text_embedding_numpy as ten_mod
+    from kaine import text_embedding_numpy as ten_mod
 
     original_forward = ten_mod.bert_forward
 
@@ -292,7 +292,7 @@ def test_torch_unload_in_gap_returns_ones(monkeypatch: pytest.MonkeyPatch) -> No
 def test_numpy_double_cancel_does_not_leak_inflight(
     bert_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import kaine.text_embedding_numpy as ten_mod
+    from kaine import text_embedding_numpy as ten_mod
 
     original_forward = ten_mod.bert_forward
 
@@ -408,7 +408,7 @@ def test_sentence_double_cancel_does_not_leak_inflight(
 def test_numpy_cancelled_encode_unload_waits_for_worker_thread(
     bert_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import kaine.text_embedding_numpy as ten_mod
+    from kaine import text_embedding_numpy as ten_mod
 
     original_forward = ten_mod.bert_forward
 
@@ -438,7 +438,7 @@ def test_numpy_cancelled_encode_unload_waits_for_worker_thread(
 
             encode_task.cancel()
             with pytest.raises(asyncio.CancelledError):
-                await encode_task
+                _ = await encode_task
 
             unload_task = asyncio.create_task(embedder.unload())
             await asyncio.sleep(0.1)
@@ -506,7 +506,7 @@ def test_sentence_cancelled_encode_unload_waits_for_worker_thread(
 
             encode_task.cancel()
             with pytest.raises(asyncio.CancelledError):
-                await encode_task
+                _ = await encode_task
 
             unload_task = asyncio.create_task(embedder.unload())
             await asyncio.sleep(0.1)

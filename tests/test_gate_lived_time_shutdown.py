@@ -116,7 +116,7 @@ async def test_cancelled_run_task_records() -> None:
     clock.t = 30.0
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
-        await task
+        _ = await task
     assert lifecycle_stage.read_stage().lived_seconds == pytest.approx(30.0)
 
 

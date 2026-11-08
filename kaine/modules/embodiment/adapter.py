@@ -113,27 +113,21 @@ class EmbodimentAdapter(Protocol):
 
     def capabilities(self) -> EmbodimentCapabilities:
         """Return the (immutable) capability descriptor for this body."""
-        ...
 
     async def open(self) -> None:
         """Bind the socket / connect / spawn the transport for this body."""
-        ...
 
     async def close(self) -> None:
         """Tear the transport down; idempotent."""
-        ...
 
     def feed(self) -> AsyncIterator[FeedFrame]:
         """Yield perception frames (body → core) until the body disconnects."""
-        ...
 
     async def apply_action(self, family: str, params: dict[str, Any]) -> bool:
         """Symbolic sink: perform action ``family`` with ``params``; True on send."""
-        ...
 
     async def apply_setpoints(self, channels: dict[str, float]) -> bool:
         """Continuous sink: drive graded ``channels``; True on send.
 
         A body with no continuous channels returns ``False`` (unsupported).
         """
-        ...

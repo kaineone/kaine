@@ -205,7 +205,7 @@ def test_supervisor_liveness_poll_does_not_scale():
     # The supervisor source must not reach for the subjective clock at all.
     import inspect
 
-    import kaine.cycle.supervisor as supervisor_mod
+    from kaine.cycle import supervisor as supervisor_mod
 
     assert "EntityClock" not in inspect.getsource(supervisor_mod)
 
