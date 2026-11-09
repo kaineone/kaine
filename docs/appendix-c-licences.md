@@ -133,6 +133,9 @@ The trainer container ([`Dockerfile`](../Dockerfile)) installs its own copy of `
 | sherpa-onnx Moonshine base/tiny | see upstream | Fetched at setup ([`kaine/setup/speech_models.py`](../kaine/setup/speech_models.py)) |
 | Kokoro v0.19 | see upstream | Fetched at setup ([`kaine/setup/speech_models.py`](../kaine/setup/speech_models.py)) |
 | Chatterbox TTS | per upstream / not bundled | Operator-provided host service; not distributed with KAINE. Confirm with your Chatterbox installation before deployment. |
+| Qwen3-TTS-12Hz-0.6B-Base (`Qwen/Qwen3-TTS-12Hz-0.6B-Base`, Qwen team / Alibaba) | Apache-2.0 | Base model for the Sam voice fine-tune |
+| Sam non-binary voice dataset (`Sam-Accenture-Non-Binary-Voice/non-binary-voice-files`, Accenture Labs / CereProc) | Apache-2.0 | Training data for the Sam voice. Voice talent: Mel Murphy. Prosody donor: Avery Smith. |
+| Published KAINE voice: `kaineone/Qwen3-TTS-Sam-0.6B` | Apache-2.0 | KAINE's fine-tune of Qwen3-TTS-12Hz-0.6B-Base on the Sam dataset; fetched at setup when `backend = "qwen3_tts"` |
 
 ## Vendored third-party code
 

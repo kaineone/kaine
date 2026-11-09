@@ -50,6 +50,19 @@ subject to the pretty light restrictions detailed below.
 ############################################################################
 ```
 
+## Sam voice model (Qwen3-TTS)
+
+The shipped Qwen3-TTS voice, `kaineone/Qwen3-TTS-Sam-0.6B` (Apache 2.0), is a
+fine-tune of `Qwen/Qwen3-TTS-12Hz-0.6B-Base` (Qwen team at Alibaba, Apache 2.0)
+trained on the Sam non-binary voice dataset
+(`Sam-Accenture-Non-Binary-Voice/non-binary-voice-files`, Apache 2.0). The
+dataset was created by Accenture Labs in collaboration with CereProc, with voice
+recordings from voice talent Mel Murphy and prosody data from donor Avery Smith.
+No voice audio ships with KAINE; the model weights are downloaded from
+HuggingFace during setup with operator consent. The original dataset and its
+licence are at
+<https://github.com/Sam-Accenture-Non-Binary-Voice/non-binary-voice-files>.
+
 ## Front-end / Nexus console assets
 
 | Component | Files | License (SPDX) | License text | Origin |
