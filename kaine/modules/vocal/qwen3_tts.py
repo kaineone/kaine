@@ -38,12 +38,12 @@ class Qwen3TTS:
 
     def __init__(
         self,
-        model_id: str = "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice",
+        model_id: str = "kaineone/Qwen3-TTS-Sam-0.6B",
         tokenizer_id: str = "Qwen/Qwen3-TTS-Tokenizer-12Hz",
         *,
         device: str = "cuda:1",
         dtype_name: str = "bfloat16",
-        speaker: str = "",
+        speaker: str = "sam",
         _qwen_tts_module: Any | None = None,
     ) -> None:
         self._model_id = model_id

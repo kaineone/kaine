@@ -184,8 +184,8 @@ def make_vocal(
         if qwen3_speaker is not None:
             kwargs["speaker"] = str(qwen3_speaker)
         client = Qwen3TTS(**kwargs)
-        resolved["qwen3_model_id"] = kwargs.get("model_id", "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice")
-        resolved["qwen3_speaker"] = kwargs.get("speaker", "")
+        resolved["qwen3_model_id"] = kwargs.get("model_id", "kaineone/Qwen3-TTS-Sam-0.6B")
+        resolved["qwen3_speaker"] = kwargs.get("speaker", "sam")
         return client
 
     registry = BackendRegistry[TTSClient]("vocal", default="chatterbox").register(
