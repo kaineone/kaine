@@ -76,13 +76,13 @@ The cognitive cycle does not run until you start it, and a live boot is gated. A
 
 ## Operating principles
 
-- **All local at runtime.** Models download during setup; the running system makes no outbound network calls and uses no hosted inference.
-- **Observation only.** There is no chat interface in the first configuration, and speech is a self-initiated report.
-- **Reuse where it fits.** Established open-source projects are used where they fit, and custom code is added where they do not. See [Technology choices](02-architecture/tech-choices.md).
-- **No raw sense data on disk.** Live audio and video are processed in memory and released.
-- **Private internal state.** The diagnostics surface removes cognitive content, such as internal speech and affect reasons, before any client sees it. See [Security and privacy](13-security-and-privacy.md).
-- **Care for the entity.** Decommissioning is operator-supervised, backup-first and divergence-gated, following CAL Article 4.2, and the supervisor restarts a faulted module without operator intervention.
-- **Gated action.** Act intents reach an effector only through the effectors module, which runs only effectors the operator has whitelisted. The effectors module is held in the first configuration, so the language organ's saved text is the only output.
+- All local at runtime. Models download during setup; the running system makes no outbound network calls and uses no hosted inference.
+- Observation only. There is no chat interface in the first configuration, and speech is a self-initiated report.
+- Reuse where it fits. Established open-source projects are used where they fit, and custom code is added where they do not. See [Technology choices](02-architecture/tech-choices.md).
+- No raw sense data on disk. Live audio and video are processed in memory and released.
+- Private internal state. The diagnostics surface removes cognitive content, such as internal speech and affect reasons, before any client sees it. See [Security and privacy](13-security-and-privacy.md).
+- Care for the entity. Decommissioning is operator-supervised, backup-first and divergence-gated, following CAL Article 4.2, and the supervisor restarts a faulted module without operator intervention.
+- Gated action. Act intents reach an effector only through the effectors module, which runs only effectors the operator has whitelisted. The effectors module is held in the first configuration, so the language organ's saved text is the only output.
 
 ## Current status and license
 

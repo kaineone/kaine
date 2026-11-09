@@ -374,7 +374,7 @@ Retention: `[evaluation.paths].retention_days` ships as `0`, which keeps every f
 
 `[evaluation]` does not set `chat_model_id`; the sidecar uses the language module's model identifier, and an explicit value must match it. See the [language module](../09-modules/language.md) and `kaine/evaluation/config.py`. The `[evaluation]` section also accepts `llm_context_window_seconds`; its default is in `kaine/evaluation/config.py`.
 
-Two additional `[evaluation]` keys are worth noting:
+Two additional `[evaluation]` keys apply here:
 
 - `oscillatory_ablation` (default `false`) enables the live oscillatory-ablation recorder.
 - `require_semantic_embedder` is a fail-closed guard: when set, instruments that need a sentence-transformer embedder refuse to run if none is available, instead of degrading to a non-semantic fallback.
