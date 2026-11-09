@@ -78,7 +78,7 @@ def _make_client(fake_module: types.ModuleType, **kwargs: Any) -> Qwen3TTS:
 class TestConstruction:
     def test_base_url_uses_short_name(self, fake_module: types.ModuleType) -> None:
         client = _make_client(fake_module)
-        assert client.base_url == "qwen3-tts://Qwen3-TTS-12Hz-0.6B-CustomVoice"
+        assert client.base_url == "qwen3-tts://Qwen3-TTS-Sam-0.6B"
 
     def test_not_loaded_initially(self, fake_module: types.ModuleType) -> None:
         client = _make_client(fake_module)
