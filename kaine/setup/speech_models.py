@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Callable
 
 from kaine.model_paths import (  # noqa: F401 - re-exported for callers
+    DEFAULT_SPEAKER_EMBEDDING,
     DEFAULT_STT,
     DEFAULT_TTS,
     models_dir,
@@ -67,8 +68,10 @@ def _write_verified_marker(model: SpeechModel, target: Path) -> None:
         "model_id": model.id,
         "sha256": model.sha256,
         "files": files,
-        "tokens_sha256": _sha256_file(target / "tokens.txt"),
     }
+    tokens_path = target / "tokens.txt"
+    if tokens_path.exists():
+        marker["tokens_sha256"] = _sha256_file(tokens_path)
     with open(target / ".verified", "w", encoding="utf-8") as f:
         json.dump(marker, f, indent=2, sort_keys=True)
 
@@ -78,7 +81,10 @@ def describe(model_id: str) -> str:
     model = MANIFEST.get(model_id)
     if model is None:
         return f"{model_id}: unknown model"
-    purpose = "speech-to-text" if model.kind == "stt" else "text-to-speech"
+    purpose = {
+        "stt": "speech-to-text",
+        "speaker_embedding": "speaker embedding",
+    }.get(model.kind, "text-to-speech")
     mb = model.size_bytes / 1_000_000
     return f"{model.id}: {model.title} ({purpose}), {mb:.1f} MB, {model.licence}"
 
@@ -207,6 +213,26 @@ def fetch(
                 detail=f"sha256 mismatch: expected {model.sha256}, got {actual_hash}",
             )
 
+        if model.is_single_file:
+            try:
+                if target.is_symlink():
+                    target.unlink()
+                elif target.exists():
+                    if target.is_dir():
+                        shutil.rmtree(target)
+                    else:
+                        target.unlink()
+                target.mkdir(parents=True)
+                shutil.copyfile(archive_path, target / model.archive_name)
+                _write_verified_marker(model, target)
+            except OSError as exc:
+                return FetchResult(
+                    model_id=model_id, ok=False, detail=f"install failed: {exc}"
+                )
+            return FetchResult(
+                model_id=model_id, ok=True, detail="installed", path=target
+            )
+
         extract_dir = Path(tmp) / "extract"
         extract_dir.mkdir()
 
@@ -267,6 +293,15 @@ def required_speech_models(config: dict) -> list[str]:
             else:
                 warnings.warn(f"skipping unknown speech model id: {stt_id}")
 
+    if bool(audition.get("speaker_embedding_enabled", False)):
+        se_id = str(
+            audition.get("speaker_embedding_model_id", DEFAULT_SPEAKER_EMBEDDING)
+        ).strip()
+        if se_id in MANIFEST:
+            ids.append(se_id)
+        else:
+            warnings.warn(f"skipping unknown speech model id: {se_id}")
+
     vocal = config.get("vocal") or {}
     if str(vocal.get("backend", "chatterbox")).strip().lower() == "sherpa_onnx":
         tts_id = str(vocal.get("sherpa_model_id", DEFAULT_TTS)).strip()
@@ -283,7 +318,7 @@ def main(
     input_fn: Callable[[str], str] = input,
     downloader: Callable[[str, str], None] | None = None,
 ) -> int:
-    """CLI: ``python -m kaine.setup.speech_models [--stt ID] [--tts ID] [--yes] [--root DIR]``."""
+    """CLI: ``python -m kaine.setup.speech_models [--stt ID] [--tts ID] [--speaker-embedding ID] [--yes] [--root DIR]``."""
     parser = argparse.ArgumentParser(
         prog="python -m kaine.setup.speech_models",
         description=(
@@ -295,6 +330,9 @@ def main(
     )
     parser.add_argument("--stt", metavar="ID", help="STT model id to fetch")
     parser.add_argument("--tts", metavar="ID", help="TTS model id to fetch")
+    parser.add_argument(
+        "--speaker-embedding", metavar="ID", help="speaker embedding model id to fetch"
+    )
     parser.add_argument("--yes", action="store_true", help="skip confirmation")
     parser.add_argument("--root", metavar="DIR", default=None, help="models root directory")
     args = parser.parse_args(argv)
@@ -326,6 +364,19 @@ def main(
             )
             return 2
         selected.append(args.tts)
+    if args.speaker_embedding:
+        sid = args.speaker_embedding
+        if sid not in MANIFEST:
+            print(f"unknown speaker embedding model id: {sid}", file=sys.stderr)
+            return 2
+        if MANIFEST[sid].kind != "speaker_embedding":
+            print(
+                f"model {sid} is not a speaker embedding model "
+                f"(expected kind 'speaker_embedding', got '{MANIFEST[sid].kind}')",
+                file=sys.stderr,
+            )
+            return 2
+        selected.append(sid)
     if not selected:
         selected = [DEFAULT_STT, DEFAULT_TTS]
 

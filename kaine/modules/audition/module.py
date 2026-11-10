@@ -25,6 +25,7 @@ from kaine.modules.positive_control import (
 from kaine.workspace.feedback import FEEDBACK_KEY, WorkspaceFeedbackSettings
 
 if TYPE_CHECKING:
+    from kaine.modules.audition.speaker_embedder import SpeakerEmbedder
     from kaine.modules.vocal.coordination import SpeakingGate
 from kaine.bus.streams import SLEEP_STREAM
 from kaine.modules.audition.acoustic import (
@@ -141,6 +142,7 @@ class Audition(BaseModule):
         entity_clock: Optional[EntityClock] = None,
         positive_control: Optional[PositiveControlSettings] = None,
         workspace_feedback: Optional[WorkspaceFeedbackSettings] = None,
+        speaker_embedder: Optional["SpeakerEmbedder"] = None,
     ) -> None:
         super().__init__(bus)
         if not 0.0 <= baseline_salience <= 1.0:
@@ -228,6 +230,10 @@ class Audition(BaseModule):
         # sizes the auditory attentional window. Audition never imports the
         # workspace; None → widest window.
         self._arousal_provider: Optional[Callable[[], float]] = None
+
+        # Speaker embedding (perceptual identity). Injected by the factory when
+        # speaker_embedding_enabled is true; None = disabled.
+        self._speaker_embedder: Optional["SpeakerEmbedder"] = speaker_embedder
 
         # sleep suspension state.
         self._in_sleep: bool = False
@@ -731,6 +737,16 @@ class Audition(BaseModule):
                     exc,
                     exc_info=True,
                 )
+        if self._speaker_embedder is not None:
+            try:
+                await self._speaker_embedder.warm_up()
+            except Exception as exc:
+                log.warning(
+                    "speaker embedding disabled: %s",
+                    exc,
+                    exc_info=True,
+                )
+                self._speaker_embedder = None
 
     async def shutdown(self) -> None:
         if self._live_mic is not None:
@@ -740,7 +756,7 @@ class Audition(BaseModule):
                 log.warning("live mic shutdown failed", exc_info=True)
         await super().shutdown()
         await self.finish_positive_control()
-        for closeable in (self._stt_client, self._emotion_classifier):
+        for closeable in (self._stt_client, self._emotion_classifier, self._speaker_embedder):
             try:
                 shutdown = getattr(closeable, "shutdown", None) or getattr(
                     closeable, "aclose", None
@@ -816,21 +832,38 @@ class Audition(BaseModule):
         emo_task = asyncio.create_task(
             self._emotion_classifier.classify(audio_bytes, sample_rate=sample_rate)
         )
+
+        se_task = None
+        if self._speaker_embedder is not None:
+            se_task = asyncio.create_task(
+                self._speaker_embedder.extract(audio_bytes, sample_rate=sample_rate)
+            )
+
         # STT is gated: when transcription is disabled the model is never invoked
         # (the entity hears sound as prediction error, not a transcript). Emotion
         # still runs — it is an affective state signal, not a transcript.
+        parallel: list[Any] = []
         if self._transcription_enabled:
-            stt_task = asyncio.create_task(
+            parallel.append(asyncio.create_task(
                 self._stt_client.transcribe(
                     audio_bytes, sample_rate=sample_rate, model=self._stt_model
                 )
-            )
-            stt_result_or_exc, emo_result_or_exc = await asyncio.gather(
-                stt_task, emo_task, return_exceptions=True
-            )
+            ))
+        parallel.append(emo_task)
+        if se_task is not None:
+            parallel.append(se_task)
+
+        results = await asyncio.gather(*parallel, return_exceptions=True)
+
+        idx = 0
+        if self._transcription_enabled:
+            stt_result_or_exc = results[idx]
+            idx += 1
         else:
             stt_result_or_exc = None
-            (emo_result_or_exc,) = await asyncio.gather(emo_task, return_exceptions=True)
+        emo_result_or_exc = results[idx]
+        idx += 1
+        se_result_or_exc = results[idx] if se_task is not None else None
 
         # ------------------------------------------------------------------
         # Forward model step: build feature vector from emotion result.
@@ -927,6 +960,9 @@ class Audition(BaseModule):
                 error_ratio=tone_ratio,
                 error_defined=tone_error_defined,
             )
+
+        if se_result_or_exc is not None:
+            await self._publish_speaker_embedding(se_result_or_exc, source_label)
 
         return stt_result, emo_result
 
@@ -1124,6 +1160,39 @@ class Audition(BaseModule):
             "audition.emotion",
             payload,
             salience=salience,
+        )
+
+    async def _publish_speaker_embedding(
+        self, result_or_exc: Any, source_label: str
+    ) -> None:
+        if isinstance(result_or_exc, BaseException):
+            log.warning("speaker embedding failed: %s", result_or_exc)
+            await self.publish(
+                "audition.speaker_embedding",
+                {
+                    "embedding": None,
+                    "source_label": source_label,
+                    "confidence": 0.0,
+                    "degraded": True,
+                    "dim": 0,
+                    "error": f"{type(result_or_exc).__name__}: {result_or_exc}",
+                },
+                salience=self._baseline_salience,
+            )
+            return
+        payload: dict[str, Any] = {
+            "embedding": result_or_exc.embedding,
+            "source_label": source_label,
+            "confidence": result_or_exc.confidence,
+            "degraded": result_or_exc.degraded,
+            "dim": result_or_exc.dim,
+        }
+        if result_or_exc.degraded:
+            payload["embedding"] = None
+        await self.publish(
+            "audition.speaker_embedding",
+            payload,
+            salience=self._baseline_salience,
         )
 
     def serialize(self) -> dict[str, Any]:

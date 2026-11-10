@@ -99,6 +99,10 @@ def make_audition(
         "acoustic_change_alert_factor",
         "acoustic_encoder",
         "acoustic_device",
+        # Speaker embedding (perceptual identity). Off by default.
+        "speaker_embedding_enabled",
+        "speaker_embedding_model_id",
+        "speaker_embedding_num_threads",
         # Unified deterministic perception feed (unified-perception-feed). The
         # resolved top-level [perception_feed] config, injected by build_registry
         # under this reserved key. Selecting seeded/playlist supplies a
@@ -252,6 +256,38 @@ def make_audition(
     # STT gate (default true = unchanged). When false, no transcript path.
     if "transcription_enabled" in section:
         kwargs["transcription_enabled"] = bool(section["transcription_enabled"])
+
+    # Speaker embedding (perceptual identity). When enabled, construct a
+    # SpeakerEmbedder from the provisioned model path.
+    if bool(section.get("speaker_embedding_enabled", False)):
+        from kaine.model_paths import DEFAULT_SPEAKER_EMBEDDING, speech_model_dir
+        from kaine.modules.audition.speaker_embedder import SpeakerEmbedder
+
+        se_model_id = str(
+            section.get("speaker_embedding_model_id", DEFAULT_SPEAKER_EMBEDDING)
+        ).strip()
+        se_model_dir = speech_model_dir(se_model_id)
+        from kaine.speech_manifest import MANIFEST
+
+        se_manifest = MANIFEST.get(se_model_id)
+        if se_manifest is not None:
+            se_model_path = se_model_dir / se_manifest.archive_name
+        else:
+            se_model_path = se_model_dir / f"{se_model_id}.onnx"
+        se_num_threads = int(section.get("speaker_embedding_num_threads", 1))
+        try:
+            kwargs["speaker_embedder"] = SpeakerEmbedder(
+                se_model_path,
+                num_threads=se_num_threads,
+            )
+        except Exception as exc:
+            log.warning(
+                "speaker embedding disabled: %s. "
+                "Fetch the model: python -m kaine.setup.speech_models "
+                "--speaker-embedding %s",
+                exc,
+                se_model_id,
+            )
 
     # Backend seam (openspec runtime-backends). The backend value is normalised
     # once and all disclosures derive from the resolved backend.
