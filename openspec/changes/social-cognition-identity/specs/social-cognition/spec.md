@@ -1,0 +1,42 @@
+# Spec Delta
+
+## MODIFIED Requirements
+
+### Requirement: Per-agent models with familiarity score
+The social cognition module SHALL maintain a model per interacting agent (emotion histogram, behavioral summary, reliability, interaction count, first/last seen, voice centroid, face centroid, per-modality exemplar buffers, per-modality sample counts, modality binding state, and binding confidence) and SHALL expose a `familiarity()` score in [0,1] that increases monotonically with interaction count, model coverage, and embedding-based evidence (exemplar count and centroid stability). Agent profiles SHALL persist via a Qdrant-backed store (with an in-memory backend for tests).
+
+#### Scenario: Familiarity incorporates perceptual evidence
+- **WHEN** an agent has both voice and face centroids with high sample counts and stable centroids
+- **THEN** `familiarity()` SHALL return a higher score than for an agent with the same interaction count and emotion coverage but no perceptual embeddings
+
+#### Scenario: Familiarity without perceptual data
+- **WHEN** an agent has no voice or face embeddings (identity binding disabled or agent only known by label)
+- **THEN** `familiarity()` SHALL fall back to the existing computation based on interaction count and emotion category coverage
+
+#### Scenario: New embedding fields default to absent
+- **WHEN** an agent profile is loaded that was created before identity binding existed (no voice or face fields)
+- **THEN** the new fields SHALL default to absent (null centroids, empty exemplar buffers, zero sample counts, unbound state, null binding confidence) and the agent SHALL remain functional
+
+### Requirement: Agent profile fork/merge persistence
+The social cognition module SHALL implement `serialize()` / `deserialize()` on `AgentStore`, and the lifecycle layer SHALL provide an `SocialCognitionMergeStrategy` (beside `EpisodicMemoryMergeStrategy` in `kaine.lifecycle.strategies`) that `default_strategies()` registers under `"social_cognition"`, so that agent profiles survive the fork/merge cycle. On merge, the strategy MUST reconcile two diverged profile sets: interaction counts are summed, histograms, behavioural summaries and reliability are averaged with interaction count as the weight, `first_seen` takes the earlier and `last_seen` the later value. A behavioural-summary entry that is missing or null on one side is absent, not 0: an entry defined on both sides takes the count-weighted average, an entry defined on one side takes that side's value, an entry defined on neither side stays absent, and when the sides that hold a value have no interactions their plain mean is used. Voice and face centroids SHALL be merged by sample-count-weighted averaging; exemplar buffers SHALL be unioned with deduplication by similarity threshold; binding state SHALL take the side with higher binding confidence; binding confidence SHALL take the maximum. The merged profiles SHALL be carried in the merged snapshot; restoring that snapshot loads them into the store, which serves them before any Qdrant copy and writes each to Qdrant on its next update.
+
+#### Scenario: Merge reconciles embedding centroids
+- **WHEN** two forks diverge and both update the same agent's voice centroid with different observations
+- **THEN** the merged centroid SHALL be the sample-count-weighted average of the two centroids
+
+#### Scenario: Merge with one side lacking embeddings
+- **WHEN** one fork has voice and face centroids for an agent and the other fork has none
+- **THEN** the merged agent SHALL retain the centroids from the fork that has them
+
+## ADDED Requirements
+
+### Requirement: Social cognition consumes identity update events
+The social cognition module SHALL subscribe to `social_cognition.identity_update` events from the identity-binding system and SHALL use the resolved agent id to attribute subsequent emotion and transcription events, replacing the static operator-label attribution when identity binding is enabled and a match is available.
+
+#### Scenario: Identity-resolved attribution replaces label
+- **WHEN** identity binding resolves the current speaker to a known agent and an `audition.emotion` event arrives
+- **THEN** the social cognition module SHALL attribute the emotion to the identity-resolved agent rather than the configured operator label
+
+#### Scenario: Fallback to label when identity unavailable
+- **WHEN** identity binding is disabled or no speaker has been identified
+- **THEN** the social cognition module SHALL fall back to the existing channel-based operator-label attribution
