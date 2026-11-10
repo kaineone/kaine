@@ -1085,6 +1085,15 @@ prosody_enabled = false
 # alone (paper A.8); studies set it.
 tone_rule = "categorical"
 
+# Speaker embedding (perceptual identity). Off by default. When enabled,
+# each processed audio window is also embedded by the speaker identification
+# model and published as audition.speaker_embedding. Requires the speech-edge
+# extra and the speaker embedding model (pip install 'kaine[speech-edge]';
+# python -m kaine.setup.speech_models --speaker-embedding wespeaker-cam++-en).
+speaker_embedding_enabled = false
+# speaker_embedding_model_id = "wespeaker-cam++-en"
+# speaker_embedding_num_threads = 1
+
 # Unified deterministic perception feed (reproducible research stimulus). A
 # SINGLE top-level section that drives BOTH the vision surface (the vision module) and the
 # hearing surface (Audition) from one source of truth, so picture and sound
