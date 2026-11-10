@@ -164,6 +164,13 @@ SAFE_SAMPLES: dict[tuple[str, str], dict[str, Any]] = {
         "salience": 0.7,
         "deviation_magnitude": 0.45,
     },
+    ("social_cognition", "social_cognition.identity_update"): {
+        "agent_id": "person:a1b2c3d4",
+        "modality": "voice",
+        "confidence": 0.92,
+        "is_new": False,
+        "binding_confidence": 0.85,
+    },
     ("vocal", "vocal.synthesized"): {
         "text_length": 37,
         "bytes_produced": 88200,
@@ -382,6 +389,7 @@ def test_only_the_agent_fields_admit_a_free_word():
     assert admitting == [
         (("social_cognition", "social_cognition.agent_model"), "agent_id"),
         (("social_cognition", "social_cognition.agent_model"), "agent_label"),
+        (("social_cognition", "social_cognition.identity_update"), "agent_id"),
         (("social_cognition", "social_cognition.social_error"), "agent_id"),
         (("social_cognition", "social_cognition.social_error"), "agent_label"),
     ]
@@ -442,10 +450,12 @@ def test_audition_channels_match_the_code():
 
 def test_agent_ids_come_only_from_config_or_a_channel():
     """Structural: the social cognition module creates an agent only with
-    ``id=agent_id, label=agent_id``; every ``agent_id`` is ``self._agent_for(event)``;
-    ``_agent_for`` returns only the configured speaker label or
-    ``media:<source_label>``; and ``source_label`` is the event's channel. A
-    change that takes agent names from heard speech fails here."""
+    ``id=agent_id, label=agent_id``; every ``agent_id`` is assigned from an
+    audited safe source (event routing, identity minting, or merge redirect);
+    ``_agent_for`` returns only the configured speaker label,
+    ``media:<source_label>``, or an identity-cache lookup; and
+    ``source_label`` is the event's channel. A change that takes agent names
+    from heard speech fails here."""
     import ast
 
     from kaine.modules.social_cognition import agent as agent_mod
@@ -466,13 +476,31 @@ def test_agent_ids_come_only_from_config_or_a_channel():
         and any(isinstance(t, ast.Name) and t.id == "agent_id" for t in n.targets)
     ]
     assert assigns
+    _SAFE_AGENT_ID_SOURCES = {
+        "self._agent_for(event)",
+        "self._merged_into[agent_id]",
+        "self._resolve_agent(agent_id)",
+    }
     for node in assigns:
-        assert ast.unparse(node.value) == "self._agent_for(event)"
+        code = ast.unparse(node.value)
+        safe = (
+            code in _SAFE_AGENT_ID_SOURCES
+            or ("person:" in code and "uuid" in code)
+        )
+        assert safe, f"agent_id assigned from unaudited source: {code}"
     agent_for = next(
         n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "_agent_for"
     )
     returns = sorted(ast.unparse(r.value) for r in ast.walk(agent_for) if isinstance(r, ast.Return))
-    assert returns == ["f'media:{source_label}'", "self._speaker_label"]
+    assert returns == ["f'media:{source_label}'", "identified", "self._speaker_label"]
+    identified_sources = [
+        ast.unparse(n.value) for n in ast.walk(agent_for)
+        if isinstance(n, ast.Assign)
+        and any(isinstance(t, ast.Name) and t.id == "identified" for t in n.targets)
+    ]
+    assert identified_sources == ["self._identity_cache.get(str(source_label))"], (
+        f"identified must come from identity cache, got: {identified_sources}"
+    )
     sources = [
         ast.unparse(n.value) for n in ast.walk(agent_for)
         if isinstance(n, ast.Assign)

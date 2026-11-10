@@ -23,6 +23,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import uuid
 from typing import Any, Optional, Protocol, Sequence, runtime_checkable
 
@@ -34,6 +35,52 @@ log = logging.getLogger(__name__)
 
 # Namespace used to derive deterministic Qdrant point IDs from agent IDs.
 _AGENT_ID_NAMESPACE = uuid.UUID("5b0c7d2e-8f41-4a3c-9d6e-1f2a3b4c5d6e")
+
+
+def _cos_sim(a: list[float], b: list[float]) -> float:
+    dot = sum(x * y for x, y in zip(a, b))
+    na = math.sqrt(sum(x * x for x in a))
+    nb = math.sqrt(sum(x * x for x in b))
+    if na == 0.0 or nb == 0.0:
+        return 0.0
+    return dot / (na * nb)
+
+
+def _modality_similarity(
+    embedding: list[float],
+    centroid: list[float] | None,
+    exemplars: list[dict[str, Any]],
+) -> float | None:
+    """Similarity to one modality of an agent; None when it has no data."""
+    if centroid is not None:
+        return _cos_sim(embedding, centroid)
+    if exemplars:
+        from kaine.modules.social_cognition.exemplar_buffer import ExemplarBuffer
+
+        buf: "ExemplarBuffer" = ExemplarBuffer(dim=len(embedding))
+        for item in exemplars:
+            buf.add(item["embedding"], timestamp=item.get("timestamp"))
+        return buf.match(embedding)
+    return None
+
+
+def _search_profiles(
+    profiles: dict[str, AgentModel],
+    embedding: list[float],
+    threshold: float,
+    *,
+    modality: str,
+) -> list[tuple[str, float]]:
+    out: list[tuple[str, float]] = []
+    for agent_id, model in profiles.items():
+        if modality == "voice":
+            sim = _modality_similarity(embedding, model.voice_centroid, model.voice_exemplars)
+        else:
+            sim = _modality_similarity(embedding, model.face_centroid, model.face_exemplars)
+        if sim is not None and sim >= threshold:
+            out.append((agent_id, sim))
+    out.sort(key=lambda t: t[1], reverse=True)
+    return out
 
 
 def _point_id(agent_id: str) -> str:
@@ -68,6 +115,19 @@ class AgentStore(Protocol):
 
     async def replace_all(self, models: Sequence[AgentModel]) -> None:
         """Protocol member: replace all."""
+
+    async def delete(self, agent_id: str) -> None:
+        """Protocol member: remove a single agent profile."""
+
+    async def search_by_voice(
+        self, embedding: list[float], threshold: float = 0.6
+    ) -> list[tuple[str, float]]:
+        """Return (agent_id, similarity) pairs above threshold, sorted descending."""
+
+    async def search_by_face(
+        self, embedding: list[float], threshold: float = 0.6
+    ) -> list[tuple[str, float]]:
+        """Return (agent_id, similarity) pairs above threshold, sorted descending."""
 
     def serialize(self) -> bytes:
         """Protocol member: serialize."""
@@ -115,6 +175,19 @@ class InMemoryAgentStore:
         self._profiles.clear()
         for model in models:
             self._profiles[model.id] = model
+
+    async def delete(self, agent_id: str) -> None:
+        self._profiles.pop(agent_id, None)
+
+    async def search_by_voice(
+        self, embedding: list[float], threshold: float = 0.6
+    ) -> list[tuple[str, float]]:
+        return _search_profiles(self._profiles, embedding, threshold, modality="voice")
+
+    async def search_by_face(
+        self, embedding: list[float], threshold: float = 0.6
+    ) -> list[tuple[str, float]]:
+        return _search_profiles(self._profiles, embedding, threshold, modality="face")
 
     def serialize(self) -> bytes:
         payload = {
@@ -388,6 +461,34 @@ class QdrantAgentStore:
             self._cache.clear()
             for model in models:
                 await self._put_strict(model)
+
+    async def delete(self, agent_id: str) -> None:
+        """Remove a single agent profile from Qdrant and the local cache."""
+        self._cache.pop(agent_id, None)
+        if self._client is None:
+            return
+        from qdrant_client import models  # type: ignore[import-untyped]
+
+        point_id = _point_id(agent_id)
+        try:
+            await self._client.delete(
+                collection_name=self._collection,
+                points_selector=models.PointIdsList(points=[point_id]),
+            )
+        except Exception:
+            log.warning("QdrantAgentStore.delete failed for %s", agent_id, exc_info=True)
+
+    async def search_by_voice(
+        self, embedding: list[float], threshold: float = 0.6
+    ) -> list[tuple[str, float]]:
+        # Brute force over the cache: perceptual embeddings are not in the Qdrant
+        # text-embedding space, and the expected population is under 100 agents.
+        return _search_profiles(self._cache, embedding, threshold, modality="voice")
+
+    async def search_by_face(
+        self, embedding: list[float], threshold: float = 0.6
+    ) -> list[tuple[str, float]]:
+        return _search_profiles(self._cache, embedding, threshold, modality="face")
 
     def serialize(self) -> bytes:
         """Lossless snapshot of all known profiles (from cache)."""

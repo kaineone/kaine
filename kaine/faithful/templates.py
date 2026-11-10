@@ -335,6 +335,15 @@ def _t_social_cognition_agent_model(payload: dict[str, Any]) -> str:
     return f"[Social cognition] {agent_label} familiarity={familiarity:.0%}"
 
 
+def _t_social_cognition_identity_update(payload: dict[str, Any]) -> str:
+    agent_id = payload.get("agent_id", "unknown")
+    modality = payload.get("modality", "unknown")
+    confidence = float(payload.get("confidence", 0.0))
+    is_new = payload.get("is_new", False)
+    action = "new agent" if is_new else "recognized"
+    return f"[Social cognition] identity {action}: {agent_id} via {modality} (confidence={confidence:.2f})"
+
+
 def _t_social_cognition_social_error(payload: dict[str, Any]) -> str:
     agent_label = payload.get("agent_label") or payload.get("agent_id", "unknown")
     deviation_magnitude = float(payload.get("deviation_magnitude", 0.0))
@@ -516,6 +525,7 @@ TEMPLATES: dict[tuple[str, str], TemplateFn] = {
     ("interoception", "interoception.regulation"): _t_interoception_regulation,
     ("social_cognition", "social_cognition.agent_model"): _t_social_cognition_agent_model,
     ("social_cognition", "social_cognition.social_error"): _t_social_cognition_social_error,
+    ("social_cognition", "social_cognition.identity_update"): _t_social_cognition_identity_update,
     ("world_model", "world_model.world_error"): _t_world_model_world_error,
     ("world_model", "world_model.scenario"): _t_world_model_scenario,
     ("planning", "planning.timeout"): _t_planning_timeout,

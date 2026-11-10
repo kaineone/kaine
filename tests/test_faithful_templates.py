@@ -173,6 +173,13 @@ _SAMPLE_PAYLOADS: dict[tuple[str, str], dict] = {
         "personality_baseline": {"openness": 0.8, "conscientiousness": 0.7},
         "capability_map": {"language": 0.9, "reasoning": 0.8},
     },
+    ("social_cognition", "social_cognition.identity_update"): {
+        "agent_id": "person:a1b2c3d4",
+        "modality": "voice",
+        "confidence": 0.92,
+        "is_new": False,
+        "binding_confidence": 0.85,
+    },
 }
 
 

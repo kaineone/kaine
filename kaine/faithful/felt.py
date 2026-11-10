@@ -402,6 +402,10 @@ def _f_social_cognition_social_error(payload: dict[str, Any]) -> str:
     return "Someone around me surprised me."
 
 
+def _f_social_cognition_identity_update(payload: dict[str, Any]) -> str:
+    return "I recognise someone by how they look or sound."
+
+
 def _f_world_model_world_error(payload: dict[str, Any]) -> str:
     return "Something in the world did not go as I expected."
 
@@ -669,6 +673,7 @@ FELT_FIELDS: dict[tuple[str, str], frozenset[str]] = {
     ("vocal", "vocal.synthesized"): frozenset({"success"}),
     ("social_cognition", "social_cognition.agent_model"): frozenset({"agent_label", "agent_id", "familiarity"}),
     ("social_cognition", "social_cognition.social_error"): frozenset(),
+    ("social_cognition", "social_cognition.identity_update"): frozenset(),
     ("world_model", "world_model.world_error"): frozenset(),
     ("world_model", "world_model.scenario"): frozenset(),
     ("sleep", "sleep.sleep.started"): frozenset(),
@@ -700,6 +705,7 @@ FELT_TEMPLATES: dict[tuple[str, str], TemplateFn] = {
     ("interoception", "interoception.regulation"): _guarded("interoception", _f_interoception_regulation),
     ("social_cognition", "social_cognition.agent_model"): _guarded("social_cognition", _f_social_cognition_agent_model),
     ("social_cognition", "social_cognition.social_error"): _guarded("social_cognition", _f_social_cognition_social_error),
+    ("social_cognition", "social_cognition.identity_update"): _guarded("social_cognition", _f_social_cognition_identity_update),
     ("world_model", "world_model.world_error"): _guarded("world_model", _f_world_model_world_error),
     ("world_model", "world_model.scenario"): _guarded("world_model", _f_world_model_scenario),
     ("planning", "planning.timeout"): _guarded("planning", _f_planning_timeout),

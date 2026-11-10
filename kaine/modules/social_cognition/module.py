@@ -11,22 +11,31 @@ Publishes:
   (numeric metadata only — no raw sense data).
 - ``social_cognition.social_error`` — salience-only signal (agent id, salience,
   deviation magnitude only — never raw behavioral data or transcript text).
+- ``social_cognition.identity_update`` — a voice or face embedding matched (or
+  minted) an agent; carries agent id, modality, confidence and binding
+  confidence, never the embedding.
 
-Agent identity v1: a single operator-set speaker label (default
-``"operator"``). Speaker diarization is future work (paper §10).
+Agent identity defaults to a single operator-set speaker label (default
+``"operator"``). With speaker or face identification enabled, voice and face
+embeddings are matched against known agents, new agents are minted for
+unmatched embeddings, and co-occurring voice and face identities are bound
+and merged by the cross-modal binder.
 """
 from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 from typing import Any, ClassVar, Optional, Sequence
 
 from kaine.bus.client import AsyncBus, tail_id
 from kaine.bus.schema import OPERATOR_SOURCES, Event
-from kaine.bus.streams import AUDITION_STREAM
+from kaine.bus.streams import AUDITION_STREAM, VISION_STREAM
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.modules.base import BaseModule
 from kaine.modules.social_cognition.agent import AgentModel
+from kaine.modules.social_cognition.binder import BindingObservation, CrossModalBinder
+from kaine.modules.social_cognition.exemplar_buffer import ExemplarBuffer
 from kaine.modules.social_cognition.store import AgentStore, InMemoryAgentStore, QdrantAgentStore
 from kaine.text_embedding import Embedder
 
@@ -58,6 +67,18 @@ class SocialCognition(BaseModule):
         qdrant_host: str = "127.0.0.1",
         qdrant_port: int = 6533,
         qdrant_api_key: Optional[str] = None,
+        speaker_identification_enabled: bool = False,
+        face_identification_enabled: bool = False,
+        speaker_identification_threshold: float = 0.6,
+        face_identification_threshold: float = 0.6,
+        co_occurrence_window_s: float = 3.0,
+        binding_merge_threshold: float = 0.9,
+        p_common_prior: float = 0.7,
+        exemplar_max_size: int = 20,
+        consolidation_threshold: int = 5,
+        exemplar_diversity_floor: float = 0.01,
+        exemplar_ema_decay: float = 0.9,
+        reliability_floor: float = 0.3,
     ) -> None:
         super().__init__(bus)
         if not 0.0 <= baseline_salience <= 1.0:
@@ -98,8 +119,34 @@ class SocialCognition(BaseModule):
         else:
             raise ValueError(f"unknown backend {backend!r}")
 
+        self._speaker_identification_enabled = bool(speaker_identification_enabled)
+        self._face_identification_enabled = bool(face_identification_enabled)
+        self._speaker_identification_threshold = float(speaker_identification_threshold)
+        self._face_identification_threshold = float(face_identification_threshold)
+        self._co_occurrence_window_s = float(co_occurrence_window_s)
+        self._binding_merge_threshold = float(binding_merge_threshold)
+        self._p_common_prior = float(p_common_prior)
+        self._exemplar_max_size = int(exemplar_max_size)
+        self._consolidation_threshold = int(consolidation_threshold)
+        self._exemplar_diversity_floor = float(exemplar_diversity_floor)
+        self._exemplar_ema_decay = float(exemplar_ema_decay)
+        self._reliability_floor = float(reliability_floor)
+
+        self._binder: Optional[CrossModalBinder] = None
+        if self._speaker_identification_enabled or self._face_identification_enabled:
+            self._binder = CrossModalBinder(
+                co_occurrence_window_s=self._co_occurrence_window_s,
+                merge_threshold=self._binding_merge_threshold,
+                p_common_prior=self._p_common_prior,
+            )
+        # source_label -> identified agent id, set by the voice identity path.
+        self._identity_cache: dict[str, str] = {}
+        self._merged_into: dict[str, str] = {}
+        self._merge_lock = asyncio.Lock()
+
         # Cursor for audition.out stream (emotion + transcription events).
         self._audition_cursor: str = "0-0"
+        self._vision_cursor: str = "0-0"
 
     @property
     def store(self) -> AgentStore:
@@ -120,6 +167,14 @@ class SocialCognition(BaseModule):
                 name="social-cognition-audition-consumer",
             )
         )
+        if self._face_identification_enabled:
+            self._vision_cursor = await tail_id(self._bus, VISION_STREAM)
+            self._tasks.append(
+                asyncio.create_task(
+                    self._vision_consumer_loop(),
+                    name="social-cognition-vision-consumer",
+                )
+            )
 
     async def shutdown(self) -> None:
         await super().shutdown()
@@ -170,12 +225,38 @@ class SocialCognition(BaseModule):
         except asyncio.CancelledError:
             raise
 
+    async def _vision_consumer_loop(self) -> None:
+        """Background loop: read vision.out for face detection events."""
+        try:
+            while not self._stopped.is_set():
+                try:
+                    entries, last_scanned = await self._bus.read_entries(
+                        VISION_STREAM,
+                        last_id=self._vision_cursor,
+                        count=32,
+                        block_ms=0,
+                    )
+                except Exception:
+                    await asyncio.sleep(0.05)
+                    continue
+                if last_scanned is not None:
+                    self._vision_cursor = last_scanned
+                    for _, event in entries:
+                        if event.type == "vision.face_detection":
+                            await self._handle_face_detection(event)
+                else:
+                    await asyncio.sleep(0.05)
+        except asyncio.CancelledError:
+            raise
+
     async def _handle_audition_event(self, event: Event) -> None:
         """Dispatch incoming audition events to the right handler."""
         if event.type == "audition.emotion":
             await self._handle_emotion(event)
         elif event.type == "audition.transcription":
             await self._handle_transcription(event)
+        elif event.type == "audition.speaker_embedding" and self._speaker_identification_enabled:
+            await self._handle_speaker_embedding(event)
 
     def _agent_for(self, event: Event) -> str:
         """Map an audition event to the agent id it updates.
@@ -185,6 +266,10 @@ class SocialCognition(BaseModule):
         agent so film voices cannot shape the operator model.
         """
         source_label = event.payload.get("source_label")
+        if self._speaker_identification_enabled and source_label is not None:
+            identified = self._identity_cache.get(str(source_label))
+            if identified is not None:
+                return identified
         if source_label is None or source_label in self._operator_sources:
             return self._speaker_label
         return f"media:{source_label}"
@@ -250,6 +335,249 @@ class SocialCognition(BaseModule):
         await self._store.put(model)
         await self._publish_agent_model(
             model, source_label=event.payload.get("source_label")
+        )
+
+    # ------------------------------------------------------------------
+    # Perceptual identity
+    # ------------------------------------------------------------------
+
+    def _make_buffer(self, dim: int) -> ExemplarBuffer:
+        return ExemplarBuffer(
+            dim,
+            max_size=self._exemplar_max_size,
+            consolidation_threshold=self._consolidation_threshold,
+            diversity_floor=self._exemplar_diversity_floor,
+            ema_decay=self._exemplar_ema_decay,
+            reliability_floor=self._reliability_floor,
+        )
+
+    def _rebuild_buffer(self, dim: int, exemplars: list[dict[str, Any]]) -> ExemplarBuffer:
+        buf = self._make_buffer(dim)
+        for item in exemplars:
+            buf.add(item["embedding"], timestamp=item.get("timestamp"))
+        return buf
+
+    def _get_or_create_voice_buffer(self, model: AgentModel) -> ExemplarBuffer:
+        if model.voice_exemplars:
+            return self._rebuild_buffer(192, model.voice_exemplars)
+        return self._make_buffer(192)
+
+    def _get_or_create_face_buffer(self, model: AgentModel) -> ExemplarBuffer:
+        if model.face_exemplars:
+            return self._rebuild_buffer(128, model.face_exemplars)
+        return self._make_buffer(128)
+
+    @staticmethod
+    def _store_voice_buffer(model: AgentModel, buf: ExemplarBuffer) -> None:
+        model.voice_exemplars = buf.to_dict()["exemplars"]
+        model.voice_centroid = buf.centroid
+        model.voice_sample_count = buf.count
+        model.voice_reliability = buf.reliability()
+
+    @staticmethod
+    def _store_face_buffer(model: AgentModel, buf: ExemplarBuffer) -> None:
+        model.face_exemplars = buf.to_dict()["exemplars"]
+        model.face_centroid = buf.centroid
+        model.face_sample_count = buf.count
+        model.face_reliability = buf.reliability()
+
+    @staticmethod
+    def _update_binding_state(model: AgentModel) -> None:
+        if model.binding_state == "bound":
+            return
+        has_voice = model.voice_centroid is not None
+        has_face = model.face_centroid is not None
+        if has_voice and has_face:
+            model.binding_state = "unbound"
+        elif has_voice:
+            model.binding_state = "voice_only"
+        elif has_face:
+            model.binding_state = "face_only"
+
+    def _resolve_agent(self, agent_id: str) -> str:
+        """Follow the merge-redirect chain to the terminal (live) agent."""
+        seen: set[str] = set()
+        while agent_id in self._merged_into:
+            if agent_id in seen:
+                break
+            seen.add(agent_id)
+            agent_id = self._merged_into[agent_id]
+        return agent_id
+
+    def _binding_confidence_for(self, agent_id: str) -> Optional[float]:
+        if self._binder is None:
+            return None
+        best: Optional[float] = None
+        for (a, b), conf in self._binder._confidence.items():
+            if agent_id in (a, b) and (best is None or conf > best):
+                best = conf
+        return best
+
+    async def _handle_speaker_embedding(self, event: Event) -> None:
+        """Match a voice embedding to a known agent, or mint a new one."""
+        payload = event.payload
+        embedding = payload.get("embedding")
+        if not embedding:
+            return
+        embedding = [float(x) for x in embedding]
+        detection_conf = float(payload.get("confidence") or 0.0)
+        timestamp = event.timestamp.timestamp()
+
+        matches = await self._store.search_by_voice(
+            embedding, self._speaker_identification_threshold
+        )
+        if matches:
+            agent_id, confidence = matches[0]
+            model = await self._store.get(agent_id)
+            is_new = model is None
+            if model is None:
+                model = AgentModel(id=agent_id, label=agent_id)
+        else:
+            agent_id = f"person:{uuid.uuid4().hex[:8]}"
+            model = AgentModel(id=agent_id, label=agent_id)
+            confidence = detection_conf
+            is_new = True
+
+        buf = self._get_or_create_voice_buffer(model)
+        buf.add(embedding, timestamp=timestamp)
+        self._store_voice_buffer(model, buf)
+        self._update_binding_state(model)
+        await self._store.put(model)
+
+        source_label = payload.get("source_label")
+        if source_label is not None:
+            self._identity_cache[str(source_label)] = agent_id
+
+        if self._binder is not None:
+            self._binder.observe_voice(agent_id, confidence, buf.reliability(), timestamp)
+            await self._process_bindings()
+            # A merge may have redirected this agent.
+            agent_id = self._resolve_agent(agent_id)
+
+        await self._publish_identity_update(
+            agent_id,
+            "voice",
+            confidence,
+            is_new,
+            self._binding_confidence_for(agent_id),
+        )
+
+    async def _handle_face_detection(self, event: Event) -> None:
+        """Match each detected face to a known agent, or mint a new one."""
+        timestamp = event.timestamp.timestamp()
+        for face in event.payload.get("faces") or []:
+            embedding = face.get("embedding")
+            if not embedding:
+                continue
+            embedding = [float(x) for x in embedding]
+            detection_conf = float(face.get("confidence") or 0.0)
+
+            matches = await self._store.search_by_face(
+                embedding, self._face_identification_threshold
+            )
+            if matches:
+                agent_id, confidence = matches[0]
+                model = await self._store.get(agent_id)
+                is_new = model is None
+                if model is None:
+                    model = AgentModel(id=agent_id, label=agent_id)
+            else:
+                agent_id = f"person:{uuid.uuid4().hex[:8]}"
+                model = AgentModel(id=agent_id, label=agent_id)
+                confidence = detection_conf
+                is_new = True
+
+            buf = self._get_or_create_face_buffer(model)
+            buf.add(embedding, timestamp=timestamp)
+            self._store_face_buffer(model, buf)
+            self._update_binding_state(model)
+            await self._store.put(model)
+
+            if self._binder is not None:
+                self._binder.observe_face(agent_id, confidence, buf.reliability(), timestamp)
+                await self._process_bindings()
+                agent_id = self._resolve_agent(agent_id)
+
+            await self._publish_identity_update(
+                agent_id,
+                "face",
+                confidence,
+                is_new,
+                self._binding_confidence_for(agent_id),
+            )
+
+    async def _process_bindings(self) -> None:
+        if self._binder is None:
+            return
+        async with self._merge_lock:
+            for obs in self._binder.check_bindings():
+                if obs.voice_agent_id == obs.face_agent_id:
+                    continue
+                if self._binder.should_merge(obs.voice_agent_id, obs.face_agent_id):
+                    await self._handle_binding_merge(obs)
+
+    async def _handle_binding_merge(self, observation: BindingObservation) -> None:
+        """Merge the two agents of a bound voice/face pair into the better-observed one."""
+        assert self._binder is not None
+        a = await self._store.get(observation.voice_agent_id)
+        b = await self._store.get(observation.face_agent_id)
+        if a is None or b is None or a.id == b.id:
+            return
+        if (a.voice_sample_count + a.face_sample_count) >= (
+            b.voice_sample_count + b.face_sample_count
+        ):
+            kept, gone = a, b
+        else:
+            kept, gone = b, a
+
+        if gone.voice_exemplars:
+            buf = self._get_or_create_voice_buffer(kept)
+            for item in gone.voice_exemplars:
+                buf.add(item["embedding"], timestamp=item.get("timestamp"))
+            self._store_voice_buffer(kept, buf)
+        if gone.face_exemplars:
+            buf = self._get_or_create_face_buffer(kept)
+            for item in gone.face_exemplars:
+                buf.add(item["embedding"], timestamp=item.get("timestamp"))
+            self._store_face_buffer(kept, buf)
+        kept.interaction_count += gone.interaction_count
+        kept.binding_state = "bound"
+        kept.binding_confidence = self._binder.binding_confidence(kept.id, gone.id)
+        await self._store.put(kept)
+
+        await self._store.delete(gone.id)
+
+        self._binder.record_merge(kept.id, gone.id)
+        self._merged_into[gone.id] = kept.id
+        for k, v in list(self._merged_into.items()):
+            if v == gone.id:
+                self._merged_into[k] = kept.id
+        for label, agent_id in list(self._identity_cache.items()):
+            if agent_id == gone.id:
+                self._identity_cache[label] = kept.id
+
+        await self._publish_identity_update(
+            kept.id, "both", kept.binding_confidence or 0.0, False, kept.binding_confidence
+        )
+
+    async def _publish_identity_update(
+        self,
+        agent_id: str,
+        modality: str,
+        confidence: float,
+        is_new: bool,
+        binding_confidence: Optional[float],
+    ) -> None:
+        await self.publish(
+            "social_cognition.identity_update",
+            {
+                "agent_id": agent_id,
+                "modality": modality,
+                "confidence": confidence,
+                "is_new": is_new,
+                "binding_confidence": binding_confidence,
+            },
+            salience=self._baseline_salience,
         )
 
     # ------------------------------------------------------------------
