@@ -25,13 +25,10 @@ import json
 import logging
 import math
 import uuid
-from typing import TYPE_CHECKING, Any, Optional, Protocol, Sequence, runtime_checkable
+from typing import Any, Optional, Protocol, Sequence, runtime_checkable
 
 from kaine.modules.social_cognition.agent import AgentModel
 from kaine.text_embedding import DEFAULT_LATENT_DIM
-
-if TYPE_CHECKING:
-    from kaine.modules.social_cognition.exemplar_buffer import ExemplarBuffer
 
 log = logging.getLogger(__name__)
 
