@@ -212,14 +212,27 @@ class TestSynthesis:
 
 class TestSpeakerResolution:
     @pytest.mark.asyncio
-    async def test_default_speaker_is_sam(
+    async def test_default_speaker_sam_used_when_present(
+        self,
+    ) -> None:
+        mod = _fake_qwen_tts_module(speakers=["sam", "Ryan", "Zara"])
+        client = _make_client(mod)
+        try:
+            await client.synthesize(TTSRequest(text="hi"))
+            calls = mod._generated_calls  # type: ignore[attr-defined]
+            assert calls[-1]["speaker"] == "sam"
+        finally:
+            await client.aclose()
+
+    @pytest.mark.asyncio
+    async def test_default_speaker_falls_back_when_absent(
         self, fake_module: types.ModuleType,
     ) -> None:
         client = _make_client(fake_module)
         try:
             await client.synthesize(TTSRequest(text="hi"))
             calls = fake_module._generated_calls  # type: ignore[attr-defined]
-            assert calls[-1]["speaker"] == "sam"
+            assert calls[-1]["speaker"] == "Allison"
         finally:
             await client.aclose()
 
@@ -242,6 +255,19 @@ class TestSpeakerResolution:
             await client.synthesize(TTSRequest(text="hi"))
             calls = fake_module._generated_calls  # type: ignore[attr-defined]
             assert calls[-1]["speaker"] == "Zara"
+        finally:
+            await client.aclose()
+
+    @pytest.mark.asyncio
+    async def test_configured_speaker_used_when_no_speaker_list(
+        self,
+    ) -> None:
+        mod = _fake_qwen_tts_module(speakers=[])
+        client = _make_client(mod, speaker="custom")
+        try:
+            await client.synthesize(TTSRequest(text="hi"))
+            calls = mod._generated_calls  # type: ignore[attr-defined]
+            assert calls[-1]["speaker"] == "custom"
         finally:
             await client.aclose()
 

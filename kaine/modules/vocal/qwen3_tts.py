@@ -126,7 +126,10 @@ class Qwen3TTS:
                 speakers = []
             speakers = list(speakers)
 
-            if self._speaker:
+            if self._speaker and speakers and self._speaker not in speakers:
+                logger.warning("Configured speaker %r not in available speakers %s; falling back to auto-pick.", self._speaker, speakers)
+                resolved = sorted(speakers, key=str)[0]
+            elif self._speaker:
                 resolved = self._speaker
             elif speakers:
                 resolved = sorted(speakers, key=str)[0]
