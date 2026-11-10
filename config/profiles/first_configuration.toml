@@ -106,3 +106,6 @@ awareness_rendering = "felt"
 # The sequence module predicts the next broadcast and publishes temporal prediction errors.
 # The shipped kaine.toml keeps the forward head off.
 forward_prediction = true
+
+[decision]
+enabled = false

@@ -610,6 +610,33 @@ def _select_components(
                     )
                 )
 
+    decision = config.get("decision", {})
+    if decision.get("enabled", False):
+        url = decision.get("url", "http://127.0.0.1:11436")
+        model_id = decision.get("model", "k1-jev")
+        if _is_loopback_url(url):
+            components.append(
+                ComponentInfo(
+                    name="decision",
+                    kind="external",
+                    backend="llama_cpp",
+                    model_id=model_id,
+                    url=url,
+                )
+            )
+        else:
+            components.append(
+                ComponentInfo(
+                    name="decision",
+                    kind="not_measured",
+                    backend="llama_cpp",
+                    model_id=model_id,
+                    message="not measured: remote_endpoint",
+                    url=url,
+                    reason="remote_endpoint",
+                )
+            )
+
     if only:
         components = [c for c in components if c.name in only]
 

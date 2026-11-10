@@ -53,3 +53,6 @@ engine = "numpy"
 [vocal]
 # Local speech synthesis via sherpa-onnx (Tier 1 default; replaces Chatterbox).
 backend = "sherpa_onnx"
+
+[decision]
+enabled = false
