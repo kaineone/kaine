@@ -67,6 +67,28 @@ class AgentModel:
         Unix timestamp of the first observation.
     last_seen : float
         Unix timestamp of the most recent observation.
+    voice_centroid : list[float] | None
+        192-dim voice centroid (nullable).
+    face_centroid : list[float] | None
+        128-dim face centroid (nullable).
+    voice_exemplars : list[dict[str, Any]]
+        Serialized exemplar buffer for voice.
+    face_exemplars : list[dict[str, Any]]
+        Serialized exemplar buffer for face.
+    voice_sample_count : int
+        Number of voice samples observed.
+    face_sample_count : int
+        Number of face samples observed.
+    binding_state : str
+        One of: "unbound", "voice_only", "face_only", "bound".
+    binding_confidence : float | None
+        Bayesian posterior accumulator (nullable).
+    voice_reliability : float | None
+        Inverse intra-cluster variance for voice (nullable).
+    face_reliability : float | None
+        Inverse intra-cluster variance for face (nullable).
+    voice_acoustic_embedding : list[float] | None
+        Forward-compatible hook for two-level voice (nullable).
     """
 
     id: str
@@ -77,6 +99,19 @@ class AgentModel:
     interaction_count: int = 0
     first_seen: float = field(default_factory=time.time)
     last_seen: float = field(default_factory=time.time)
+
+    # Perceptual identity binding fields.
+    voice_centroid: list[float] | None = None
+    face_centroid: list[float] | None = None
+    voice_exemplars: list[dict[str, Any]] = field(default_factory=list)
+    face_exemplars: list[dict[str, Any]] = field(default_factory=list)
+    voice_sample_count: int = 0
+    face_sample_count: int = 0
+    binding_state: str = "unbound"
+    binding_confidence: float | None = None
+    voice_reliability: float | None = None
+    face_reliability: float | None = None
+    voice_acoustic_embedding: list[float] | None = None
 
     # ------------------------------------------------------------------
     # Familiarity
@@ -91,13 +126,42 @@ class AgentModel:
         - model_coverage contribution: fraction of emotion categories seen
           at least once.
 
+        When perceptual (voice/face) identity data is available, an
+        additional perceptual_score component is included.
+
         Both are averaged, so the score rises monotonically as we observe
         more interactions AND as the model covers more categories.
         """
         count_score = 1.0 - math.exp(-self.interaction_count / _COUNT_SCALE)
         seen_categories = sum(1 for v in self.emotion_histogram.values() if v > 0.0)
         coverage = seen_categories / len(EMOTION_CATEGORIES) if EMOTION_CATEGORIES else 0.0
-        return (count_score + coverage) / 2.0
+
+        has_perceptual = (
+            self.voice_centroid is not None or self.face_centroid is not None
+        )
+        if not has_perceptual:
+            return (count_score + coverage) / 2.0
+
+        total_samples = self.voice_sample_count + self.face_sample_count
+        sample_score = 1.0 - math.exp(-total_samples / _COUNT_SCALE)
+
+        components: list[float] = [sample_score]
+
+        reliability_values = [
+            r for r in (self.voice_reliability, self.face_reliability)
+            if r is not None
+        ]
+        if reliability_values:
+            components.append(sum(reliability_values) / len(reliability_values))
+
+        if (
+            self.binding_state == "bound"
+            and self.binding_confidence is not None
+        ):
+            components.append(self.binding_confidence)
+
+        perceptual_score = sum(components) / len(components) if components else 0.0
+        return (count_score + coverage + perceptual_score) / 3.0
 
     # ------------------------------------------------------------------
     # Update rules
@@ -204,6 +268,17 @@ class AgentModel:
             "interaction_count": self.interaction_count,
             "first_seen": self.first_seen,
             "last_seen": self.last_seen,
+            "voice_centroid": self.voice_centroid,
+            "face_centroid": self.face_centroid,
+            "voice_exemplars": list(self.voice_exemplars),
+            "face_exemplars": list(self.face_exemplars),
+            "voice_sample_count": self.voice_sample_count,
+            "face_sample_count": self.face_sample_count,
+            "binding_state": self.binding_state,
+            "binding_confidence": self.binding_confidence,
+            "voice_reliability": self.voice_reliability,
+            "face_reliability": self.face_reliability,
+            "voice_acoustic_embedding": self.voice_acoustic_embedding,
         }
 
     @classmethod
@@ -215,4 +290,24 @@ class AgentModel:
         model.interaction_count = int(d.get("interaction_count", 0))
         model.first_seen = float(d.get("first_seen", time.time()))
         model.last_seen = float(d.get("last_seen", time.time()))
+        model.voice_centroid = d.get("voice_centroid", None)
+        model.face_centroid = d.get("face_centroid", None)
+        model.voice_exemplars = list(d.get("voice_exemplars") or [])
+        model.face_exemplars = list(d.get("face_exemplars") or [])
+        model.voice_sample_count = int(d.get("voice_sample_count", 0))
+        model.face_sample_count = int(d.get("face_sample_count", 0))
+        model.binding_state = str(d.get("binding_state", "unbound"))
+        model.binding_confidence = (
+            None if d.get("binding_confidence", None) is None
+            else float(d.get("binding_confidence"))
+        )
+        model.voice_reliability = (
+            None if d.get("voice_reliability", None) is None
+            else float(d.get("voice_reliability"))
+        )
+        model.face_reliability = (
+            None if d.get("face_reliability", None) is None
+            else float(d.get("face_reliability"))
+        )
+        model.voice_acoustic_embedding = d.get("voice_acoustic_embedding", None)
         return model

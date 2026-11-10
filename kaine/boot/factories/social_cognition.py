@@ -29,6 +29,19 @@ def make_social_cognition(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
         "baseline_salience",
         "alert_salience",
         "qdrant",  # nested sub-table: host, port, api_key
+        # Identity binding config (all ship disabled).
+        "speaker_identification_enabled",
+        "face_identification_enabled",
+        "speaker_identification_threshold",
+        "face_identification_threshold",
+        "co_occurrence_window_s",
+        "binding_merge_threshold",
+        "p_common_prior",
+        "exemplar_max_size",
+        "consolidation_threshold",
+        "exemplar_diversity_floor",
+        "exemplar_ema_decay",
+        "reliability_floor",
     }
     _require_keys(section, allowed)
     qdrant = section.get("qdrant") or {}

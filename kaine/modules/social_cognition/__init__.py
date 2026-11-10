@@ -2,6 +2,7 @@
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
 from kaine.modules.social_cognition.agent import EMOTION_CATEGORIES, AgentModel
+from kaine.modules.social_cognition.exemplar_buffer import ExemplarBuffer
 from kaine.modules.social_cognition.module import SocialCognition
 from kaine.modules.social_cognition.store import (
     AgentStore,
@@ -12,6 +13,7 @@ from kaine.modules.social_cognition.store import (
 __all__ = [
     "AgentModel",
     "AgentStore",
+    "ExemplarBuffer",
     "SocialCognition",
     "EMOTION_CATEGORIES",
     "InMemoryAgentStore",

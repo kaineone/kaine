@@ -1588,6 +1588,24 @@ deviation_threshold = 0.5
 baseline_salience = 0.15
 alert_salience = 0.6
 
+# --- Identity binding (perceptual identity, cross-modal binder) ---
+# All identity features ship disabled; enable per-pipeline below.
+speaker_identification_enabled = false
+face_identification_enabled = false
+# Cosine similarity thresholds for identity matching.
+speaker_identification_threshold = 0.65
+face_identification_threshold = 0.55
+# Cross-modal binder.
+co_occurrence_window_s = 3.0
+binding_merge_threshold = 0.9
+p_common_prior = 0.7
+# Exemplar buffer parameters (per-modality, per-agent).
+exemplar_max_size = 20
+consolidation_threshold = 5
+exemplar_diversity_floor = 0.01
+exemplar_ema_decay = 0.9
+reliability_floor = 0.3
+
 [social_cognition.qdrant]
 host = "127.0.0.1"
 port = 6533
