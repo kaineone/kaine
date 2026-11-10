@@ -56,6 +56,7 @@ def models_dir() -> Path:
 # kaine.setup.speech_models re-exports them.
 DEFAULT_STT = "moonshine-base-en"
 DEFAULT_TTS = "kokoro-en"
+DEFAULT_SPEAKER_EMBEDDING = "wespeaker-cam++-en"
 
 
 def speech_model_dir(model_id: str, root: Path | str | None = None) -> Path:

@@ -26,7 +26,7 @@ __all__ = [
     "is_installed",
 ]
 
-SpeechKind = Literal["stt", "tts"]
+SpeechKind = Literal["stt", "tts", "speaker_embedding"]
 
 
 @dataclass(frozen=True)
@@ -43,6 +43,8 @@ class SpeechModel:
     required_files: tuple[str, ...]
     # Preset speaker names by id, for multi-speaker TTS models (empty when unknown).
     speakers: tuple[str, ...] = ()
+    # The URL is a single file, not an archive; archive_name is the saved filename.
+    is_single_file: bool = False
 
 
 def _archive_url(tag: str, name: str) -> str:
@@ -120,6 +122,22 @@ MANIFEST: dict[str, SpeechModel] = {
             "espeak-ng-data",
         ),
         speakers=KOKORO_EN_V0_19_SPEAKERS,
+    ),
+    "wespeaker-cam++-en": SpeechModel(
+        id="wespeaker-cam++-en",
+        title="WeSpeaker CAM++ English (VoxCeleb)",
+        kind="speaker_embedding",
+        url=_archive_url(
+            "speaker-recongition-models",
+            "wespeaker_en_voxceleb_CAM%2B%2B.onnx",
+        ),
+        archive_name="wespeaker_en_voxceleb_CAM++.onnx",
+        size_bytes=29_292_684,
+        sha256="c46fad10b5f81e1aa4a60c162714208577093655076c5450f8c469e522ec54ef",
+        licence="Apache-2.0",
+        top_dir="wespeaker-cam++-en",
+        required_files=("wespeaker_en_voxceleb_CAM++.onnx",),
+        is_single_file=True,
     ),
 }
 
@@ -203,7 +221,9 @@ def validate_tokens_file(p: Path | str) -> None:
 
 def _verify_error(model_id: str, path: Path, reason: str) -> str:
     model = MANIFEST.get(model_id)
-    flag = "--stt" if model and model.kind == "stt" else "--tts"
+    flag = {"stt": "--stt", "speaker_embedding": "--speaker-embedding"}.get(
+        model.kind if model else "", "--tts"
+    )
     return (
         f"model verification failed for {model_id} at {path}: {reason}. "
         f"Reinstall with python -m kaine.setup.speech_models "
@@ -242,6 +262,9 @@ def verify_model_dir(model_id: str, path: Path | str) -> None:
                 _verify_error(model_id, d, f"required file missing: {req}")
             )
 
+    if model.kind == "speaker_embedding":
+        return
+
     expected_tokens_sha256 = marker.get("tokens_sha256")
     if expected_tokens_sha256 is None:
         raise ValueError(
@@ -271,11 +294,16 @@ def is_installed(model_id: str, root: Path | str | None = None) -> bool:
     if marker.get("model_id") != model_id or marker.get("sha256") != model.sha256:
         return False
 
-    expected_tokens_sha256 = marker.get("tokens_sha256")
-    if expected_tokens_sha256 is None:
-        return False
-    if not (d / "tokens.txt").exists() or _sha256_file(d / "tokens.txt") != expected_tokens_sha256:
-        return False
+    has_tokens = model.kind != "speaker_embedding"
+    if has_tokens:
+        expected_tokens_sha256 = marker.get("tokens_sha256")
+        if expected_tokens_sha256 is None:
+            return False
+        if (
+            not (d / "tokens.txt").exists()
+            or _sha256_file(d / "tokens.txt") != expected_tokens_sha256
+        ):
+            return False
 
     for rel_path, size in (marker.get("files") or {}).items():
         p = d / rel_path
@@ -283,8 +311,9 @@ def is_installed(model_id: str, root: Path | str | None = None) -> bool:
             return False
     if not all((d / f).exists() for f in model.required_files):
         return False
-    try:
-        validate_tokens_file(d / "tokens.txt")
-    except ValueError:
-        return False
+    if has_tokens:
+        try:
+            validate_tokens_file(d / "tokens.txt")
+        except ValueError:
+            return False
     return True
