@@ -68,3 +68,6 @@ awareness_rendering = "felt"
 
 [sequence]
 forward_prediction = true
+
+[decision]
+enabled = false

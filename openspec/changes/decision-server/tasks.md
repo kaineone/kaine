@@ -13,8 +13,8 @@
   - nothing content-bearing in the logs.
 
 ## 2b. Residency and the sleep window
-- [ ] 2.3 Register the `decision` organ and its rungs in the rung and footprint catalogues and the fit report (`kaine/residency`); the tier profiles' decision rung goes through the integrator (shared files).
-- [ ] 2.4 Test that an organ window (`run_with_organ_window`) stops only the organ service and never the decision server, and that the client keeps answering (against a real local fake server) while the window is open.
+- [x] 2.3 Register the `decision` organ and its rungs in the rung and footprint catalogues and the fit report (`kaine/residency`); the tier profiles' decision rung goes through the integrator (shared files).
+- [x] 2.4 Test that an organ window (`run_with_organ_window`) stops only the organ service and never the decision server, and that the client keeps answering (against a real local fake server) while the window is open.
 
 ## 3. Shared files (integrator)
 - [x] 3.1 `[decision]` in `config/kaine.toml` (shipped `enabled = false`), and its config-appendix rows.
