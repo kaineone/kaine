@@ -79,6 +79,8 @@ class SocialCognition(BaseModule):
         exemplar_diversity_floor: float = 0.01,
         exemplar_ema_decay: float = 0.9,
         reliability_floor: float = 0.3,
+        expression_processing_enabled: bool = False,
+        gaze_processing_enabled: bool = False,
     ) -> None:
         super().__init__(bus)
         if not 0.0 <= baseline_salience <= 1.0:
@@ -131,6 +133,8 @@ class SocialCognition(BaseModule):
         self._exemplar_diversity_floor = float(exemplar_diversity_floor)
         self._exemplar_ema_decay = float(exemplar_ema_decay)
         self._reliability_floor = float(reliability_floor)
+        self._expression_processing_enabled = bool(expression_processing_enabled)
+        self._gaze_processing_enabled = bool(gaze_processing_enabled)
 
         self._binder: Optional[CrossModalBinder] = None
         if self._speaker_identification_enabled or self._face_identification_enabled:

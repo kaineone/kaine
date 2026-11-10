@@ -34,6 +34,8 @@ def make_social_cognition(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
         "exemplar_diversity_floor",
         "exemplar_ema_decay",
         "reliability_floor",
+        "expression_processing_enabled",
+        "gaze_processing_enabled",
     }
     allowed = {
         "backend",

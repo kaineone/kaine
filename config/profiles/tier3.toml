@@ -27,3 +27,7 @@ backend = "qdrant"      # KAINE-owned Qdrant container
 
 [decision]
 enabled = false
+
+# [social_cognition]
+# Perceptual identity is available at Tier 2+ but ships disabled.
+# Enable via config/kaine.operator.toml.
