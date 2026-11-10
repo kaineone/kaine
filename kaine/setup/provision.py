@@ -158,8 +158,12 @@ def aux_models(config: Optional[dict[str, Any]] = None) -> tuple[AuxModel, ...]:
     models.append(AuxModel(emb_repo, emb_label))
 
     vocal = cfg.get("vocal") or {}
-    if str(vocal.get("backend", "chatterbox")).strip().lower() == "chatterbox":
+    vocal_backend = str(vocal.get("backend", "chatterbox")).strip().lower()
+    if vocal_backend == "chatterbox":
         models.append(AuxModel(DEFAULT_TTS_REPO, "text-to-speech (Chatterbox)"))
+    elif vocal_backend == "qwen3_tts":
+        qwen3_repo = str(vocal["qwen3_model_id"]) if vocal.get("qwen3_model_id") else "kaineone/Qwen3-TTS-Sam-0.6B"
+        models.append(AuxModel(qwen3_repo, "text-to-speech (Qwen3-TTS)"))
 
     return tuple(models)
 

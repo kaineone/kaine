@@ -6,7 +6,7 @@ The vocal module is KAINE's voice. It turns the language organ's external speech
 
 The vocal module is built and tested, and held: it is off in the shipped `config/kaine.toml` (`[modules].vocal = false`) and in the `first_configuration` profile. The [module-addition study](../15-experiments/ignition-study.md) (the ignition study in code) adds it sixth and last in its default order of six: the episodic memory, world model, planning, self-model, social cognition and vocal modules.
 
-`[vocal].backend` selects the synthesizer: `"chatterbox"` (the default) or `"sherpa_onnx"`. The file sink (`sink_enabled`) is off by default, self-hearing suppression is on, and prosodic mirroring is off (`[vocal.mirroring].enabled = false`).
+`[vocal].backend` selects the synthesizer: `"chatterbox"` (the default), `"sherpa_onnx"` or `"qwen3_tts"`. The file sink (`sink_enabled`) is off by default, self-hearing suppression is on, and prosodic mirroring is off (`[vocal.mirroring].enabled = false`).
 
 During the developmental phase the vocal module is held dormant, since the developmental stimulus has no air to speak into, and the gate runner activates it at maturation. Inner speech is unaffected.
 
@@ -18,6 +18,7 @@ Prosodic mirroring needs Audition with `prosody_enabled = true`, which needs `li
 |---|---|---|---|
 | `chatterbox` | Chatterbox TTS service | yes | HTTP service with expressive controls: `temperature`, `exaggeration`, `cfg_weight` and `speed_factor` |
 | `sherpa_onnx` | sherpa-onnx with Kokoro | no | In-process and torch-free; Kokoro English int8, 103 MB |
+| `qwen3_tts` | Qwen3-TTS with Sam voice | no | In-process via the `qwen-tts` package; GPU required. Supports affect-driven instruct prosody and language control. The shipped default model is `kaineone/Qwen3-TTS-Sam-0.6B` (2.4 GB), a fine-tune of Qwen3-TTS-12Hz-0.6B-Base trained on the [Sam non-binary voice dataset](https://github.com/Sam-Accenture-Non-Binary-Voice/non-binary-voice-files) (Accenture Labs and CereProc, Apache 2.0). Speaker: `sam`. |
 
 The sherpa-onnx backend has these limits:
 
@@ -25,26 +26,43 @@ The sherpa-onnx backend has these limits:
 - The voice is a preset speaker, so an entity moved from one backend to the other does not keep its voice.
 - `vocal.synthesized` lists the parameters actually applied in `prosody_applied`: all four under Chatterbox, `["speed_factor"]` under Kokoro. Its `voice` field reads `"kokoro-en speaker N"` under sherpa-onnx.
 
+The Qwen3-TTS backend:
+
+- Applies `instruct` (a natural-language description of the desired prosody, generated from affect state) and `language`. The affect module's valence, arousal and dominance are mapped to instruct strings like "Speak with warm enthusiasm" or "Speak quietly and sadly" by `affect_to_instruct()` in `kaine/modules/vocal/mapping.py`.
+- The shipped model is `kaineone/Qwen3-TTS-Sam-0.6B` with speaker `sam`, a gender-neutral English voice. The voice was trained on the Sam non-binary voice dataset created by Accenture Labs and CereProc (Apache 2.0), using the Qwen3-TTS supervised fine-tuning pipeline at learning rate 1e-7, 2 epochs. See the [model card on HuggingFace](https://huggingface.co/kaineone/Qwen3-TTS-Sam-0.6B) for training details.
+- `vocal.synthesized` carries `"backend": "qwen3_tts"` and `"prosody_applied"` includes `"instruct"` and `"language"`.
+- Requires the `speech-qwen3` extra: `pip install "kaine[speech-qwen3]"`. Needs a CUDA GPU with enough VRAM for the 0.6B model (about 2 GB in bfloat16).
+
 ### Choosing a voice
 
-KAINE ships no voice files and its configuration names no voice. When no voice is configured, the vocal module picks one that the engine itself ships, so an enabled module can speak without operator-local files. The rule lives in `kaine/modules/vocal/voices.py` and is deterministic: the same list and the same settings give the same voice on every start.
+No voice files are distributed with the project, and the shipped config leaves all voice keys unset. When nothing is configured, the vocal module picks a voice the engine itself provides, so it can speak without any operator-local files. The selection rule lives in `kaine/modules/vocal/voices.py` and is deterministic: the same speaker list and settings produce the same voice on every start.
 
 An explicit voice always wins, in this order:
 
-1. `predefined_voice_id` (Chatterbox) or `sherpa_speaker_id` (Kokoro). A configured `predefined_voice_id` is sent as it is, without asking the server, so an operator's own uploaded voice keeps working.
+1. `predefined_voice_id` (Chatterbox), `sherpa_speaker_id` (Kokoro) or `qwen3_speaker` (Qwen3-TTS). A configured `predefined_voice_id` is sent as it is, without asking the server, so an operator's own uploaded voice keeps working.
 2. `default_voice`, which must name a voice in the engine's list: a Chatterbox filename or display name, or a Kokoro speaker name.
-3. The automatic pick: the first voice in sorted order of names, keeping only the voices whose gender matches `voice_gender` where the engine reports gender.
+3. The automatic pick: the first voice in sorted order of names, keeping only the voices whose gender matches `voice_gender` where the engine reports gender. For Qwen3-TTS, the default speaker is `sam`.
 
 | Engine | Where the list comes from | Gender |
 |---|---|---|
 | Chatterbox | `GET /get_predefined_voices` on the server, read once at startup. The upstream server ships 28 voices in its `voices/` directory, listed as `display_name` and `filename`. | Not reported. A `"female"` or `"male"` preference is logged as not applicable and the pick is made from all voices. With the upstream voices the pick is `Abigail.wav`. |
 | Kokoro (sherpa-onnx) | The speaker table of the pinned `kokoro-en` model (v0_19, 11 speakers) in `kaine/speech_manifest.py`, from the sherpa-onnx model documentation. | Encoded in the name prefix: the first letter is the accent (`a` American, `b` British), the second the gender (`f` female, `m` male). `"any"` and `"female"` give speaker 0 (`af`), `"male"` gives speaker 5 (`am_adam`). |
+| Qwen3-TTS | `model.get_supported_speakers()` on the loaded model, or the configured `qwen3_speaker`. The shipped model has one speaker: `sam`. | Not applicable. The Sam voice is gender-neutral by design. |
 
 The module logs the chosen voice once at startup, for example `vocal module voice: Abigail.wav (first of 28 shipped voices in sorted order)`. The `voice` field of `vocal.synthesized` carries the Chatterbox filename, or `kokoro-en speaker N` under sherpa-onnx.
 
 ### Fetching the model
 
-Download models ahead of time with `python -m kaine.setup.speech_models [--tts ID] [--yes]`. The command shows each model's name, size and licence and asks for consent. Archives are pinned by URL and SHA-256, verified, and extracted into `state/models/sherpa-onnx/`. The command is idempotent, and nothing downloads at runtime. Kokoro English int8 is 103 MB. Its licences are Apache-2.0 for the model and GPL-3.0-or-later for espeak-ng-data and the espeak-ng engine built into sherpa-onnx. KAINE does not redistribute espeak-ng: the operator installs it with sherpa-onnx and the model after the consent prompt shows both licences.
+**sherpa-onnx (Kokoro):** Download models ahead of time with `python -m kaine.setup.speech_models [--tts ID] [--yes]`. The command shows each model's name, size and licence and asks for consent. Archives are pinned by URL and SHA-256, verified, and extracted into `state/models/sherpa-onnx/`. The command is idempotent, and nothing downloads at runtime. Kokoro English int8 is 103 MB. Its licences are Apache-2.0 for the model and GPL-3.0-or-later for espeak-ng-data and the espeak-ng engine built into sherpa-onnx. KAINE does not redistribute espeak-ng: the operator installs it with sherpa-onnx and the model after the consent prompt shows both licences.
+
+**Qwen3-TTS (Sam voice):** When the vocal backend is `qwen3_tts`, the first-run wizard (`python -m kaine.setup`) includes `kaineone/Qwen3-TTS-Sam-0.6B` (2.4 GB, Apache 2.0) in its provisioning plan and downloads it from HuggingFace with operator consent. The download uses `huggingface_hub` and lands in the HuggingFace cache (`HF_HOME`). If the operator sets a different `qwen3_model_id`, the wizard downloads that repo instead. The model can also be fetched manually:
+
+```bash
+pip install "kaine[speech-qwen3]"
+hf download kaineone/Qwen3-TTS-Sam-0.6B
+```
+
+The Sam model is a fine-tune of Qwen3-TTS-12Hz-0.6B-Base (Qwen team, Apache 2.0) trained on the Sam non-binary voice dataset (Accenture Labs and CereProc, Apache 2.0). The [model card](https://huggingface.co/kaineone/Qwen3-TTS-Sam-0.6B) has the training parameters and attribution.
 
 ### Failure behaviour
 
@@ -91,11 +109,16 @@ Full reference: [`[vocal]` in the modules configuration](../appendix-a-configura
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `backend` | string | `"chatterbox"` | `"chatterbox"` or `"sherpa_onnx"` |
+| `backend` | string | `"chatterbox"` | `"chatterbox"`, `"sherpa_onnx"` or `"qwen3_tts"` |
 | `sherpa_model_id` | string | `"kokoro-en"` | sherpa-onnx model id |
 | `sherpa_model_dir` | string | `<models dir>/sherpa-onnx/<id>` | Directory of the downloaded model files |
 | `sherpa_speaker_id` | int | unset | Kokoro preset speaker (0 to 10). Unset, the vocal module picks one (see [Choosing a voice](#choosing-a-voice)) |
 | `sherpa_num_threads` | int | `2` | ONNX Runtime threads |
+| `qwen3_model_id` | string | `"kaineone/Qwen3-TTS-Sam-0.6B"` | HuggingFace repo for the Qwen3-TTS model |
+| `qwen3_tokenizer_id` | string | `"Qwen/Qwen3-TTS-Tokenizer-12Hz"` | HuggingFace repo for the Qwen3-TTS tokenizer |
+| `qwen3_device` | string | `"cuda:1"` | GPU device for the Qwen3-TTS model |
+| `qwen3_dtype` | string | `"bfloat16"` | Precision: `"bfloat16"`, `"float16"` or `"float32"` |
+| `qwen3_speaker` | string | `"sam"` | Speaker name from the model's speaker list |
 | `chatterbox_url` | string | `"http://127.0.0.1:8883"` | Chatterbox service URL |
 | `voice_mode` | string | `"predefined"` | `"predefined"` uses a voice file the operator has given Chatterbox |
 | `predefined_voice_id` | string | unset | A voice filename the Chatterbox server serves, sent without checking. Unset, the vocal module picks a voice the server ships. List the voices with `curl -s http://127.0.0.1:8883/get_predefined_voices`. |
@@ -164,8 +187,10 @@ flowchart LR
     BP -->|blended parameters| REQ[TTSRequest]
     REQ -->|backend chatterbox| CB[Chatterbox]
     REQ -->|backend sherpa_onnx| SK[sherpa-onnx Kokoro]
+    REQ -->|backend qwen3_tts| QT[Qwen3-TTS Sam]
     CB -->|audio| PL[Player.play]
     SK -->|audio| PL
+    QT -->|audio| PL
     PL -->|gate| SG[SpeakingGate\nself-hearing suppression]
 ```
 
@@ -182,6 +207,7 @@ With `sink_enabled = true`, each clip is written to `<sink_path>/<timestamp>-<uu
 | File | Role |
 |---|---|
 | `kaine/modules/vocal/module.py` | `Vocal`: consumer loops, synthesis, playback, publication |
+| `kaine/modules/vocal/qwen3_tts.py` | The Qwen3-TTS backend |
 | `kaine/modules/vocal/sherpa_tts.py` | The sherpa-onnx Kokoro backend |
 | `kaine/modules/vocal/mapping.py` | `affect_to_chatterbox()` and `ChatterboxParams` |
 | `kaine/modules/vocal/mirroring.py` | `blend_prosody()` and `decayed_strength()` |
@@ -191,8 +217,8 @@ With `sink_enabled = true`, each clip is written to `<sink_path>/<timestamp>-<uu
 
 ## Enabling
 
-1. In the operator file `config/kaine.operator.toml`, set `[modules].vocal = true`. The same flag in the shipped `config/kaine.toml` would be overridden by the `first_configuration` profile, which the loader applies when no profile is selected.
-2. For `backend = "chatterbox"`, start the Chatterbox server. With no voice configured the vocal module uses the first voice the server ships; to use a particular one, set `default_voice` or `predefined_voice_id` (keep personal filenames out of version control). For `backend = "sherpa_onnx"`, fetch the model with `python -m kaine.setup.speech_models --tts kokoro-en`; the vocal module picks a preset speaker, or set `voice_gender`, `default_voice` or `sherpa_speaker_id`.
+1. In the operator file `config/kaine.operator.toml`, set `[modules].vocal = true`.
+2. For `backend = "chatterbox"`, start the Chatterbox server. With no voice configured the vocal module uses the first voice the server ships; to use a particular one, set `default_voice` or `predefined_voice_id` (keep personal filenames out of version control). For `backend = "sherpa_onnx"`, fetch the model with `python -m kaine.setup.speech_models --tts kokoro-en`; the vocal module picks a preset speaker, or set `voice_gender`, `default_voice` or `sherpa_speaker_id`. For `backend = "qwen3_tts"`, install the extra with `pip install "kaine[speech-qwen3]"` and run the setup wizard or `hf download kaineone/Qwen3-TTS-Sam-0.6B`; the default speaker is `sam`, or set `qwen3_speaker`.
 3. Keep the [language module](language.md) on, since the vocal module speaks its output, and the [affect module](affect.md), since the vocal module's prosody follows its affect.
 4. For prosodic mirroring, turn on [Audition](audition.md)'s `prosody_enabled` and set `[vocal.mirroring].enabled = true`.
 
@@ -201,7 +227,7 @@ With `sink_enabled = true`, each clip is written to `<sink_path>/<timestamp>-<uu
 - Audio never goes on the bus; `vocal.synthesized` carries numeric metadata such as `bytes_produced` and `latency_ms`.
 - The file sink is off by default and, when on, is bounded by `retain_count`.
 - `predefined_voice_id` names a file in Chatterbox's voices directory that the operator manages; the filename stays out of version control.
-- The project ships no voice files. A voice picked automatically is one the engine ships, and its name appears only in the log and in `vocal.synthesized`.
+- No voice files are distributed with the project. An automatically picked voice is one the engine provides, and its name appears only in the log and in `vocal.synthesized`.
 - The prosody cached for mirroring is six numbers; no waveform is kept in the module's state.
 
 ## Tests
@@ -219,6 +245,7 @@ With `sink_enabled = true`, each clip is written to `<sink_path>/<timestamp>-<uu
 | `tests/test_sherpa_speech_engines.py` | sherpa-onnx engine integration |
 | `tests/test_speech_models.py` | Model download and verification |
 | `tests/test_speech_model_verification.py` | Hash pinning and extraction checks |
+| `tests/test_qwen3_tts.py` | Qwen3-TTS client: construction, protocol, synthesis, unload/reload |
 
 ## Spec and related
 

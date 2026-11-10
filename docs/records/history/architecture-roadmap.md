@@ -2,7 +2,7 @@
 
 > **Superseded.** Every change this roadmap sequences has been implemented and
 > archived (see `openspec/changes/archive/`). Current and planned work lives in
-> `openspec/changes/` — `openspec list` is the live view. Kept for provenance;
+> `openspec/changes/`; `openspec list` is the live view. Kept for provenance;
 > one factual correction below is bracketed.
 
 Generated: 2026-06-06. Reflects the change set after the Phase-4/5 proposal
@@ -19,13 +19,13 @@ These are the only changes in this build plan that introduce JAX as a dependency
 `condition-language-organ` come from already-implemented or near-ready feature
 work. *[Correction: `condition-language-organ` was in fact already implemented
 (commit `acadfa1`, 2026-06-03) when this roadmap was generated, and later gained
-its own change dir and merged acceptance PR (#41) — the "drafted, not yet in a
+its own change dir and merged acceptance PR (#41); the "drafted, not yet in a
 feature branch" status this document originally recorded was stale at
 generation time.]*
 
 ---
 
-## Phase 1 — Forward models and perception rename
+## Phase 1: Forward models and perception rename
 
 **Go/no-go:** all five changes are independent of each other; they share only
 shipped deps (`chronos`, `topos`, `audition`/`vox`). Gate: unit suite green,
@@ -41,7 +41,7 @@ no runtime regression with layer disabled.
 
 ---
 
-## Phase 2 — Memory, executive, and affect
+## Phase 2: Memory, executive, and affect
 
 **Go/no-go:** depends on `rename-audition-vox` (Phase 1). `mnemos-replay` is a
 hard gate for Phase 4 `hypnos-consolidation`. Gate: replay round-trip tested,
@@ -56,7 +56,7 @@ affect coupling degrades gracefully without Empatheia.
 
 ---
 
-## Phase 3 — New modules (Empatheia, Nous/pymdp, Phantasia)
+## Phase 3: New modules (Empatheia, Nous/pymdp, Phantasia)
 
 **Go/no-go:** these are the highest-risk changes (new modules, JAX stack). Land
 in order: Empatheia (no JAX), then pymdp-Nous, then Phantasia. Gate: each
@@ -71,10 +71,10 @@ checkpoint serialization verified.
 
 ---
 
-## Phase 4 — Hypnos restructure (split from original `hypnos-restructure`)
+## Phase 4: Hypnos restructure (split from original `hypnos-restructure`)
 
 **Go/no-go:** `hypnos-fatigue-phases` depends only on `soma-forward-model-fatigue`
-(Phase 1) — land first, independently. `hypnos-consolidation` gates on three
+(Phase 1), so land it first, independently. `hypnos-consolidation` gates on three
 Phase-3 changes; land after all three are green. The abliteration probe in
 `hypnos-consolidation` is welfare-load-bearing and must not be bypassed.
 
@@ -85,9 +85,9 @@ Phase-3 changes; land after all three are green. The abliteration probe in
 
 ---
 
-## Phase 5 — Structural, evaluation, and self-model
+## Phase 5: Structural, evaluation, and self-model
 
-**Go/no-go:** `oscillatory-layer` touches BaseModule and salience — land after
+**Go/no-go:** `oscillatory-layer` touches BaseModule and salience, so land it after
 all modules exist (post Phase 3). `sidecar-observers` activates incrementally.
 `eidolon-self-inference` and `state-encryption` are independent of each other;
 `state-encryption` should land after `phantasia-dreamerv3` and `sidecar-observers`

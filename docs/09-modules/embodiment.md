@@ -6,7 +6,7 @@ The embodiment module is KAINE's body-agnostic embodiment layer. It routes perce
 
 The embodiment module is built and tested, and held: it is off in the shipped `config/kaine.toml` and in the `first_configuration` profile. It acts on a body only when all three of these hold:
 
-1. `[modules].embodiment = true` in the operator file `config/kaine.operator.toml`, so the module is constructed (the same flag in the shipped `config/kaine.toml` is overridden by the `first_configuration` profile);
+1. `[modules].embodiment = true` in the operator file `config/kaine.operator.toml`, so the module is constructed;
 2. `[embodiment].enabled = true` (the shipped value), the configuration gate;
 3. `KAINE_EMBODIMENT_OPERATOR_APPROVED=1` in the environment, the operator gate.
 

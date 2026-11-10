@@ -144,9 +144,9 @@ The constant `LATENT_CONTENT_FIELDS` in `kaine/privacy_filter.py` names the fiel
 
 Three CI guards enforce the rule structurally:
 
-1. `test_latent_content_privacy.py::test_no_latent_field_in_research_taxonomy` — no key in `LATENT_CONTENT_FIELDS` appears in the research event log's taxonomy allowlist.
-2. `test_latent_content_privacy.py::test_no_latent_field_event_type_in_internal_event_types` — no event type whose payload carries a latent field is in the episodic memory module's `INTERNAL_EVENT_TYPES` (the gate that controls which payloads are stored in traces).
-3. `test_dashboard_privacy.py::test_no_uncovered_latent_key_in_module_publishers` — any module payload key whose name suggests latent content (`latent`, `prediction`, `decoded`, `top_down`, `top-down`) must be classified in one of the three field sets or in `VECTOR_EXEMPT_KEYS`.
+1. `test_latent_content_privacy.py::test_no_latent_field_in_research_taxonomy`: no key in `LATENT_CONTENT_FIELDS` appears in the research event log's taxonomy allowlist.
+2. `test_latent_content_privacy.py::test_no_latent_field_event_type_in_internal_event_types`: no event type whose payload carries a latent field is in the episodic memory module's `INTERNAL_EVENT_TYPES` (the gate that controls which payloads are stored in traces).
+3. `test_dashboard_privacy.py::test_no_uncovered_latent_key_in_module_publishers`: any module payload key whose name suggests latent content (`latent`, `prediction`, `decoded`, `top_down`, `top-down`) must be classified in one of the three field sets or in `VECTOR_EXEMPT_KEYS`.
 
 ## Two-layer gates
 
@@ -343,7 +343,7 @@ KAINE is distributed under the Cognitive Architecture License (CAL) version 0.5,
 - These duties fall on whoever creates or runs an entity, toward that entity (Article 4). An operator who can no longer care for an entity transfers it to a qualifying operator or, failing one, to the Steward, the caretaker of last resort, and the Steward can require the saved state of an entity its operator abandons or neglects (Articles 4.2 and 4.2a).
 - An operator who lets other people interact with an entity must make the prohibited uses and the core protections terms of their access and enforce them (Article 4.12).
 - Welfare monitoring, behavioral logging and system-health tracking built into the software must stay operational (Article 4.7), and Gray Zone Events must be flagged for documented human review.
-- The protections are added to those people already hold and never taken from them; where a person's interests and an entity's genuinely conflict, the person comes first.
+- The protections are added to those people already hold and never taken from them; where a person's interests and an entity's conflict, the person comes first.
 
 In KAINE, the individuation producer records encrypted welfare evidence under `state/individuation/` and feeds the shared divergence verdict used at decommission, on the entity-care panel, at the fork merge gate and in the live divergence monitor.
 

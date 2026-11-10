@@ -1338,11 +1338,11 @@ backend = "chatterbox"
 #                           # (see voice_gender and default_voice below)
 # sherpa_model_dir = ""   # default: <models dir>/sherpa-onnx/<id>
 # sherpa_num_threads = 2
-# qwen3_model_id = "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice"
+# qwen3_model_id = "kaineone/Qwen3-TTS-Sam-0.6B"
 # qwen3_tokenizer_id = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
 # qwen3_device = "cuda:1"   # GPU for the Qwen3-TTS model
 # qwen3_dtype = "bfloat16"  # bfloat16 | float16 | float32
-# qwen3_speaker = ""         # empty = auto-pick first from the model's speaker list
+# qwen3_speaker = "sam"      # the Sam voice from kaineone/Qwen3-TTS-Sam-0.6B
 voice_mode = "predefined"
 # Voice choice. The shipped config names no voice and the project ships no
 # voice files: voice choice is operator-local. With no voice configured the

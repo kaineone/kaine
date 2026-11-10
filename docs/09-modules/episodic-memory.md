@@ -175,7 +175,7 @@ The two collections are created on the first co-replay, so a store that has neve
 
 1. Start the Qdrant container: `docker compose -f compose/qdrant.yml up -d`.
 2. The first time, run `bash scripts/qdrant-bootstrap.sh`. It generates the API key, writes it to `compose/.env` and `config/secrets.toml`, and checks `/readyz`.
-3. In the operator file `config/kaine.operator.toml`, set `[modules].episodic_memory = true`. The same flag in the shipped `config/kaine.toml` would be overridden by the `first_configuration` profile, which the loader applies when no profile is selected.
+3. In the operator file `config/kaine.operator.toml`, set `[modules].episodic_memory = true`.
 4. To run without Qdrant, set `backend = "inmemory"` or `backend = "sqlite_vec"` and leave out the API key.
 
 In tests, replay can be driven by hand:

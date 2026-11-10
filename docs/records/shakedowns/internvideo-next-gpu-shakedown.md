@@ -10,7 +10,7 @@ change, which shipped with the real forward pass un-exercised and
 - Hardware: NVIDIA RTX 4070 SUPER (pinned via `CUDA_VISIBLE_DEVICES=0`)
 - torch 2.11.0+cu128, CUDA 12.8, transformers 4.x; `[internvideo]` deps
   `einops`, `timm`, `easydict` installed (plus a matching `torchvision`
-  `0.26.0+cu128` that `timm` pulls in — the PyPI default wheel mismatches this
+  `0.26.0+cu128` that `timm` pulls in; the PyPI default wheel mismatches this
   torch's ABI and must come from the cu128 index).
 - Model: `revliter/internvideo_next_base_p14_res224_f16`, MIT, vendored +
   revision-pinned (`ff2659b9…`); ~182 MB fp16 weights fetched once via
@@ -32,8 +32,8 @@ scaled-dot-product attention over the real trained weights.
 
 The run used a **local, uncommitted** shim (a `sitecustomize.py` on `PYTHONPATH`,
 never added to the tree) that (1) registers a stub `flash_attn` package so the
-vendored module imports — the stubbed names are only referenced, never called, on
-the eager path — and (2) wraps the offline loader's `_import_vendored_classes` to
+vendored module imports (the stubbed names are only referenced, never called, on
+the eager path) and (2) wraps the offline loader's `_import_vendored_classes` to
 force `use_flash_attn = use_fused_rmsnorm = use_fused_mlp = False`. The vendored
 files and the committed loader were **not** edited to achieve this. A production
 run on a host with a real `flash_attn` build needs neither the stub nor the force.
@@ -41,11 +41,11 @@ run on a host with a real `flash_attn` build needs neither the stub nor the forc
 ## Real-path fix found
 
 The shipped loader read the model **config** from the weights dir, but the setup
-step fetches only `model.safetensors` there — `config.json` is **vendored**
+step fetches only `model.safetensors` there; `config.json` is **vendored**
 in-tree (`external/internvideo_next/config.json`) and is never downloaded. The real
 load therefore failed (`'InternVideoNextConfig' object has no attribute
 'model_config'`). Fixed in `kaine/modules/topos/internvideo_next_loader.py`: the
-config now loads from `vendored_code_dir()` (reviewed, pinned, in-tree — exactly as
+config now loads from `vendored_code_dir()` (reviewed, pinned, in-tree, exactly as
 the VideoMAE processor already does), and only the weights load from the fetch dir
 with that config passed in explicitly. This was masked before because every test
 injects fakes; it is the kind of gap the shakedown exists to catch.
@@ -68,7 +68,7 @@ Driven end-to-end through the real `Topos.process_frame` (real encoder,
 `surprise_strength=1.0`), 900 frames → 295 clip reports. Reproducible provenance:
 seed 0, 900 frames, surprises at frames 150/300/450/600/750.
 
-**Finding — the cosine `change_score` is heavily compressed on attention-pooled
+**Finding: the cosine `change_score` is heavily compressed on attention-pooled
 InternVideo-Next embeddings:**
 
 | stimulus | cosine change (`1 − cos`) |
@@ -83,7 +83,7 @@ InternVideo-Next embeddings:**
 Full-feed `change_score`: p90 = 0.0000, p99 = 0.0003, **max 0.0004**. The global
 attention-pooled vector is highly **direction-stable**; the encoder's entire cosine
 "scene-change" dynamic range tops out near ~0.04 for completely different content.
-The DINOv2-era **0.5 was unreachable** (never fired — ~12× above even a total
+The DINOv2-era **0.5 was unreachable** (never fired, roughly 12× above even a total
 content change). Mean pooling is ~3–4× less compressed (content change ~0.14) but
 the shipped default is attention pooling and was not changed here.
 
@@ -94,7 +94,7 @@ normalized to the rolling-window mean it reached exactly the 2.0× alert factor 
 at 2.0. Habituation stayed in a healthy 0.66–1.0 band.
 
 **Calibrated value:** `change_alert_threshold = 0.005` (was 0.5). It sits in the
-empirical gap — >10× above the seeded feed's routine floor (≤0.0004, so routine
+empirical gap: >10× above the seeded feed's routine floor (≤0.0004, so routine
 motion stays baseline) yet below the weakest genuine cut (~0.008), so real scene
 changes alert. On the smooth seeded feed the change path stays quiet by design (it
 has no scene cuts); surprises there are carried by the prediction-error path.
@@ -102,6 +102,6 @@ has no scene cuts); surprises there are carried by the prediction-error path.
 unchanged. Because the seeded feed is a continuous world with no genuine cuts, a
 naive "90th-percentile of observed change" (≈0) is not usable; the threshold is
 instead anchored between the measured routine floor and the encoder's measured
-scene-cut scale. This value is calibrated on the smooth synthetic feed — real
+scene-cut scale. This value is calibrated on the smooth synthetic feed; real
 camera footage is noisier, so it is a defensible starting point to revisit against
 live video, not a final constant.

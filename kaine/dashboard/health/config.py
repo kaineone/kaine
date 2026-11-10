@@ -197,7 +197,7 @@ def build_dependency_specs(
             )
         )
     elif vocal_backend == "qwen3_tts":
-        qwen3_mid = str(vocal_cfg.get("qwen3_model_id") or "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice")
+        qwen3_mid = str(vocal_cfg.get("qwen3_model_id") or "kaineone/Qwen3-TTS-Sam-0.6B")
         speech_rows.append(
             DependencySpec(
                 name=f"Qwen3-TTS ({qwen3_mid.rsplit('/', 1)[-1]})",

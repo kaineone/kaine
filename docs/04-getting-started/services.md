@@ -17,7 +17,7 @@ Two speech services are optional:
 - Speaches, only when [Audition](../09-modules/audition.md) transcription is on (`transcription_enabled = true`) with the default `speaches` backend.
 - Chatterbox, only when the [vocal](../09-modules/vocal.md) module is enabled with the default `chatterbox` backend.
 
-You can avoid the separate speech services by switching the audition and vocal modules to `sherpa_onnx`.
+You can avoid the separate speech services by switching the audition and vocal modules to `sherpa_onnx`. A third vocal backend, `qwen3_tts`, runs in-process with the Qwen3-TTS model on a CUDA GPU and also needs no separate service; install `pip install "kaine[speech-qwen3]"` and run the setup wizard or `hf download kaineone/Qwen3-TTS-Sam-0.6B` (2.4 GB).
 
 ## Redis (event bus)
 

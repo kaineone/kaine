@@ -149,7 +149,7 @@ The sleep module opens the scenario window before phase 2, whose replay publishe
 
 ## Enabling
 
-1. In the operator file `config/kaine.operator.toml`, set `[modules].world_model = true`. The same flag in the shipped `config/kaine.toml` would be overridden by the `first_configuration` profile, which the loader applies when no profile is selected.
+1. In the operator file `config/kaine.operator.toml`, set `[modules].world_model = true`.
 2. Choose an engine. For the JAX engine (the default), install the extra with `.venv/bin/pip install -e '.[worldmodel]'`. For the NumPy engine, set `engine = "numpy"` under `[world_model]`. The shipped training and persistence settings apply to both.
 3. For the development fallback, set `backend = "fake"` and `persist_weights = false`; `persist_weights = true` with this backend raises a `ValueError` at construction.
 

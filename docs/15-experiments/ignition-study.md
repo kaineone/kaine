@@ -29,7 +29,7 @@ A progressive plan replaces the branch grid with a linear sequence:
 
 Each step carries one entity forward. The plan declares `module_order` (the addition sequence) and optionally `broadcast_capacity` (the workspace's K parameter). All steps share a single Redis database number (`redis.db` is an integer, not a per-line dict). Step directories are `seed/`, `step_1/`, `step_2/`, etc.
 
-The analysis produces step-over-step comparisons: for each adjacent pair (step k, step k-1) it computes the same measures as a branching comparison, plus the new-module ignition rate — the share of coalitions that include the newly added module.
+The analysis produces step-over-step comparisons: for each adjacent pair (step k, step k-1) it computes the same measures as a branching comparison, plus the new-module ignition rate (the share of coalitions that include the newly added module).
 
 ## Before you start
 
