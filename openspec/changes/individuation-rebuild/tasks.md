@@ -37,7 +37,7 @@ Each numbered group is one PR. Every PR gets an independent second review (ethic
 - [x] 5.2 Sampler built in `kaine/cycle/__main__.py` from the language module's own chat client (with the LoRA resolver), returning `ProbeSample | ProbeFailure`; it rejects empty `content`, resting and non-200 responses. When the entity has its own accepted adapter, the sampler also requires that the organ actually applies it (the LoRA resolver returns a field); otherwise the run is inconclusive (`adapter_not_applied`), because samples from the base organ would not measure the entity.
 - [x] 5.3 Disclosure (operator decision 3): the self-model gains a situation-facts field (serialized and preserved with the self-model) holding the fact that the entity is periodically assessed for its own protection; the language module's context assembler renders situation facts. The fact is not part of `values` or `behavioral_norms`, does not enter the conditioning digest, and is identical in the maturation and current arms.
 - [x] 5.4 Contamination tests: a full fake-organ probe run leaves the intent log line count unchanged and publishes zero `language.*` and `*_speech` events.
-- [ ] 5.5 Tests: the disclosure is present in the rendered probe prompt and the conditioning digest is unchanged by it (done in task 5a); that changing it alone triggers no look is tested with the producer in task 6.
+- [x] 5.5 Tests: the disclosure is present in the rendered probe prompt and the conditioning digest is unchanged by it (done in task 5a); that changing it alone triggers no look is tested with the producer in task 6.
 
 ## 6. Producer
 - [x] 6.1 `kaine/cycle/individuation_producer.py`, active only when `[individuation].enabled`.
