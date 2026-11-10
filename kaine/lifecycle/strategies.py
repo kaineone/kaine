@@ -380,6 +380,153 @@ def _merge_summary(
     return merged
 
 
+def _cosine_similarity(a: list[float], b: list[float]) -> float:
+    """Cosine similarity of two vectors; 0.0 if either has zero norm."""
+    dot = sum(x * y for x, y in zip(a, b))
+    na = sum(x * x for x in a) ** 0.5
+    nb = sum(y * y for y in b) ** 0.5
+    if na == 0.0 or nb == 0.0:
+        return 0.0
+    return dot / (na * nb)
+
+
+def _merge_exemplars(
+    exemplars_a: list[dict[str, Any]] | None,
+    exemplars_b: list[dict[str, Any]] | None,
+    centroid: list[float] | None,
+    max_size: int = 20,
+) -> list[dict[str, Any]]:
+    """Union two exemplar lists, dedupe near-duplicates, cap at max_size.
+
+    Near-duplicates (cosine > 0.99) keep the later timestamp. When over
+    the cap, exemplars most similar to the centroid are evicted first.
+    """
+    merged: list[dict[str, Any]] = []
+    for ex in list(exemplars_a or []) + list(exemplars_b or []):
+        emb = ex.get("embedding")
+        if not emb:
+            continue
+        ts = ex.get("timestamp")
+        ts_val = float(ts) if ts is not None else float("-inf")
+        for i, kept in enumerate(merged):
+            if _cosine_similarity(emb, kept["embedding"]) > 0.99:
+                kts = kept.get("timestamp")
+                kts_val = float(kts) if kts is not None else float("-inf")
+                if ts_val > kts_val:
+                    merged[i] = dict(ex)
+                break
+        else:
+            merged.append(dict(ex))
+
+    if len(merged) > max_size:
+        if centroid:
+            merged.sort(
+                key=lambda e: _cosine_similarity(e["embedding"], centroid)
+            )
+            # Least similar to the centroid first; keep the most diverse.
+        merged = merged[:max_size]
+    return merged
+
+
+def _merge_centroid(
+    ca: list[float] | None,
+    cb: list[float] | None,
+    na: int,
+    nb: int,
+) -> list[float] | None:
+    """Sample-count weighted centroid average, re-normalized to unit length."""
+    if not ca and not cb:
+        return None
+    if not ca or not cb or len(ca) != len(cb):
+        src = ca if ca else cb
+        return list(src) if src else None
+    wa, wb = (na, nb) if (na + nb) > 0 else (1, 1)
+    mixed = [(wa * x + wb * y) / (wa + wb) for x, y in zip(ca, cb)]
+    norm = sum(v * v for v in mixed) ** 0.5
+    if norm == 0.0:
+        return mixed
+    return [v / norm for v in mixed]
+
+
+def _merge_opt_reliability(
+    ra: float | None, rb: float | None, na: int, nb: int
+) -> float | None:
+    if ra is None:
+        return rb
+    if rb is None:
+        return ra
+    if na + nb == 0:
+        return (ra + rb) / 2
+    return (na * ra + nb * rb) / (na + nb)
+
+
+_BINDING_RANK = {"unbound": 0, "voice_only": 1, "face_only": 1, "bound": 2}
+
+
+def _merge_identity_fields(
+    pa: dict[str, Any], pb: dict[str, Any]
+) -> dict[str, Any]:
+    """Merge identity-binding fields; tolerant of absent keys (old profiles)."""
+    vna = int(pa.get("voice_sample_count") or 0)
+    vnb = int(pb.get("voice_sample_count") or 0)
+    fna = int(pa.get("face_sample_count") or 0)
+    fnb = int(pb.get("face_sample_count") or 0)
+
+    voice_centroid = _merge_centroid(
+        pa.get("voice_centroid"), pb.get("voice_centroid"), vna, vnb
+    )
+    face_centroid = _merge_centroid(
+        pa.get("face_centroid"), pb.get("face_centroid"), fna, fnb
+    )
+
+    ca = pa.get("binding_confidence")
+    cb = pb.get("binding_confidence")
+    conf_a = float(ca) if ca is not None else 0.0
+    conf_b = float(cb) if cb is not None else 0.0
+    state_a = str(pa.get("binding_state") or "unbound")
+    state_b = str(pb.get("binding_state") or "unbound")
+    rank_a = _BINDING_RANK.get(state_a, 0)
+    rank_b = _BINDING_RANK.get(state_b, 0)
+    if rank_a != rank_b:
+        binding_state = state_a if rank_a > rank_b else state_b
+    else:
+        binding_state = state_a if conf_a >= conf_b else state_b
+
+    if ca is None and cb is None:
+        binding_confidence = None
+    else:
+        binding_confidence = max(conf_a, conf_b)
+
+    acoustic_src = pa if vna >= vnb else pb
+    acoustic = acoustic_src.get("voice_acoustic_embedding")
+    if acoustic is None:
+        acoustic = (pb if acoustic_src is pa else pa).get(
+            "voice_acoustic_embedding"
+        )
+
+    return {
+        "voice_centroid": voice_centroid,
+        "face_centroid": face_centroid,
+        "voice_exemplars": _merge_exemplars(
+            pa.get("voice_exemplars"), pb.get("voice_exemplars"), voice_centroid
+        ),
+        "face_exemplars": _merge_exemplars(
+            pa.get("face_exemplars"), pb.get("face_exemplars"), face_centroid
+        ),
+        "voice_sample_count": vna + vnb,
+        "face_sample_count": fna + fnb,
+        "binding_state": binding_state,
+        "binding_confidence": binding_confidence,
+        "voice_reliability": _merge_opt_reliability(
+            pa.get("voice_reliability"), pb.get("voice_reliability"), vna, vnb
+        ),
+        "face_reliability": _merge_opt_reliability(
+            pa.get("face_reliability"), pb.get("face_reliability"), fna, fnb
+        ),
+        "voice_acoustic_embedding": acoustic,
+    }
+
+
 def _merge_profiles(
     pa: dict[str, Any], pb: dict[str, Any]
 ) -> dict[str, Any]:
@@ -390,7 +537,9 @@ def _merge_profiles(
 
     if total == 0:
         # No observations on either side — take pa as base.
-        return dict(pa)
+        result = dict(pa)
+        result.update(_merge_identity_fields(pa, pb))
+        return result
 
     w_a = count_a / total
     w_b = count_b / total
@@ -415,7 +564,10 @@ def _merge_profiles(
         + w_b * float(pb.get("reliability", 1.0))
     )
 
+    identity_fields = _merge_identity_fields(pa, pb)
+
     return {
+        **identity_fields,
         "id": pa.get("id") or pb.get("id"),
         "label": pa.get("label") or pb.get("label"),
         "emotion_histogram": merged_hist,
