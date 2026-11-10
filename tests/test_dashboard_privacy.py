@@ -159,6 +159,7 @@ _REVIEWED_OPERATIONAL_KEYS = frozenset(
         "source_label",    # audition: perception source name (e.g. "microphone")
         "temporal_context",  # sequence module: numeric hidden-state vector; removed by the vector rule (VECTOR_FIELDS)
         "prediction_error",  # processor modules: scalar numeric prediction error (float), not latent content
+        "label",             # vision face expression: fixed classifier category enum (e.g. "happy", "neutral")
     }
 )
 

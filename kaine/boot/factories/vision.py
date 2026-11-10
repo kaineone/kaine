@@ -4,10 +4,9 @@
 """The vision module factory."""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Optional
+import logging
+from typing import Any, Optional
 
-if TYPE_CHECKING:
-    pass
 from kaine.boot.config_kwargs import config_kwargs
 from kaine.boot.errors import _require_keys
 from kaine.boot.feedback import FEEDBACK_SECTION_KEY, feedback_settings
@@ -16,6 +15,8 @@ from kaine.bus.client import AsyncBus
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
 from kaine.modules.positive_control import PositiveControlSettings
+
+log = logging.getLogger(__name__)
 
 
 def make_vision(
@@ -84,6 +85,11 @@ def make_vision(
         # source_factory and forces capture on. Shipped mode = "off". Popped
         # before the key check below.
         "perception_feed",
+        # Face perception pipeline (social-cognition-identity).
+        "face_detection_enabled",
+        "face_expression_enabled",
+        "gaze_enabled",
+        "gaze_backend",
     }
     feed_section = dict(section.pop("perception_feed", {}) or {})
     pc_section = section.pop("positive_control", None)
@@ -231,4 +237,50 @@ def make_vision(
             height=height,
             warmup_frames=int(section.get("capture_warmup_frames", 3)),
         )
+    # Face perception pipeline (social-cognition-identity). Each component is
+    # constructed when its config flag is true and its model is provisioned;
+    # failure at construction time disables that component with a warning.
+    if bool(section.get("face_detection_enabled", False)):
+        from kaine.model_paths import vision_model_path
+        from kaine.vision_manifest import is_installed as _vision_installed
+
+        try:
+            from kaine.modules.vision.face_detector import FaceDetector
+
+            det_path = vision_model_path("yunet")
+            rec_path = vision_model_path("sface") if _vision_installed("sface") else None
+            kwargs["face_detector"] = FaceDetector(det_path, rec_path)
+        except Exception:
+            log.warning("face detector disabled: model not provisioned", exc_info=True)
+
+    if bool(section.get("face_expression_enabled", False)):
+        from kaine.model_paths import vision_model_path
+
+        try:
+            from kaine.modules.vision.face_expression import FaceExpressionClassifier
+
+            kwargs["face_expression"] = FaceExpressionClassifier(vision_model_path("fer"))
+        except Exception:
+            log.warning("face expression disabled: model not provisioned", exc_info=True)
+
+    if bool(section.get("gaze_enabled", False)):
+        gaze_backend = str(section.get("gaze_backend", "landmark")).strip().lower()
+        if gaze_backend == "landmark":
+            from kaine.modules.vision.gaze_estimator import LandmarkGazeEstimator
+
+            kwargs["gaze_estimator"] = LandmarkGazeEstimator()
+        elif gaze_backend == "learned":
+            from kaine.model_paths import vision_model_path
+
+            try:
+                from kaine.modules.vision.gaze_estimator import LearnedGazeEstimator
+
+                kwargs["gaze_estimator"] = LearnedGazeEstimator(
+                    vision_model_path("gaze-mobilenetv2")
+                )
+            except Exception:
+                log.warning(
+                    "learned gaze disabled: model not provisioned", exc_info=True
+                )
+
     return Vision(bus, entity_clock=entity_clock, **kwargs)

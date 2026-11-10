@@ -632,6 +632,13 @@ peripheral_width = 320              # downsampled whole-field gist geometry
 peripheral_height = 180
 foveal_size = 224                   # square foveal crop fed to the encoder
 
+# Face perception pipeline (identity + expression + gaze).
+# Requires `python -m kaine.setup.vision_models` to provision the models.
+face_detection_enabled = false
+face_expression_enabled = false
+gaze_enabled = false
+gaze_backend = "landmark"           # "landmark" (zero model cost) or "learned" (MobileNet V2)
+
 [planning]
 # backend = "pymdp"  # "pymdp" (JAX/pymdp) or "numpy" (pure NumPy, no JAX)
 # Active inference engine (pymdp 1.0, JAX). Install the `reasoning` extra

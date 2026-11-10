@@ -284,6 +284,7 @@ source_modules = [
     "kaine.memory_kinds",
     "kaine.model_paths",
     "kaine.speech_manifest",
+    "kaine.vision_manifest",
     "kaine.net",
     "kaine.organ_probe",
     "kaine.organ_server",
