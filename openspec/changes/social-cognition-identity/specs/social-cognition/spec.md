@@ -9,6 +9,10 @@ The social cognition module SHALL maintain a model per interacting agent (emotio
 - **WHEN** an agent has both voice and face centroids with high sample counts and stable centroids
 - **THEN** `familiarity()` SHALL return a higher score than for an agent with the same interaction count and emotion coverage but no perceptual embeddings
 
+#### Scenario: Familiarity incorporates reliability
+- **WHEN** an agent has high reliability scores (low exemplar variance) in both modalities
+- **THEN** `familiarity()` SHALL weight the perceptual evidence contribution higher than for an agent with the same exemplar count but low reliability
+
 #### Scenario: Familiarity without perceptual data
 - **WHEN** an agent has no voice or face embeddings (identity binding disabled or agent only known by label)
 - **THEN** `familiarity()` SHALL fall back to the existing computation based on interaction count and emotion category coverage
@@ -40,3 +44,18 @@ The social cognition module SHALL subscribe to `social_cognition.identity_update
 #### Scenario: Fallback to label when identity unavailable
 - **WHEN** identity binding is disabled or no speaker has been identified
 - **THEN** the social cognition module SHALL fall back to the existing channel-based operator-label attribution
+
+### Requirement: Multimodal emotion fusion from face expression and voice emotion
+The social cognition module SHALL consume `vision.face_expression` events and fuse face emotion evidence with the existing voice emotion from `audition.emotion`, per agent. When identity binding has resolved a face to an agent, the expression classification for that face updates the agent's emotion histogram with visual evidence.
+
+#### Scenario: Face expression fused with voice emotion for identified agent
+- **WHEN** a `vision.face_expression` event arrives for a face that identity binding has resolved to a known agent, and an `audition.emotion` event has been received for the same agent within the same processing window
+- **THEN** the social cognition module SHALL fuse the face and voice emotion evidence into the agent's emotion histogram, weighting each by its confidence
+
+#### Scenario: Face expression without identity resolution
+- **WHEN** a `vision.face_expression` event arrives but the face has not been resolved to a known agent (identity binding disabled or no match)
+- **THEN** the social cognition module SHALL NOT update any agent's emotion histogram from that expression event
+
+#### Scenario: Face expression alone (no voice emotion)
+- **WHEN** a `vision.face_expression` event arrives for an identity-resolved agent but no voice emotion is available
+- **THEN** the social cognition module SHALL update the agent's emotion histogram from the face expression alone

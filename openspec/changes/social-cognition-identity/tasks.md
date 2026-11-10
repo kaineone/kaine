@@ -16,7 +16,7 @@
 
 ## 3. AgentModel Extension (Person Identity Node)
 
-- [ ] 3.1 Extend `AgentModel` in `kaine/modules/social_cognition/agent.py`: add `voice_centroid` (192-dim, nullable), `face_centroid` (128-dim, nullable), `voice_exemplars` (list of exemplar dicts with embedding + timestamp), `face_exemplars` (list), `voice_sample_count` (int), `face_sample_count` (int), `binding_state` (enum: unbound/voice_only/face_only/bound), `binding_confidence` (float, nullable). Verify: unit test for construction, serialization (`to_dict`/`from_dict`), and backwards-compatible deserialization of profiles lacking the new fields (defaults to absent).
+- [ ] 3.1 Extend `AgentModel` in `kaine/modules/social_cognition/agent.py`: add `voice_centroid` (192-dim, nullable), `face_centroid` (128-dim, nullable), `voice_exemplars` (list of exemplar dicts with embedding + timestamp), `face_exemplars` (list), `voice_sample_count` (int), `face_sample_count` (int), `binding_state` (enum: unbound/voice_only/face_only/bound), `binding_confidence` (float, Bayesian posterior accumulator, nullable), `voice_reliability` (float, inverse intra-cluster variance, nullable), `face_reliability` (float, nullable), `voice_acoustic_embedding` (nullable, forward-compatible with deferred two-level voice). Exemplar buffers serialized inline in `to_dict()`. Verify: unit test for construction, serialization (`to_dict`/`from_dict`), and backwards-compatible deserialization of profiles lacking the new fields (defaults to absent).
 - [ ] 3.2 Extend `familiarity()` to incorporate embedding evidence: factor in exemplar count, centroid stability, and binding confidence alongside existing interaction count and emotion coverage. When no embeddings exist, fall back to existing computation. Verify: unit test showing familiarity is higher with stable centroids and high sample counts than without, given equal interaction counts.
 - [ ] 3.3 Extend `SocialCognitionMergeStrategy` in `kaine/lifecycle/strategies.py`: merge voice/face centroids by sample-count-weighted average, union exemplar buffers with similarity-based deduplication, binding state takes higher-confidence side, binding confidence takes maximum. Verify: unit test for merge with diverged centroids, merge with one side lacking embeddings, merge of exemplar buffers.
 
@@ -30,7 +30,7 @@
 
 - [ ] 5.1 Implement speaker identification consumer in `kaine/modules/social_cognition/module.py`: subscribes to `audition.speaker_embedding`, matches against known agents (exemplar-based or centroid-based depending on phase), resolves to best match or mints new agent, publishes `social_cognition.identity_update`. Verify: integration test with known speaker resolved, unknown speaker minted.
 - [ ] 5.2 Implement face identification consumer: subscribes to `vision.face_detection`, matches each face against known agents, resolves per face, publishes `social_cognition.identity_update` per face. Verify: integration test with known face, unknown face, multiple faces.
-- [ ] 5.3 Implement cross-modal binder: tracks recent voice and face identifications in a sliding window, merges agents when voice and face co-occur within the configurable window for a minimum co-occurrence count. Verify: integration test showing agent merge on sustained co-occurrence, no merge on single coincidence, no merge when only one modality active.
+- [ ] 5.3 Implement reliability-weighted cross-modal binder in `kaine/modules/social_cognition/binder.py`: tracks recent voice and face identifications in a sliding window, computes Bayesian posterior for common-cause (Ernst & Banks 2002 MLE), weights by per-modality reliability (inverse exemplar variance), accumulates binding_confidence via EMA, merges agents when binding_confidence exceeds configurable threshold. Verify: integration test showing agent merge on sustained high-confidence co-occurrence, no merge on low-confidence or single coincidence, no merge when only one modality active, low-reliability modality contributes less to binding.
 - [ ] 5.4 Wire identity resolution into existing agent attribution: when identity binding is enabled and a speaker has been identified, `_agent_for(event)` uses the identity-resolved agent instead of the operator label. Fallback to label when identity unavailable. Verify: integration test showing identity-based attribution replacing label-based.
 - [ ] 5.5 Add `FaithfulRenderer` template for `social_cognition.identity_update` events. Verify: template renders in human-readable form.
 
@@ -41,10 +41,36 @@
 
 ## 7. Configuration and Deployment Tiers
 
-- [ ] 7.1 Add `[social_cognition]` config keys: speaker/face identification thresholds, co-occurrence window, co-occurrence count before merge, exemplar buffer limits, consolidation parameters. All ship disabled/conservative. Verify: config keys parsed, defaults correct.
-- [ ] 7.2 Update deployment-tier capability matrix: perceptual identity row: present Tier 2+, absent Tier 0/1. Tier 0/1 tier files force identity config flags to disabled. Verify: Tier 1 config overlay disables identity; Tier 2 allows it.
+- [ ] 7.1 Add `[social_cognition]` config keys: speaker/face identification thresholds, co-occurrence window, binding merge threshold, p_common prior, reliability floor, exemplar buffer limits, consolidation parameters, expression/gaze pipeline toggles. All ship disabled/conservative. Verify: config keys parsed, defaults correct.
+- [ ] 7.2 Update deployment-tier capability matrix: perceptual identity row (speaker + face identity + expression + gaze): present Tier 2+, absent Tier 0/1. Tier 0/1 tier files force identity and face-perception config flags to disabled. Verify: Tier 1 config overlay disables all; Tier 2 allows them.
 
-## 8. Integration Verification
+## 8. Face Expression Classification (pSTS Analogue)
 
-- [ ] 8.1 End-to-end integration test: enable both modalities, process audio and video with a consistent identity, verify agent minted by voice, recognized by face, cross-modal merge on co-occurrence, familiarity increases, identity_update events published correctly.
-- [ ] 8.2 Backwards compatibility test: deserialize agent profiles from before this change (no embedding fields), verify they load with absent defaults and continue to function.
+- [ ] 8.1 Add OpenCV Zoo FER model provisioning: consent-gated download via the existing provision system (~8 MB ONNX). Verify: provisioning downloads the model.
+- [ ] 8.2 Implement `FaceExpressionClassifier` class in `kaine/modules/vision/face_expression.py`: wraps the OpenCV Zoo FER model, accepts a face crop (from YuNet detection), returns expression label, per-category scores, and confidence. Gated by config flag. Verify: unit test that classifies a test face crop and returns 7-category scores.
+- [ ] 8.3 Integrate `FaceExpressionClassifier` into `Vision.process_frame()`: run on each detected face alongside the identity pipeline, sharing the same face crop. Publish `vision.face_expression` event on the bus. Independent of identity embedding (SFace failure does not block expression). Verify: integration test that processes a frame with a face and observes `vision.face_expression` on the bus.
+- [ ] 8.4 Add `[vision].face_expression_enabled` config key (default false) to `config/kaine.toml`. Verify: boot with default config does not load expression classifier.
+
+## 9. Gaze Estimation
+
+- [ ] 9.1 Implement gaze estimation in `kaine/modules/vision/gaze_estimator.py`: two backends, config-selectable. (1) Landmark-based: solvePnP on YuNet's 5-point landmarks, producing yaw/pitch (zero model cost). (2) Learned: MobileNet V2 gaze (~10 MB ONNX, MIT, consent-gated download). Both produce per-face yaw, pitch, and mutual_gaze flag. Verify: unit test for both backends.
+- [ ] 9.2 Integrate gaze estimator into `Vision.process_frame()`: run on each detected face, publish `vision.gaze_direction` event. Verify: integration test with face observes gaze event; mutual gaze flag set when face points at camera.
+- [ ] 9.3 Add `[vision].gaze_enabled` and `[vision].gaze_backend` (landmark|learned) config keys (default false/landmark). Add MobileNet V2 gaze model provisioning if learned backend enabled. Verify: config keys parsed, landmark backend works without model download.
+
+## 10. Multimodal Emotion Fusion
+
+- [ ] 10.1 Implement face expression consumer in `kaine/modules/social_cognition/module.py`: subscribes to `vision.face_expression`, looks up the agent for the detected face via the identity system, updates the agent's emotion histogram with visual evidence weighted by expression confidence. Verify: integration test showing agent emotion histogram updated from face expression.
+- [ ] 10.2 Implement emotion fusion logic: when both voice emotion (from `audition.emotion`) and face emotion (from `vision.face_expression`) are available for the same agent in the same processing window, fuse by confidence-weighted combination. Verify: unit test showing fused emotion differs from either single-modality source.
+- [ ] 10.3 Add `FaithfulRenderer` template for `vision.face_expression` and `vision.gaze_direction` events. Verify: templates render in human-readable form.
+
+## 11. Per-Modality Reliability
+
+- [ ] 11.1 Implement reliability computation in `ExemplarBuffer`: method `reliability()` returns inverse of intra-cluster variance (mean squared cosine distance from centroid), normalized to [0, 1]. Returns configurable floor when fewer than 2 exemplars. Verify: unit test with known exemplar distributions.
+- [ ] 11.2 Wire reliability into AgentModel: `voice_reliability` and `face_reliability` fields, updated when exemplar buffer changes. Verify: reliability increases as exemplars cluster tighter.
+- [ ] 11.3 Wire reliability into familiarity(): weight perceptual evidence contribution by reliability. High-reliability centroids contribute more to familiarity than low-reliability ones. Verify: unit test showing familiarity difference.
+
+## 12. Integration Verification
+
+- [ ] 12.1 End-to-end integration test: enable all pipelines (speaker identity, face identity, expression, gaze), process audio and video with a consistent identity. Verify: agent minted by voice, recognized by face, expression and gaze events attributed to agent, cross-modal merge on sustained co-occurrence with reliability weighting, familiarity increases, all events published correctly.
+- [ ] 12.2 Backwards compatibility test: deserialize agent profiles from before this change (no embedding/reliability fields), verify they load with absent defaults and continue to function.
+- [ ] 12.3 Single-modality test: enable only speaker embedding (face disabled). Verify: voice-only identification works, no face events, no binding, no expression/gaze events. Repeat with only face enabled.

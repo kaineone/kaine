@@ -36,12 +36,16 @@ The identity-binding system SHALL compare each incoming face embedding against k
 - **WHEN** a `vision.face_detection` event carries embeddings for more than one detected face
 - **THEN** the system SHALL resolve each face independently against known agents, minting new agents as needed, and SHALL publish one `social_cognition.identity_update` per resolved face
 
-### Requirement: Cross-modal binder associates voice and face through temporal co-occurrence
-The identity-binding system SHALL bind a voice identification and a face identification to the same agent when both occur within a configurable temporal co-occurrence window, operating as a convergence-zone correlator.
+### Requirement: Cross-modal binder associates voice and face through reliability-weighted temporal co-occurrence
+The identity-binding system SHALL bind a voice identification and a face identification to the same agent when both occur within a configurable temporal co-occurrence window, operating as a convergence-zone correlator with Bayesian reliability weighting. Each co-occurrence observation updates a posterior probability (binding_confidence) that the voice and face share a common cause, following the MLE framework (Ernst & Banks, 2002). Agent merge triggers when accumulated binding_confidence exceeds a configurable threshold.
 
-#### Scenario: Voice and face co-occur within window
-- **WHEN** a speaker identification resolves to agent A and a face identification resolves to agent B, and both events occur within the configured co-occurrence window, and agents A and B are distinct
+#### Scenario: Voice and face co-occur within window, binding confidence exceeds threshold
+- **WHEN** a speaker identification resolves to agent A and a face identification resolves to agent B, both events occur within the configured co-occurrence window, agents A and B are distinct, and the accumulated binding_confidence between them exceeds the configured merge threshold
 - **THEN** the system SHALL merge agents A and B into a single agent that holds both the voice and face representations, and SHALL publish a `social_cognition.identity_update` with the merged agent id and both modalities
+
+#### Scenario: Co-occurrence below merge threshold
+- **WHEN** a speaker identification and face identification co-occur within the window for distinct agents, but the accumulated binding_confidence has not yet exceeded the merge threshold
+- **THEN** the system SHALL update the binding_confidence between the two agents using the Bayesian posterior from the current observation, weighted by each modality's reliability, without merging
 
 #### Scenario: Voice and face already bound to same agent
 - **WHEN** a speaker identification and face identification both resolve to the same existing agent within the co-occurrence window
@@ -50,6 +54,21 @@ The identity-binding system SHALL bind a voice identification and a face identif
 #### Scenario: No co-occurring detection
 - **WHEN** a speaker identification occurs and no face identification occurs within the co-occurrence window (or vice versa)
 - **THEN** the system SHALL NOT attempt cross-modal binding for that event
+
+### Requirement: Per-modality reliability weighting
+The identity-binding system SHALL compute per-modality reliability for each agent from the intra-cluster variance of the exemplar buffer. Low-variance exemplar clusters indicate high reliability. Reliability SHALL weight identity match confidence and binding decisions.
+
+#### Scenario: Reliability computed from exemplar variance
+- **WHEN** an agent has two or more exemplars in a modality's buffer
+- **THEN** the system SHALL compute the intra-cluster variance (mean squared cosine distance from centroid) and store it as that modality's reliability score (inverse variance, normalized to [0, 1])
+
+#### Scenario: Low-reliability modality down-weighted in binding
+- **WHEN** a cross-modal co-occurrence is evaluated and one modality has low reliability (high exemplar variance)
+- **THEN** that modality's contribution to the binding_confidence posterior SHALL be reduced proportionally to its reliability
+
+#### Scenario: Single exemplar has default reliability
+- **WHEN** an agent has only one exemplar in a modality (no variance computable)
+- **THEN** that modality's reliability SHALL default to a configurable floor value (conservative, low)
 
 ### Requirement: Two-phase identity learning with exemplar buffer and centroid consolidation
 The identity-binding system SHALL implement a two-phase learning process: a fast-binding phase using individual exemplar storage and nearest-exemplar matching, and a slow-consolidation phase using centroid representations.
