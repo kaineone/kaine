@@ -8,7 +8,11 @@ import copy
 import functools
 import logging
 import math
-from typing import Any, ClassVar, Optional
+from typing import TYPE_CHECKING, Any, ClassVar, Optional
+
+if TYPE_CHECKING:
+    from kaine.modules.vision.face_detector import FaceDetector
+    from kaine.modules.vision.face_expression import FaceExpressionClassifier
 
 from kaine.bus.client import AsyncBus, tail_id
 from kaine.bus.streams import SLEEP_STREAM
@@ -148,6 +152,11 @@ class Vision(BaseModule):
         foveal_size: tuple[int, int] = (224, 224),
         positive_control: Optional[PositiveControlSettings] = None,
         workspace_feedback: Optional[WorkspaceFeedbackSettings] = None,
+        # Face perception pipeline (social-cognition-identity). Injected by
+        # the factory when the corresponding config flags are true; None = disabled.
+        face_detector: Optional["FaceDetector"] = None,
+        face_expression: Optional["FaceExpressionClassifier"] = None,
+        gaze_estimator: Optional[Any] = None,
     ) -> None:
         super().__init__(bus)
         if not 0.0 <= baseline_salience <= 1.0:
@@ -307,6 +316,11 @@ class Vision(BaseModule):
         # kaine/perception_preview.py for the zero-persistence contract.
         self._preview_jpeg: Optional[bytes] = None
 
+        # Face perception pipeline (social-cognition-identity).
+        self._face_detector: Optional["FaceDetector"] = face_detector
+        self._face_expression: Optional["FaceExpressionClassifier"] = face_expression
+        self._gaze_estimator: Optional[Any] = gaze_estimator
+
     def _ensure_feedback_wrap(self) -> None:
         """Wrap the forward model in a top-down blend when workspace feedback is on.
 
@@ -364,6 +378,28 @@ class Vision(BaseModule):
                 )
                 self._live_camera = None
 
+        # Face perception pipeline warm-up.
+        if self._face_detector is not None:
+            try:
+                await self._face_detector.warm_up()
+            except Exception as exc:
+                log.warning("face detector disabled: %s", exc, exc_info=True)
+                self._face_detector = None
+        if self._face_expression is not None:
+            try:
+                await self._face_expression.warm_up()
+            except Exception as exc:
+                log.warning("face expression disabled: %s", exc, exc_info=True)
+                self._face_expression = None
+        if self._gaze_estimator is not None:
+            warm = getattr(self._gaze_estimator, "warm_up", None)
+            if warm is not None:
+                try:
+                    await warm()
+                except Exception as exc:
+                    log.warning("gaze estimator disabled: %s", exc, exc_info=True)
+                    self._gaze_estimator = None
+
     async def shutdown(self) -> None:
         if self._live_camera is not None:
             try:
@@ -376,6 +412,14 @@ class Vision(BaseModule):
             await self._encoder.shutdown()
         except Exception:
             log.warning("vision encoder shutdown failed", exc_info=True)
+        # Shut down face perception pipeline.
+        for _face_component in (self._face_detector, self._face_expression, self._gaze_estimator):
+            if _face_component is not None:
+                try:
+                    await _face_component.aclose()
+                except Exception:
+                    log.warning("face component shutdown failed", exc_info=True)
+
         # Drop any dev preview so no stale frame lingers once capture stops.
         self._preview_jpeg = None
         try:
@@ -523,6 +567,102 @@ class Vision(BaseModule):
         # Last resort: let numpy try (e.g. a torch tensor exposes __array__).
         return np.asarray(image)
 
+    async def _run_face_pipeline(self, image: Any) -> None:
+        """Run face detection, expression classification, and gaze estimation.
+
+        Publishes separate bus events for each result type. Runs as a
+        concurrent task alongside the forward model step in process_frame.
+        """
+        import numpy as np
+
+        if self._face_detector is None:
+            return
+
+        frame_np = self._foveation_frame(image)
+        try:
+            detection = await self._face_detector.detect(frame_np)
+        except Exception:
+            log.warning("face detection failed", exc_info=True)
+            return
+
+        if detection.degraded or not detection.faces:
+            if detection.degraded:
+                await self.publish(
+                    "vision.face_detection",
+                    {"faces": [], "degraded": True},
+                    salience=self._baseline_salience,
+                )
+            return
+
+        face_entries: list[dict[str, Any]] = []
+        for face in detection.faces:
+            landmarks_list = face.landmarks.tolist() if isinstance(face.landmarks, np.ndarray) else face.landmarks
+            face_entries.append({
+                "bbox": list(face.bbox),
+                "confidence": face.confidence,
+                "embedding": face.embedding,
+                "landmarks": landmarks_list,
+            })
+
+        await self.publish(
+            "vision.face_detection",
+            {"faces": face_entries, "degraded": False},
+            salience=self._baseline_salience,
+        )
+
+        for idx, face in enumerate(detection.faces):
+            tasks: list[asyncio.Task[Any]] = []
+            expr_task = None
+            gaze_task = None
+
+            if self._face_expression is not None and face.crop is not None:
+                expr_task = asyncio.create_task(
+                    self._face_expression.classify(face.crop)
+                )
+                tasks.append(expr_task)
+            if self._gaze_estimator is not None:
+                gaze_task = asyncio.create_task(
+                    self._gaze_estimator.estimate(face.landmarks, frame_np.shape)
+                )
+                tasks.append(gaze_task)
+
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
+
+            if expr_task is not None:
+                try:
+                    expr_result = expr_task.result()
+                    if expr_result is not None:
+                        await self.publish(
+                            "vision.face_expression",
+                            {
+                                "face_index": idx,
+                                "label": expr_result.label,
+                                "scores": expr_result.scores,
+                                "confidence": expr_result.confidence,
+                            },
+                            salience=self._baseline_salience,
+                        )
+                except Exception:
+                    log.debug("expression classification failed for face %d", idx, exc_info=True)
+
+            if gaze_task is not None:
+                try:
+                    gaze_result = gaze_task.result()
+                    if gaze_result is not None:
+                        await self.publish(
+                            "vision.gaze_direction",
+                            {
+                                "face_index": idx,
+                                "yaw": gaze_result.yaw,
+                                "pitch": gaze_result.pitch,
+                                "mutual_gaze": gaze_result.mutual_gaze,
+                            },
+                            salience=self._baseline_salience,
+                        )
+                except Exception:
+                    log.debug("gaze estimation failed for face %d", idx, exc_info=True)
+
     async def process_frame(self, image: Any) -> str:
         # Clip-native ring buffer (topos-temporal-video-encoder §1a/§1b). Append
         # the incoming frame; publish nothing until the buffer first fills
@@ -582,6 +722,14 @@ class Vision(BaseModule):
             embedding = peripheral_latent
         else:
             embedding = await self._encode_clip(list(self._frame_buffer))
+
+        # Kick off the face perception pipeline concurrently with the rest
+        # of the report work (forward model, change detection, etc.).
+        face_task: Optional[asyncio.Task[None]] = None
+        if self._face_detector is not None:
+            face_image = list(self._frame_buffer)[-1]
+            face_task = asyncio.create_task(self._run_face_pipeline(face_image))
+
         # A non-finite embedding is skipped: it scores no change and leaves the
         # change detector and the change history as they were, so the next
         # embedding is compared with the last finite one.
@@ -839,6 +987,13 @@ class Vision(BaseModule):
                 "own_error": getattr(self._forward_model, "last_own_error", None),
                 "top_down_error": getattr(self._forward_model, "last_top_error", None),
             }
+        # Wait for the face perception pipeline to finish before publishing.
+        if face_task is not None:
+            try:
+                await face_task
+            except Exception:
+                log.warning("face perception pipeline failed", exc_info=True)
+
         event_id = await self.publish(
             "vision.report",
             report,

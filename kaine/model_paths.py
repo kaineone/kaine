@@ -61,3 +61,18 @@ DEFAULT_TTS = "kokoro-en"
 def speech_model_dir(model_id: str, root: Path | str | None = None) -> Path:
     """Directory where the extracted model for ``model_id`` is expected to live."""
     return (Path(root) if root else models_dir()) / "sherpa-onnx" / model_id
+
+
+def vision_model_path(model_id: str, root: Path | str | None = None) -> Path:
+    """Path to a single-file vision ONNX model.
+
+    Vision models are standalone ONNX files (not archives), stored under
+    ``models_dir() / "vision" / <filename>``.  The filename is looked up
+    from the vision manifest.
+    """
+    from kaine.vision_manifest import VISION_MANIFEST
+
+    model = VISION_MANIFEST.get(model_id)
+    if model is None:
+        raise ValueError(f"unknown vision model id: {model_id}")
+    return (Path(root) if root else models_dir()) / "vision" / model.filename

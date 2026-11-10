@@ -100,6 +100,7 @@ class ProvisionPlan:
     organ_commands: tuple[tuple[str, ...], ...] = ()
     aux_models: tuple[AuxModel, ...] = ()
     speech_models: tuple[str, ...] = ()
+    vision_models: tuple[str, ...] = ()
     # The InternVideo-Next weights fetch argv, present ONLY when the configured
     # (or default) encoder backend is ``internvideo_next``. Empty otherwise (the
     # DINOv2 backend fetches its weights as a plain aux model instead).
@@ -177,7 +178,7 @@ def internvideo_next_fetch_cmd() -> tuple[str, ...]:
 
 def plan_provision(config: dict[str, Any]) -> ProvisionPlan:
     """Build the full setup-phase plan. Pure: downloads nothing."""
-    from kaine.setup import speech_models
+    from kaine.setup import speech_models, vision_models
 
     modules = config.get("modules") or {}
     backend = detect_organ_backend()
@@ -192,6 +193,7 @@ def plan_provision(config: dict[str, Any]) -> ProvisionPlan:
         organ_commands=organ_cmds,
         aux_models=aux_models(config),
         speech_models=tuple(speech_models.required_speech_models(config)),
+        vision_models=tuple(vision_models.required_vision_models(config)),
         internvideo_command=iv_cmd,
         _config=config,
     )
@@ -207,20 +209,23 @@ def run_provision(
     *,
     consent: bool = True,
     speech_consent: bool = False,
+    vision_consent: bool = False,
     runner: Optional[Callable[..., Any]] = None,
     speech_downloader: Optional[Callable[[str, str], None]] = None,
+    vision_downloader: Optional[Callable[[str, str], None]] = None,
 ) -> tuple[list[OrganDownloadResult], list[ProvisionResult]]:
     """Provision every model weight. Real ``hf download`` per model.
 
     With ``consent=False`` nothing runs (returns empty lists). Sherpa-onnx speech
     archives are downloaded only when both ``consent`` and ``speech_consent`` are
     true; otherwise a single ``ok=False`` result records that they were not
-    fetched. ``runner`` defaults to ``subprocess.run`` and is injectable so tests
-    never hit the network. ``speech_downloader`` is forwarded to
+    fetched. Vision ONNX models require ``vision_consent``. ``runner`` defaults to
+    ``subprocess.run`` and is injectable so tests never hit the network.
+    ``speech_downloader`` is forwarded to
     :func:`kaine.setup.speech_models.fetch` for sherpa-onnx model archives. Never
     raises — a failed download is reported as ``ok=False``.
     """
-    from kaine.setup import speech_models
+    from kaine.setup import speech_models, vision_models
 
     if not consent:
         return [], []
@@ -305,6 +310,31 @@ def run_provision(
             )
         )
 
+    required_vision = vision_models.required_vision_models(config)
+    if required_vision and not vision_consent:
+        aux_results.append(
+            ProvisionResult(
+                repo="opencv-zoo vision models",
+                purpose="vision models (not fetched)",
+                ok=False,
+                detail=(
+                    "vision models need explicit consent: re-run with --vision-models "
+                    "or KAINE_PROVISION_VISION_MODELS=1 after reading the licences above"
+                ),
+            )
+        )
+    for model_id in (required_vision if vision_consent else []):
+        print(vision_models.describe(model_id))
+        res = vision_models.fetch(model_id, downloader=vision_downloader)
+        aux_results.append(
+            ProvisionResult(
+                repo=vision_models.VISION_MANIFEST[model_id].url,
+                purpose=vision_models.describe(model_id),
+                ok=res.ok,
+                detail=res.detail,
+            )
+        )
+
     return organ_results, aux_results
 
 
@@ -324,19 +354,32 @@ def main(argv: Optional[list[str]] = None) -> int:
         action="store_true",
         help="download sherpa-onnx speech archives after the plan shows their licences",
     )
+    parser.add_argument(
+        "--vision-models",
+        action="store_true",
+        help="download vision ONNX models (YuNet, SFace, FER, gaze) after the plan shows their licences",
+    )
     args = parser.parse_args(argv)
     speech_consent = args.speech_models or os.environ.get("KAINE_PROVISION_SPEECH_MODELS") == "1"
+    vision_consent = args.vision_models or os.environ.get("KAINE_PROVISION_VISION_MODELS") == "1"
 
     config = _load_config()
     install_data_root(config)
-    from kaine.setup import speech_models
+    from kaine.setup import speech_models, vision_models
     planned_speech = speech_models.required_speech_models(config)
     if planned_speech:
         print("Planned sherpa-onnx speech archives:")
         for model_id in planned_speech:
             print(f"  - {speech_models.describe(model_id)}")
+    planned_vision = vision_models.required_vision_models(config)
+    if planned_vision:
+        print("Planned vision ONNX models:")
+        for model_id in planned_vision:
+            print(f"  - {vision_models.describe(model_id)}")
 
-    organ_results, aux_results = run_provision(config, speech_consent=speech_consent)
+    organ_results, aux_results = run_provision(
+        config, speech_consent=speech_consent, vision_consent=vision_consent,
+    )
     ok = True
     for r in organ_results:
         status = "ok" if r.ok else "FAILED"
