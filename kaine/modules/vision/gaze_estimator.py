@@ -62,7 +62,11 @@ class LandmarkGazeEstimator:
     """Head-pose gaze from solvePnP on 5-point landmarks.  No model cost."""
 
     async def estimate(
-        self, landmarks: np.ndarray, frame_shape: tuple[int, ...]
+        self,
+        landmarks: np.ndarray,
+        frame_shape: tuple[int, ...],
+        *,
+        face_crop: np.ndarray | None = None,
     ) -> GazeResult | None:
         """Estimate gaze from 5 face landmarks (shape (5, 2))."""
         if landmarks is None or landmarks.shape != (5, 2):

@@ -622,7 +622,9 @@ class Vision(BaseModule):
                 tasks.append(expr_task)
             if self._gaze_estimator is not None:
                 gaze_task = asyncio.create_task(
-                    self._gaze_estimator.estimate(face.landmarks, frame_np.shape)
+                    self._gaze_estimator.estimate(
+                        face.landmarks, frame_np.shape, face_crop=face.crop,
+                    )
                 )
                 tasks.append(gaze_task)
 
