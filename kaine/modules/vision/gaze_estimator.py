@@ -104,7 +104,7 @@ class LandmarkGazeEstimator:
 
         rmat, _ = cv2.Rodrigues(rvec)
         # Decompose rotation matrix to Euler angles.
-        sy = math.sqrt(rmat[0, 0] ** 2 + rmat[1, 0] ** 2)
+        sy = math.hypot(rmat[0, 0], rmat[1, 0])
         if sy > 1e-6:
             yaw = math.atan2(rmat[1, 0], rmat[0, 0])
             pitch = math.atan2(-rmat[2, 0], sy)

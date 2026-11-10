@@ -27,6 +27,7 @@ SCANNED_ROOTS = ("kaine", "scripts")
 # hash-pinned artifacts at setup time and never carries entity data.
 ALLOWED_PROXY_CAPABLE = {
     "kaine/setup/speech_models.py": "downloads public speech models at setup",
+    "kaine/setup/vision_models.py": "downloads public vision ONNX models at setup",
     "kaine/wheel_index.py": "fetches public wheel indexes at setup",
     "scripts/k1jev/sources.py": "fetches public datasets and the generator GGUF for K1-Jev data builds, each SHA-256-pinned",
 }

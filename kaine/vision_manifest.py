@@ -14,8 +14,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from kaine.model_paths import vision_model_path
-
 __all__ = [
     "VisionModel",
     "VISION_MANIFEST",
@@ -96,6 +94,8 @@ def is_installed(model_id: str, root: Path | str | None = None) -> bool:
     model = VISION_MANIFEST.get(model_id)
     if model is None:
         return False
+    from kaine.model_paths import vision_model_path  # lazy: break cycle with model_paths
+
     onnx_path = vision_model_path(model_id, root)
     if not onnx_path.is_file():
         return False
