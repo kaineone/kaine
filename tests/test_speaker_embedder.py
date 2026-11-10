@@ -273,6 +273,9 @@ class _StubEmbedder:
     def __init__(self) -> None:
         self.calls = 0
 
+    async def warm_up(self) -> None:
+        pass
+
     async def extract(self, audio_bytes: bytes, *, sample_rate: int = 16000):
         self.calls += 1
         return SpeakerEmbeddingResult(
