@@ -129,7 +129,7 @@ Writes are atomic (write, then rename). An operator write to `locus` bypasses th
 
 ## Enabling
 
-In the operator file `config/kaine.operator.toml` (the same flag in the shipped `config/kaine.toml` would be overridden by the `first_configuration` profile, which the loader applies when no profile is selected):
+In the operator file `config/kaine.operator.toml` (see [Module defaults](README.md#the-first-configuration-profile) for how profiles and the operator file interact):
 
 ```toml
 [modules]

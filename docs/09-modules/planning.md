@@ -151,7 +151,7 @@ The payload keeps the shape of the earlier symbolic reasoner:
 ## Enabling
 
 1. Choose a backend. The default, `backend = "pymdp"`, needs the `[reasoning]` extra: `.venv/bin/pip install -e '.[reasoning]'`. `backend = "numpy"` needs nothing more.
-2. In the operator file `config/kaine.operator.toml`, set `[modules].planning = true`. The same flag in the shipped `config/kaine.toml` would be overridden by the `first_configuration` profile, which the loader applies when no profile is selected.
+2. In the operator file `config/kaine.operator.toml`, set `[modules].planning = true`.
 
 The planning module needs no external service. In tests, inject a `FakeEngine`:
 

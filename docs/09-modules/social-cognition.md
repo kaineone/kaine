@@ -168,7 +168,7 @@ Each `social_cognition.agent_model` carries the `source_label` of the audio even
 ## Enabling
 
 1. Start the Qdrant container that the episodic memory module uses, or set `backend = "inmemory"`.
-2. In the operator file `config/kaine.operator.toml`, set `[modules].social_cognition = true`. The same flag in the shipped `config/kaine.toml` would be overridden by the `first_configuration` profile, which the loader applies when no profile is selected.
+2. In the operator file `config/kaine.operator.toml`, set `[modules].social_cognition = true`.
 3. Optionally turn on the affect module's coupling with `[affect.coupling].enabled = true`.
 
 To try the agent model by hand:

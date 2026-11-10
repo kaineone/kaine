@@ -217,7 +217,7 @@ With `sink_enabled = true`, each clip is written to `<sink_path>/<timestamp>-<uu
 
 ## Enabling
 
-1. In the operator file `config/kaine.operator.toml`, set `[modules].vocal = true`. The same flag in the shipped `config/kaine.toml` would be overridden by the `first_configuration` profile, which the loader applies when no profile is selected.
+1. In the operator file `config/kaine.operator.toml`, set `[modules].vocal = true`.
 2. For `backend = "chatterbox"`, start the Chatterbox server. With no voice configured the vocal module uses the first voice the server ships; to use a particular one, set `default_voice` or `predefined_voice_id` (keep personal filenames out of version control). For `backend = "sherpa_onnx"`, fetch the model with `python -m kaine.setup.speech_models --tts kokoro-en`; the vocal module picks a preset speaker, or set `voice_gender`, `default_voice` or `sherpa_speaker_id`. For `backend = "qwen3_tts"`, install the extra with `pip install "kaine[speech-qwen3]"` and run the setup wizard or `hf download kaineone/Qwen3-TTS-Sam-0.6B`; the default speaker is `sam`, or set `qwen3_speaker`.
 3. Keep the [language module](language.md) on, since the vocal module speaks its output, and the [affect module](affect.md), since the vocal module's prosody follows its affect.
 4. For prosodic mirroring, turn on [Audition](audition.md)'s `prosody_enabled` and set `[vocal.mirroring].enabled = true`.

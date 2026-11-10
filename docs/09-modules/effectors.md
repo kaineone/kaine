@@ -121,7 +121,7 @@ The effectors module plays no audio (that is [the vocal module](vocal.md)), make
 
 ## Enabling
 
-1. In the operator file `config/kaine.operator.toml`, set `[modules].effectors = true`. The same flag in the shipped `config/kaine.toml` would be overridden by the `first_configuration` profile, which the loader applies when no profile is selected.
+1. In the operator file `config/kaine.operator.toml`, set `[modules].effectors = true`.
 2. List the effectors that may run in `enabled_effectors`, for example `["file_write", "notify"]`.
 3. Add any shell commands under `[effectors.shell_whitelist]`, as narrowly as the use allows.
 4. Supply an action-selection policy that emits `act` intents. The shipped policies do not, so without one the effectors module starts and never runs anything. The one built source is the held stimulus effector: set `[stimulus_control].enabled = true`, use a `playlist` feed and list `"stimulus"` in `enabled_effectors`.

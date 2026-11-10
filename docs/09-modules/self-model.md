@@ -122,7 +122,7 @@ If `seed_path` is set, the engine reads the JSONL file once at first boot throug
 
 ## Enabling
 
-1. In the operator file `config/kaine.operator.toml`, set `[modules].self_model = true`. The operator file merges last. The same flag in the shipped `config/kaine.toml` would be overridden by the `first_configuration` profile, which the loader applies when no profile is selected.
+1. In the operator file `config/kaine.operator.toml`, set `[modules].self_model = true`.
 2. Make sure `state/self_model/` is writable.
 3. To turn on self-inference, also set `[self_model.self_inference].enabled = true`.
 4. To seed fields at first boot, set `seed_path` to a JSONL file with one object per line, for example:
