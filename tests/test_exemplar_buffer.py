@@ -242,3 +242,16 @@ def test_agent_model_backwards_compat_deserialization():
     assert m.binding_state == "unbound"
     assert m.binding_confidence is None
     assert m.voice_reliability is None
+
+
+def test_merge_profiles_zero_interactions_keeps_identity_from_pb():
+    from kaine.lifecycle.strategies import _merge_profiles
+
+    pa = AgentModel(id="a", label="a").to_dict()
+    pb = AgentModel(id="a", label="a").to_dict()
+    pa["interaction_count"] = 0
+    pb["interaction_count"] = 0
+    pb["voice_centroid"] = _vec(8, 1.0)
+    assert pa.get("voice_centroid") is None
+    merged = _merge_profiles(pa, pb)
+    assert merged["voice_centroid"] == pytest.approx(_vec(8, 1.0))

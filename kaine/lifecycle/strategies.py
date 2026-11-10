@@ -537,7 +537,9 @@ def _merge_profiles(
 
     if total == 0:
         # No observations on either side — take pa as base.
-        return dict(pa)
+        result = dict(pa)
+        result.update(_merge_identity_fields(pa, pb))
+        return result
 
     w_a = count_a / total
     w_b = count_b / total
