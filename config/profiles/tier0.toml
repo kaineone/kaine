@@ -41,3 +41,6 @@ backend = "sqlite_vec"
 [planning]
 # Pure-NumPy active inference; no JAX/pymdp at this tier.
 backend = "numpy"
+
+[decision]
+enabled = false

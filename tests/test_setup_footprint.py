@@ -1345,3 +1345,30 @@ def test_measure_service_root_exiting_mid_measurement_is_not_running(monkeypatch
     monkeypatch.setattr(footprint.psutil, "net_connections", lambda kind: [Conn()])
     monkeypatch.setattr(footprint.psutil, "Process", lambda pid: Gone())
     assert footprint._measure_service("http://127.0.0.1:8123") is None
+
+
+def test_decision_enabled_registers_external_component():
+    config = {
+        "decision": {
+            "enabled": True,
+            "url": "http://127.0.0.1:11436",
+            "model": "k1-jev",
+        }
+    }
+    infos = [i for i in _select_components(config) if i.name == "decision"]
+    assert len(infos) == 1
+    assert infos[0].kind == "external"
+    assert infos[0].backend == "llama_cpp"
+    assert infos[0].model_id == "k1-jev"
+
+
+def test_decision_remote_url_not_measured():
+    config = {"decision": {"enabled": True, "url": "http://example.com:11436"}}
+    infos = [i for i in _select_components(config) if i.name == "decision"]
+    assert infos[0].kind == "not_measured"
+    assert infos[0].reason == "remote_endpoint"
+
+
+def test_decision_disabled_has_no_component():
+    config = {"decision": {"enabled": False}}
+    assert [i for i in _select_components(config) if i.name == "decision"] == []

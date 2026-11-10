@@ -27,3 +27,6 @@ backend = "openai"      # OpenAI-compatible HTTP server (today's default)
 
 [episodic_memory]
 backend = "qdrant"      # KAINE-owned Qdrant container (today's default)
+
+[decision]
+enabled = false
