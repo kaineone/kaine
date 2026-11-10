@@ -142,6 +142,7 @@ class SocialCognition(BaseModule):
         # source_label -> identified agent id, set by the voice identity path.
         self._identity_cache: dict[str, str] = {}
         self._merged_into: dict[str, str] = {}
+        self._merge_lock = asyncio.Lock()
 
         # Cursor for audition.out stream (emotion + transcription events).
         self._audition_cursor: str = "0-0"
@@ -393,6 +394,16 @@ class SocialCognition(BaseModule):
         elif has_face:
             model.binding_state = "face_only"
 
+    def _resolve_agent(self, agent_id: str) -> str:
+        """Follow the merge-redirect chain to the terminal (live) agent."""
+        seen: set[str] = set()
+        while agent_id in self._merged_into:
+            if agent_id in seen:
+                break
+            seen.add(agent_id)
+            agent_id = self._merged_into[agent_id]
+        return agent_id
+
     def _binding_confidence_for(self, agent_id: str) -> Optional[float]:
         if self._binder is None:
             return None
@@ -441,7 +452,7 @@ class SocialCognition(BaseModule):
             self._binder.observe_voice(agent_id, confidence, buf.reliability(), timestamp)
             await self._process_bindings()
             # A merge may have redirected this agent.
-            agent_id = self._merged_into.get(agent_id, agent_id)
+            agent_id = self._resolve_agent(agent_id)
 
         await self._publish_identity_update(
             agent_id,
@@ -485,7 +496,7 @@ class SocialCognition(BaseModule):
             if self._binder is not None:
                 self._binder.observe_face(agent_id, confidence, buf.reliability(), timestamp)
                 await self._process_bindings()
-                agent_id = self._merged_into.get(agent_id, agent_id)
+                agent_id = self._resolve_agent(agent_id)
 
             await self._publish_identity_update(
                 agent_id,
@@ -498,11 +509,12 @@ class SocialCognition(BaseModule):
     async def _process_bindings(self) -> None:
         if self._binder is None:
             return
-        for obs in self._binder.check_bindings():
-            if obs.voice_agent_id == obs.face_agent_id:
-                continue
-            if self._binder.should_merge(obs.voice_agent_id, obs.face_agent_id):
-                await self._handle_binding_merge(obs)
+        async with self._merge_lock:
+            for obs in self._binder.check_bindings():
+                if obs.voice_agent_id == obs.face_agent_id:
+                    continue
+                if self._binder.should_merge(obs.voice_agent_id, obs.face_agent_id):
+                    await self._handle_binding_merge(obs)
 
     async def _handle_binding_merge(self, observation: BindingObservation) -> None:
         """Merge the two agents of a bound voice/face pair into the better-observed one."""
@@ -533,11 +545,13 @@ class SocialCognition(BaseModule):
         kept.binding_confidence = self._binder.binding_confidence(kept.id, gone.id)
         await self._store.put(kept)
 
-        profiles = await self._store.all_profiles()
-        await self._store.replace_all([m for i, m in profiles.items() if i != gone.id])
+        await self._store.delete(gone.id)
 
         self._binder.record_merge(kept.id, gone.id)
         self._merged_into[gone.id] = kept.id
+        for k, v in list(self._merged_into.items()):
+            if v == gone.id:
+                self._merged_into[k] = kept.id
         for label, agent_id in list(self._identity_cache.items()):
             if agent_id == gone.id:
                 self._identity_cache[label] = kept.id

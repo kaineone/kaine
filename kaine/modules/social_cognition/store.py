@@ -119,6 +119,9 @@ class AgentStore(Protocol):
     async def replace_all(self, models: Sequence[AgentModel]) -> None:
         """Protocol member: replace all."""
 
+    async def delete(self, agent_id: str) -> None:
+        """Protocol member: remove a single agent profile."""
+
     async def search_by_voice(
         self, embedding: list[float], threshold: float = 0.6
     ) -> list[tuple[str, float]]:
@@ -175,6 +178,9 @@ class InMemoryAgentStore:
         self._profiles.clear()
         for model in models:
             self._profiles[model.id] = model
+
+    async def delete(self, agent_id: str) -> None:
+        self._profiles.pop(agent_id, None)
 
     async def search_by_voice(
         self, embedding: list[float], threshold: float = 0.6
@@ -458,6 +464,22 @@ class QdrantAgentStore:
             self._cache.clear()
             for model in models:
                 await self._put_strict(model)
+
+    async def delete(self, agent_id: str) -> None:
+        """Remove a single agent profile from Qdrant and the local cache."""
+        self._cache.pop(agent_id, None)
+        if self._client is None:
+            return
+        from qdrant_client import models  # type: ignore[import-untyped]
+
+        point_id = _point_id(agent_id)
+        try:
+            await self._client.delete(
+                collection_name=self._collection,
+                points_selector=models.PointIdsList(points=[point_id]),
+            )
+        except Exception:
+            log.warning("QdrantAgentStore.delete failed for %s", agent_id, exc_info=True)
 
     async def search_by_voice(
         self, embedding: list[float], threshold: float = 0.6
