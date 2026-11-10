@@ -1621,6 +1621,12 @@ consolidation_threshold = 5
 exemplar_diversity_floor = 0.01
 exemplar_ema_decay = 0.9
 reliability_floor = 0.3
+# Expression and gaze pipeline toggles (consumed from vision events).
+# These control whether social_cognition processes face expression and
+# gaze direction events from the vision module. Requires the vision
+# module to also have its own face_expression_enabled / gaze_enabled.
+expression_processing_enabled = false
+gaze_processing_enabled = false
 
 [social_cognition.qdrant]
 host = "127.0.0.1"

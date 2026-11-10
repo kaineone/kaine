@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 import uuid
 from typing import Any, ClassVar, Optional, Sequence
 
@@ -79,6 +80,8 @@ class SocialCognition(BaseModule):
         exemplar_diversity_floor: float = 0.01,
         exemplar_ema_decay: float = 0.9,
         reliability_floor: float = 0.3,
+        expression_processing_enabled: bool = False,
+        gaze_processing_enabled: bool = False,
     ) -> None:
         super().__init__(bus)
         if not 0.0 <= baseline_salience <= 1.0:
@@ -131,6 +134,8 @@ class SocialCognition(BaseModule):
         self._exemplar_diversity_floor = float(exemplar_diversity_floor)
         self._exemplar_ema_decay = float(exemplar_ema_decay)
         self._reliability_floor = float(reliability_floor)
+        self._expression_processing_enabled = bool(expression_processing_enabled)
+        self._gaze_processing_enabled = bool(gaze_processing_enabled)
 
         self._binder: Optional[CrossModalBinder] = None
         if self._speaker_identification_enabled or self._face_identification_enabled:
@@ -142,6 +147,8 @@ class SocialCognition(BaseModule):
         # source_label -> identified agent id, set by the voice identity path.
         self._identity_cache: dict[str, str] = {}
         self._merged_into: dict[str, str] = {}
+        # agent_id -> (category, confidence, timestamp) of the latest voice emotion.
+        self._recent_voice_emotions: dict[str, tuple[str, float, float]] = {}
         self._merge_lock = asyncio.Lock()
 
         # Cursor for audition.out stream (emotion + transcription events).
@@ -244,6 +251,12 @@ class SocialCognition(BaseModule):
                     for _, event in entries:
                         if event.type == "vision.face_detection":
                             await self._handle_face_detection(event)
+                        elif event.type == "vision.face_expression":
+                            if getattr(self, "_expression_processing_enabled", False):
+                                await self._handle_face_expression(event)
+                        elif event.type == "vision.gaze_direction":
+                            if getattr(self, "_gaze_processing_enabled", False):
+                                await self._handle_gaze_direction(event)
                 else:
                     await asyncio.sleep(0.05)
         except asyncio.CancelledError:
@@ -302,6 +315,7 @@ class SocialCognition(BaseModule):
         )
 
         await self._store.put(model)
+        self._recent_voice_emotions[agent_id] = (category, confidence, time.time())
         await self._publish_agent_model(
             model, source_label=event.payload.get("source_label")
         )
@@ -505,6 +519,73 @@ class SocialCognition(BaseModule):
                 is_new,
                 self._binding_confidence_for(agent_id),
             )
+
+    async def _handle_face_expression(self, event: Event) -> None:
+        """Update agent emotion histogram with visual expression evidence."""
+        for face in event.payload.get("faces") or []:
+            scores = face.get("scores")
+            if not scores:
+                continue
+            confidence = float(face.get("confidence") or 0.0)
+            expression = str(face.get("expression") or "neutral")
+            raw_id = face.get("agent_id")
+            if raw_id is None:
+                continue
+            agent_id = self._resolve_agent(raw_id)
+            model = await self._store.get(agent_id)
+            if model is None:
+                continue
+            visual_weight = confidence * 0.5
+            model.update_from_emotion(
+                expression,
+                visual_weight,
+                prediction_error=None,
+                deviation_threshold=self._deviation_threshold,
+            )
+            await self._store.put(model)
+            await self._publish_agent_model(model)
+
+            voice_entry = self._recent_voice_emotions.get(agent_id)
+            if voice_entry is not None:
+                voice_cat, voice_conf, voice_ts = voice_entry
+                age = time.time() - voice_ts
+                if age < self._co_occurrence_window_s:
+                    # Confidence-weighted fusion: both observations were
+                    # already folded individually, so this adds evidence
+                    # for whichever category carries more weight.
+                    total_conf = voice_conf + visual_weight
+                    if total_conf > 0:
+                        if voice_conf / total_conf >= visual_weight / total_conf:
+                            fused_cat = voice_cat
+                        else:
+                            fused_cat = expression
+                        model.update_from_emotion(
+                            fused_cat,
+                            min(1.0, total_conf),
+                            prediction_error=None,
+                            deviation_threshold=self._deviation_threshold,
+                        )
+                        await self._store.put(model)
+
+    async def _handle_gaze_direction(self, event: Event) -> None:
+        """Note mutual gaze as a social signal."""
+        for face in event.payload.get("faces") or []:
+            if not face.get("mutual_gaze"):
+                continue
+            raw_id = face.get("agent_id")
+            if raw_id is None:
+                continue
+            agent_id = self._resolve_agent(raw_id)
+            model = await self._store.get(agent_id)
+            if model is None:
+                continue
+            model.update_from_emotion(
+                "neutral",
+                confidence=0.1,
+                prediction_error=None,
+                deviation_threshold=self._deviation_threshold,
+            )
+            await self._store.put(model)
 
     async def _process_bindings(self) -> None:
         if self._binder is None:

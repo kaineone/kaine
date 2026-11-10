@@ -354,6 +354,35 @@ def _t_social_cognition_social_error(payload: dict[str, Any]) -> str:
     )
 
 
+
+def _t_vision_face_expression(payload: dict[str, Any]) -> str:
+    faces = payload.get("faces") or []
+    if not faces:
+        return "Vision detected no face expressions."
+    parts = []
+    for face in faces:
+        expr = face.get("expression", "unknown")
+        conf = float(face.get("confidence", 0.0))
+        parts.append(f"{expr} ({conf:.0%})")
+    return f"Vision face expression: {', '.join(parts)}."
+
+
+def _t_vision_gaze_direction(payload: dict[str, Any]) -> str:
+    faces = payload.get("faces") or []
+    if not faces:
+        return "Vision detected no gaze directions."
+    parts = []
+    for face in faces:
+        yaw = face.get("yaw")
+        pitch = face.get("pitch")
+        mutual = face.get("mutual_gaze", False)
+        gaze_str = f"yaw={_fmt(yaw)}, pitch={_fmt(pitch)}"
+        if mutual:
+            gaze_str += ", mutual"
+        parts.append(gaze_str)
+    return f"Vision gaze: {'; '.join(parts)}."
+
+
 def _t_world_model_world_error(payload: dict[str, Any]) -> str:
     try:
         error = float(payload.get("world_error", 0.0))
@@ -509,6 +538,8 @@ TEMPLATES: dict[tuple[str, str], TemplateFn] = {
     ("interoception", "interoception.report"): _t_interoception_report,
     ("sequence", "sequence.report"): _t_sequence_report,
     ("vision", "vision.report"): _t_vision_report,
+    ("vision", "vision.face_expression"): _t_vision_face_expression,
+    ("vision", "vision.gaze_direction"): _t_vision_gaze_direction,
     ("audition", "audition.perception"): _t_audition_perception,
     ("planning", "planning.belief"): _t_planning_belief,
     ("planning", "planning.policy"): _t_planning_policy,

@@ -56,3 +56,11 @@ backend = "sherpa_onnx"
 
 [decision]
 enabled = false
+
+[social_cognition]
+# Perceptual identity (speaker + face + expression + gaze) is a Tier 2+
+# capability. Tier 1 hosts lack the compute for real-time embedding.
+speaker_identification_enabled = false
+face_identification_enabled = false
+expression_processing_enabled = false
+gaze_processing_enabled = false

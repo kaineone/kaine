@@ -16,6 +16,12 @@ _BANNED_PHRASES = (
 
 
 _SAMPLE_PAYLOADS: dict[tuple[str, str], dict] = {
+    ("vision", "vision.face_expression"): {
+        "faces": [{"expression": "happy", "confidence": 0.82}]
+    },
+    ("vision", "vision.gaze_direction"): {
+        "faces": [{"yaw": 0.1, "pitch": -0.05, "mutual_gaze": True}]
+    },
     ("interoception", "interoception.report"): {"wellness": 0.85, "alerts": []},
     ("interoception", "interoception.fatigue"): {"value": 75.3, "threshold": 100.0, "crossed": False},
     ("interoception", "interoception.regulation"): {
