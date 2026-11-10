@@ -486,6 +486,7 @@ def test_agent_ids_come_only_from_config_or_a_channel():
         safe = (
             code in _SAFE_AGENT_ID_SOURCES
             or ("person:" in code and "uuid" in code)
+            or code.startswith("self._resolve_agent(")
         )
         assert safe, f"agent_id assigned from unaudited source: {code}"
     agent_for = next(

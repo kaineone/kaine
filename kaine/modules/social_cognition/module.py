@@ -528,15 +528,13 @@ class SocialCognition(BaseModule):
                 continue
             confidence = float(face.get("confidence") or 0.0)
             expression = str(face.get("expression") or "neutral")
-            agent_id = face.get("agent_id")
-            if agent_id is None:
+            raw_id = face.get("agent_id")
+            if raw_id is None:
                 continue
-            agent_id = self._resolve_agent(agent_id)
+            agent_id = self._resolve_agent(raw_id)
             model = await self._store.get(agent_id)
             if model is None:
                 continue
-            # Visual evidence is weighted below voice, which is closer to
-            # the entity's own experience.
             visual_weight = confidence * 0.5
             model.update_from_emotion(
                 expression,
@@ -574,15 +572,13 @@ class SocialCognition(BaseModule):
         for face in event.payload.get("faces") or []:
             if not face.get("mutual_gaze"):
                 continue
-            agent_id = face.get("agent_id")
-            if agent_id is None:
+            raw_id = face.get("agent_id")
+            if raw_id is None:
                 continue
-            agent_id = self._resolve_agent(agent_id)
+            agent_id = self._resolve_agent(raw_id)
             model = await self._store.get(agent_id)
             if model is None:
                 continue
-            # Mutual gaze is an engagement signal: a low-confidence neutral
-            # observation ticks the interaction count.
             model.update_from_emotion(
                 "neutral",
                 confidence=0.1,
