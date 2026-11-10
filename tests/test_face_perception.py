@@ -8,9 +8,6 @@ Fully offline: cv2 models are replaced by fake objects.
 
 from __future__ import annotations
 
-from typing import Any
-from unittest.mock import MagicMock, patch
-
 import numpy as np
 import pytest
 
@@ -29,7 +26,6 @@ from kaine.modules.vision.gaze_estimator import (
     GazeResult,
     LandmarkGazeEstimator,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
