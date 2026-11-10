@@ -478,7 +478,8 @@ def test_agent_ids_come_only_from_config_or_a_channel():
     assert assigns
     _SAFE_AGENT_ID_SOURCES = {
         "self._agent_for(event)",
-        "self._merged_into.get(agent_id, agent_id)",
+        "self._merged_into[agent_id]",
+        "self._resolve_agent(agent_id)",
     }
     for node in assigns:
         code = ast.unparse(node.value)
