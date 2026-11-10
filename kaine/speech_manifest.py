@@ -125,7 +125,7 @@ MANIFEST: dict[str, SpeechModel] = {
     ),
     "wespeaker-cam++-en": SpeechModel(
         id="wespeaker-cam++-en",
-        title="WeSpeaker CAM++ English (VoxCeleb)",
+        title="WeSpeaker CAM++ English (voxceleb)",
         kind="speaker_embedding",
         url=_archive_url(
             "speaker-recongition-models",
