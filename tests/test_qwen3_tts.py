@@ -212,10 +212,22 @@ class TestSynthesis:
 
 class TestSpeakerResolution:
     @pytest.mark.asyncio
-    async def test_auto_picks_first_alphabetically(
+    async def test_default_speaker_is_sam(
         self, fake_module: types.ModuleType,
     ) -> None:
         client = _make_client(fake_module)
+        try:
+            await client.synthesize(TTSRequest(text="hi"))
+            calls = fake_module._generated_calls  # type: ignore[attr-defined]
+            assert calls[-1]["speaker"] == "sam"
+        finally:
+            await client.aclose()
+
+    @pytest.mark.asyncio
+    async def test_empty_speaker_picks_first_alphabetically(
+        self, fake_module: types.ModuleType,
+    ) -> None:
+        client = _make_client(fake_module, speaker="")
         try:
             await client.synthesize(TTSRequest(text="hi"))
             calls = fake_module._generated_calls  # type: ignore[attr-defined]
