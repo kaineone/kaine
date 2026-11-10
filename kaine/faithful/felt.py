@@ -284,6 +284,21 @@ def _f_affect_emotion(payload: dict[str, Any]) -> str:
     return "I feel something I cannot name."
 
 
+def _f_vision_face_expression(payload: dict[str, Any]) -> str:
+    if payload.get("faces"):
+        return "I read the look on a face."
+    return "I see no faces to read."
+
+
+def _f_vision_gaze_direction(payload: dict[str, Any]) -> str:
+    faces = payload.get("faces") or []
+    if any(isinstance(f, dict) and f.get("mutual_gaze") for f in faces):
+        return "Someone is looking back at me."
+    if faces:
+        return "I notice where someone is looking."
+    return "I see no one looking."
+
+
 def _f_affect_drive(payload: dict[str, Any]) -> str:
     drive = payload.get("drive")
     return felt_drive_phrase(drive if isinstance(drive, str) else "", payload.get("value"))
@@ -677,6 +692,8 @@ FELT_FIELDS: dict[tuple[str, str], frozenset[str]] = {
     ("world_model", "world_model.world_error"): frozenset(),
     ("world_model", "world_model.scenario"): frozenset(),
     ("sleep", "sleep.sleep.started"): frozenset(),
+    ("vision", "vision.face_expression"): frozenset(),
+    ("vision", "vision.gaze_direction"): frozenset(),
     ("sleep", "sleep.sleep.completed"): frozenset(),
     ("sleep", "sleep.association"): frozenset(),
     ("sleep", "sleep.rest_request"): frozenset({"accepted"}),
@@ -690,6 +707,8 @@ FELT_TEMPLATES: dict[tuple[str, str], TemplateFn] = {
     ("interoception", "interoception.report"): _guarded("interoception", _f_interoception_report),
     ("sequence", "sequence.report"): _guarded("sequence", _f_sequence_report),
     ("vision", "vision.report"): _guarded("vision", _f_vision_report),
+    ("vision", "vision.face_expression"): _guarded("vision", _f_vision_face_expression),
+    ("vision", "vision.gaze_direction"): _guarded("vision", _f_vision_gaze_direction),
     ("planning", "planning.belief"): _guarded("planning", _f_planning_belief),
     ("planning", "planning.policy"): _guarded("planning", _f_planning_policy),
     ("episodic_memory", "episodic_memory.recall"): _guarded("episodic_memory", _f_episodic_memory_recall),
