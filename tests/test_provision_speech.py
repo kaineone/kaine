@@ -99,6 +99,29 @@ def test_aux_models_omits_speaches_and_chatterbox_when_sherpa_selected() -> None
     assert any("memory embedder" in m.purpose for m in models)
 
 
+def test_aux_models_includes_qwen3_tts_with_default_repo() -> None:
+    cfg = {"vocal": {"backend": "qwen3_tts"}}
+    models = provision.aux_models(cfg)
+    repos = {m.repo for m in models}
+    assert "kaineone/Qwen3-TTS-Sam-0.6B" in repos
+    assert any("Qwen3-TTS" in m.purpose for m in models)
+
+
+def test_aux_models_includes_qwen3_tts_with_custom_repo() -> None:
+    cfg = {"vocal": {"backend": "qwen3_tts", "qwen3_model_id": "my-org/My-Custom-TTS"}}
+    models = provision.aux_models(cfg)
+    repos = {m.repo for m in models}
+    assert "my-org/My-Custom-TTS" in repos
+    assert "kaineone/Qwen3-TTS-Sam-0.6B" not in repos
+
+
+def test_aux_models_excludes_qwen3_tts_for_chatterbox() -> None:
+    cfg = {"vocal": {"backend": "chatterbox"}}
+    models = provision.aux_models(cfg)
+    repos = {m.repo for m in models}
+    assert "kaineone/Qwen3-TTS-Sam-0.6B" not in repos
+
+
 def test_run_provision_consent_false_fetches_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(provision, "detect_organ_backend", lambda: "cpu")
     monkeypatch.setattr(provision, "plan_organ_download", _empty_plan)
