@@ -20,16 +20,10 @@ def make_social_cognition(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     # supervisor-injected shared embedder; never a TOML key, so pop before validation.
     embedder = section.pop("_embedder", None)
 
-    allowed = {
-        "backend",
-        "collection",
-        "speaker_label",
-        "operator_sources",
-        "deviation_threshold",
-        "baseline_salience",
-        "alert_salience",
-        "qdrant",  # nested sub-table: host, port, api_key
-        # Identity binding config (all ship disabled).
+    # Identity binding keys are accepted in the TOML (so the shipped config is
+    # valid) but not yet wired to the constructor — that lands in the identity-
+    # binder PR.  Keep them in ``allowed`` for validation, exclude from kwargs.
+    _IDENTITY_KEYS = {
         "speaker_identification_enabled",
         "face_identification_enabled",
         "speaker_identification_threshold",
@@ -43,9 +37,21 @@ def make_social_cognition(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
         "exemplar_ema_decay",
         "reliability_floor",
     }
+    allowed = {
+        "backend",
+        "collection",
+        "speaker_label",
+        "operator_sources",
+        "deviation_threshold",
+        "baseline_salience",
+        "alert_salience",
+        "qdrant",  # nested sub-table: host, port, api_key
+    } | _IDENTITY_KEYS
     _require_keys(section, allowed)
     qdrant = section.get("qdrant") or {}
-    kwargs = config_kwargs(section, sorted(allowed - {"qdrant"}), SocialCognition)
+    kwargs = config_kwargs(
+        section, sorted(allowed - {"qdrant"} - _IDENTITY_KEYS), SocialCognition
+    )
     if "operator_sources" in kwargs:
         ops = kwargs["operator_sources"]
         if not isinstance(ops, list) or not all(isinstance(x, str) for x in ops):
