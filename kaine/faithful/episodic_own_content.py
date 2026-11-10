@@ -440,6 +440,13 @@ EPISODIC_FIELD_ALLOWLISTS: Mapping[tuple[str, str], Mapping[str, FieldRule]] = {
         "salience": _N,
         "deviation_magnitude": _N,
     },
+    ("social_cognition", "social_cognition.identity_update"): {
+        "agent_id": SOCIAL_AGENT,
+        "modality": OneOf(frozenset({"voice", "face", "both"})),
+        "confidence": _N,
+        "is_new": _FLAG,
+        "binding_confidence": _N_OPT,
+    },
     ("vocal", "vocal.synthesized"): {
         "text_length": _N,
         "bytes_produced": _N,

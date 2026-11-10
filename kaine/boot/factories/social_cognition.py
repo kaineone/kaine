@@ -20,9 +20,7 @@ def make_social_cognition(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     # supervisor-injected shared embedder; never a TOML key, so pop before validation.
     embedder = section.pop("_embedder", None)
 
-    # Identity binding keys are accepted in the TOML (so the shipped config is
-    # valid) but not yet wired to the constructor — that lands in the identity-
-    # binder PR.  Keep them in ``allowed`` for validation, exclude from kwargs.
+    # Identity binding keys — accepted in the TOML and wired to the constructor.
     _IDENTITY_KEYS = {
         "speaker_identification_enabled",
         "face_identification_enabled",
@@ -50,7 +48,7 @@ def make_social_cognition(bus: AsyncBus, section: dict[str, Any]) -> BaseModule:
     _require_keys(section, allowed)
     qdrant = section.get("qdrant") or {}
     kwargs = config_kwargs(
-        section, sorted(allowed - {"qdrant"} - _IDENTITY_KEYS), SocialCognition
+        section, sorted(allowed - {"qdrant"}), SocialCognition
     )
     if "operator_sources" in kwargs:
         ops = kwargs["operator_sources"]
