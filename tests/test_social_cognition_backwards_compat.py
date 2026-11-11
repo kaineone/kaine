@@ -10,7 +10,7 @@ import pytest
 
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
-from kaine.modules.social_cognition.agent import AgentModel, EMOTION_CATEGORIES
+from kaine.modules.social_cognition.agent import AgentModel
 from kaine.modules.social_cognition.module import SocialCognition
 from kaine.modules.social_cognition.store import InMemoryAgentStore
 
