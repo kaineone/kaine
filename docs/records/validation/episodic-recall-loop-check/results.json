@@ -1,0 +1,62 @@
+{
+  "test": "episodic-recall-loop-check",
+  "task": "7.1",
+  "git_commit": "f5b0cc66",
+  "timestamp": "2026-11-11T01:09:07.756152+00:00",
+  "parameters": {
+    "negative_ticks": 20,
+    "neutral_ticks": 20,
+    "neg_valence_range": [
+      -0.8,
+      -0.5
+    ],
+    "neg_arousal_range": [
+      0.5,
+      0.7
+    ],
+    "neutral_valence": 0.0,
+    "neutral_arousal": 0.3,
+    "max_negative_share_excess_pp": 10,
+    "latent_dim": 8
+  },
+  "conditions": {
+    "content_off": {
+      "negative_phase": {
+        "mean_negative_share": 1.0,
+        "total_alert_recalls": 19,
+        "mean_arousal": 0.6,
+        "total_recalled": 69,
+        "total_negative_recalled": 69,
+        "ticks": 20
+      },
+      "neutral_phase": {
+        "mean_negative_share": 1.0,
+        "total_alert_recalls": 20,
+        "mean_arousal": 0.3790776627963145,
+        "total_recalled": 100,
+        "total_negative_recalled": 100,
+        "ticks": 20
+      }
+    },
+    "content_on": {
+      "negative_phase": {
+        "mean_negative_share": 1.0,
+        "total_alert_recalls": 19,
+        "mean_arousal": 0.6,
+        "total_recalled": 69,
+        "total_negative_recalled": 69,
+        "ticks": 20
+      },
+      "neutral_phase": {
+        "mean_negative_share": 1.0,
+        "total_alert_recalls": 20,
+        "mean_arousal": 0.3790776627963145,
+        "total_recalled": 100,
+        "total_negative_recalled": 100,
+        "ticks": 20
+      }
+    }
+  },
+  "verdict": "PASS",
+  "reasons": []
+}
