@@ -133,7 +133,6 @@ def main():
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--device", default="cuda:0")
     parser.add_argument("--checkpoint-every", type=int, default=50, help="Save checkpoint every N steps")
-    parser.add_argument("--resume", type=Path, default=None, help="Resume from checkpoint dir")
     args = parser.parse_args()
 
     torch.manual_seed(args.seed)
