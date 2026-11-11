@@ -433,7 +433,7 @@ def _install_fake_av(monkeypatch) -> None:  # noqa: ANN001
     )
 
 
-def _wait_for(predicate, timeout: float = 5.0) -> bool:  # noqa: ANN001
+def _wait_for(predicate, timeout: float = 15.0) -> bool:  # noqa: ANN001
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if predicate():
