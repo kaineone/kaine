@@ -1292,3 +1292,75 @@ def _npz_arrays(blob: bytes) -> dict[str, bytes]:
 
     data = np.load(io.BytesIO(blob), allow_pickle=False)
     return {name: data[name].tobytes() for name in data.files}
+
+
+@pytest.mark.asyncio
+async def test_preserve_revive_social_cognition_with_embeddings(
+    bus: AsyncBus, tmp_path: Path
+):
+    reg, ckpt = await _build_synthetic_entity(bus, tmp_path, persist_world_model=False)
+    sc = SocialCognition(bus, backend="inmemory")
+    await sc.initialize()
+    await sc.store.put(AgentModel(
+        id="speaker_alpha", label="alpha", interaction_count=7,
+        voice_centroid=[0.1, 0.2, 0.3, 0.4],
+        face_centroid=[0.5, 0.6, 0.7],
+        voice_exemplars=[
+            {"embedding": [0.11, 0.21, 0.31, 0.41], "timestamp": 1000.0},
+            {"embedding": [0.12, 0.22, 0.32, 0.42], "timestamp": 1001.0},
+        ],
+        face_exemplars=[
+            {"embedding": [0.51, 0.61, 0.71], "timestamp": 1000.0},
+        ],
+        voice_sample_count=2, face_sample_count=1,
+        binding_state="bound", binding_confidence=0.85,
+        voice_reliability=0.72, face_reliability=0.65,
+        voice_acoustic_embedding=[0.9, 0.8, 0.7],
+    ))
+    reg.register(sc)
+    fm = ForkManager(tmp_path / "forks")
+    result = await fm.preserve_live(
+        reg,
+        reason="embedding-roundtrip",
+        label="test-embeddings",
+        out_root=tmp_path / "backups",
+        entity_name="aria",
+    )
+    assert result.ok
+    bundle = tmp_path / "backups" / f"preservation_{result.preservation_id}_aria"
+
+    reg2, _ = await _build_synthetic_entity(
+        bus, tmp_path / "side2", persist_world_model=False
+    )
+    sc2 = SocialCognition(bus, backend="inmemory")
+    await sc2.initialize()
+    reg2.register(sc2)
+    await fm.revive(bundle, reg2)
+
+    r = await sc2.store.get("speaker_alpha")
+    assert r is not None
+    assert r.label == "alpha"
+    assert r.interaction_count == 7
+    assert r.voice_centroid == [0.1, 0.2, 0.3, 0.4]
+    assert r.face_centroid == [0.5, 0.6, 0.7]
+    assert len(r.voice_exemplars) == 2
+    assert len(r.face_exemplars) == 1
+    assert r.voice_exemplars[0]["embedding"] == [0.11, 0.21, 0.31, 0.41]
+    assert r.voice_exemplars[1]["embedding"] == [0.12, 0.22, 0.32, 0.42]
+    assert r.face_exemplars[0]["embedding"] == [0.51, 0.61, 0.71]
+    assert r.voice_sample_count == 2
+    assert r.face_sample_count == 1
+    assert r.binding_state == "bound"
+    assert r.binding_confidence == pytest.approx(0.85)
+    assert r.voice_reliability == pytest.approx(0.72)
+    assert r.face_reliability == pytest.approx(0.65)
+    assert r.voice_acoustic_embedding == [0.9, 0.8, 0.7]
+
+    try:
+        await sc.shutdown()
+        await sc2.shutdown()
+    finally:
+        for m in reg.all_modules():
+            await m.shutdown()
+        for m in reg2.all_modules():
+            await m.shutdown()
