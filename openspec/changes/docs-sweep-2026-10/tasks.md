@@ -8,4 +8,4 @@
 - [x] 1.6 Operations chapters (hardware, getting started, the dashboard, operation, deployment)
 - [x] 1.7 Remaining chapters (preservation, forks, security, experiments, research data, verification, plugins, contributing, glossary, licences)
 - [x] 1.8 Book builds with mdbook; relative links resolve
-- [ ] 1.9 The operator reviews the documentation before it is published
+- [x] 1.9 The operator reviews the documentation before it is published
