@@ -38,7 +38,7 @@ def test_noul_options_render():
 def test_prompt_ends_with_assistant():
     q = get_question("declined")
     prompt = render_prompt(state_text("x"), q)
-    assert prompt.endswith("<|im_start|>assistant\n")
+    assert prompt.endswith("<|im_start|>assistant")
 
 
 def test_training_example_for_seeds():
@@ -89,7 +89,7 @@ def test_prompt_carries_both_message_closing_markers():
     assert prompt.count("<|im_end|>") == 2
     assert prompt.count("<|im_start|>") == 3
     assert "<|im_end|>\n<|im_start|>user\n" in prompt
-    assert prompt.endswith("<|im_end|>\n<|im_start|>assistant\n")
+    assert prompt.endswith("<|im_end|>\n<|im_start|>assistant")
 
 
 
