@@ -47,7 +47,7 @@ def test_training_example_for_seeds():
     for q in questions:
         for seed in q.seeds:
             ctx = seed.context
-            st = state_text(seed.utterance, ctx) if ctx else state_text(seed.utterance)
+            st = state_text(seed.utterance, role=q.context_label, value=ctx) if ctx else state_text(seed.utterance)
             prompt, letter = training_example(q, st, seed.answer)
             assert prompt == render_prompt(st, q)
             index = letters.index(letter)
@@ -85,7 +85,7 @@ def test_letters_are_single_tokens_for_qwen():
 def test_prompt_carries_both_message_closing_markers():
     from kaine.decision.schema import get_question, state_text
 
-    prompt = render_prompt(state_text("No thanks.", "Tell me a joke."), get_question("declined"))
+    prompt = render_prompt(state_text("No thanks.", role="request", value="Tell me a joke."), get_question("declined"))
     assert prompt.count("<|im_end|>") == 2
     assert prompt.count("<|im_start|>") == 3
     assert "<|im_end|>\n<|im_start|>user\n" in prompt

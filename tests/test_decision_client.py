@@ -186,7 +186,7 @@ def test_request_shape(server, monkeypatch, sidecar_path):
 
     body = json.loads(req["body"])
     assert list(body.keys()) == ["state", "questions", "model"]
-    assert body["state"] == state_text("hello world", "ctx")
+    assert body["state"] == state_text("hello world", role=get_question(qid).context_label, value="ctx")
     assert body["questions"] == systemone_questions([qid])
     assert body["model"] == "k1-jev-test"
     client.close()

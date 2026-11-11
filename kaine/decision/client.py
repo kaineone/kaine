@@ -354,12 +354,6 @@ class DecisionClient:
             self._warn("no_sidecar", question_ids)
             return None
 
-        body: dict[str, Any] = {
-            "state": state_text(utterance, context),
-            "questions": systemone_questions(question_ids),
-            "model": self._config.model,
-        }
-
         headers: dict[str, str] = {}
         if self._api_key:
             headers["Authorization"] = f"Bearer {self._api_key}"
@@ -380,31 +374,44 @@ class DecisionClient:
 
         url = self._config.url.rstrip("/") + "/v1/systemone"
 
-        try:
-            response = self._client.post(url, json=body, headers=headers)
-        except httpx.RequestError:
-            self._warn("transport", question_ids)
-            self._identity_verified = False
-            return None
+        groups: dict[str | None, list[str]] = {}
+        for qid in question_ids:
+            groups.setdefault(get_question(qid).context_label, []).append(qid)
 
-        if response.status_code != 200:
-            self._warn("http_status", question_ids)
-            self._identity_verified = False
-            return None
+        merged: dict[str, Answer] = {}
+        for label, group_ids in groups.items():
+            body: dict[str, Any] = {
+                "state": state_text(utterance, role=label, value=context),
+                "questions": systemone_questions(group_ids),
+                "model": self._config.model,
+            }
 
-        try:
-            payload = response.json()
-        except Exception:
-            self._warn("malformed_response", question_ids)
-            self._identity_verified = False
-            return None
+            try:
+                response = self._client.post(url, json=body, headers=headers)
+            except httpx.RequestError:
+                self._warn("transport", question_ids)
+                self._identity_verified = False
+                return None
 
-        parsed = self._parse_answers(payload, question_ids)
-        if parsed is None:
-            self._identity_verified = False
-            return None
+            if response.status_code != 200:
+                self._warn("http_status", question_ids)
+                self._identity_verified = False
+                return None
 
-        return parsed
+            try:
+                payload = response.json()
+            except Exception:
+                self._warn("malformed_response", question_ids)
+                self._identity_verified = False
+                return None
+
+            parsed = self._parse_answers(payload, group_ids)
+            if parsed is None:
+                self._identity_verified = False
+                return None
+            merged.update(parsed)
+
+        return merged
 
     def _parse_answers(
         self,

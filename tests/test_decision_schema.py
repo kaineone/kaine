@@ -78,8 +78,29 @@ def test_trait_claim_options_and_traits():
 
 
 def test_state_text():
-    assert state_text("hi") == '{"utterance": "hi"}'
-    assert state_text("hi", "req") == '{"context": "req", "utterance": "hi"}'
+    assert state_text("hi") == '{"speaker_said": "hi"}'
+    assert state_text("hi", role="request", value="req") == '{"request": "req", "speaker_said": "hi"}'
+
+
+def test_state_text_v2_role_keys():
+    import json
+
+    no_ctx = json.loads(state_text("hi"))
+    assert "context" not in no_ctx
+    assert "utterance" not in no_ctx
+    assert no_ctx["speaker_said"] == "hi"
+
+    with_request = json.loads(state_text("no", role="request", value="tell me"))
+    assert "context" not in with_request
+    assert with_request == {"speaker_said": "no", "request": "tell me"}
+
+    with_trait = json.loads(state_text("I love exploring!", role="trait", value="curious"))
+    assert "context" not in with_trait
+    assert with_trait == {"speaker_said": "I love exploring!", "trait": "curious"}
+
+    with_ref = json.loads(state_text("yes", role="reference event", value="the party"))
+    assert "context" not in with_ref
+    assert with_ref == {"speaker_said": "yes", "reference_event": "the party"}
 
 
 def test_systemone_questions_shapes():
@@ -118,7 +139,7 @@ def test_get_question_unknown_raises():
 # The operator approved schema-v1.md on 2026-10-05 (k1-jev-decision-model task
 # 0.2b). Changing any question, option, seed or shared rule changes this digest.
 # Update it only together with a fresh operator approval recorded in that task.
-APPROVED_SCHEMA_DIGEST = "900a072da55af8e2803fcf7e2ea0d7c14c34d36d186c52d25249e876f583f822"
+APPROVED_SCHEMA_DIGEST = "48e462198f49719a68a68f3e00d4c1f3b314ea7ae2f1179094d0afc5c8865851"
 
 
 def test_schema_matches_the_operator_approved_digest():

@@ -717,13 +717,13 @@ def _cmd_assemble(args: argparse.Namespace) -> int:
     train_examples: list[tuple[Any, str, str, str, str]] = []
     for item in synthetic["train"]:
         q = schema.get_question(item["question_id"])
-        state = schema.state_text(item["utterance"], item["context"])
+        state = schema.state_text(item["utterance"], role=q.context_label, value=item.get("trait") or item.get("context"))
         train_examples.append((q, state, item["generated_label"], item["question_id"], "synthetic"))
 
     dev_examples: list[tuple[Any, str, str, str, str]] = []
     for item in synthetic["dev"]:
         q = schema.get_question(item["question_id"])
-        state = schema.state_text(item["utterance"], item["context"])
+        state = schema.state_text(item["utterance"], role=q.context_label, value=item.get("trait") or item.get("context"))
         dev_examples.append((q, state, item["generated_label"], item["question_id"], "synthetic"))
 
     train_examples.extend(_public_example(e) for e in banking_train)
