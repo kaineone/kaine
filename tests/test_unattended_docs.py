@@ -53,7 +53,7 @@ def test_preservation_guide_lists_nine_unattended_conditions():
     assert "The individuation requirement applies to research mode only" not in operations
 
 
-def test_researchers_guide_counts_all_six_net_conditions_for_unattended():
+def test_researchers_guide_counts_all_seven_net_conditions_for_unattended():
     researchers = (_REPO_ROOT / "docs" / "14-for-researchers.md").read_text()
-    assert "Besides the six research-safety-net conditions" in researchers
+    assert "Besides the seven research-safety-net conditions" in researchers
     assert "all but the individuation" not in researchers
