@@ -14,6 +14,8 @@ import json
 import sys
 import time
 import urllib.request
+
+_opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -95,7 +97,7 @@ def send_generate(
             method="POST",
         )
         try:
-            with urllib.request.urlopen(req, timeout=300) as resp:
+            with _opener.open(req, timeout=300) as resp:
                 body = json.loads(resp.read())
                 text = body.get("response", "").strip()
                 try:

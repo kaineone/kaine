@@ -15,6 +15,8 @@ import json
 import sys
 import time
 import urllib.request
+
+_opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 from collections import defaultdict
 from pathlib import Path
 
@@ -57,7 +59,7 @@ def send_request(
             method="POST",
         )
         try:
-            with urllib.request.urlopen(req, timeout=300) as resp:
+            with _opener.open(req, timeout=300) as resp:
                 body = json.loads(resp.read())
                 return body.get("answers", {})
         except Exception as exc:
