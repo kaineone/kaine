@@ -35,8 +35,10 @@ from kaine.lifecycle.individuation_store import (
     CAPTURE_FAILURE_LABELS,
     IndividuationPaths,
     IndividuationStoreError,
+    ReferenceUnreadable,
     clear_capture_stretch,
     conditioning_from_snapshot,
+    load_reference,
     report_sink,
 )
 from kaine.modules.language.context import HEARD_QUOTE_LIMIT
@@ -168,6 +170,7 @@ class IndividuationConfig:
     battery_path: str = ""
     language_quiet_s: float = 10.0
     probe_temperature: float = 0.0
+    allow_reconstructed: bool = False
     producer: ProducerSettings = field(default_factory=ProducerSettings)
     scheduler: SchedulerSettings = field(default_factory=SchedulerSettings)
 
@@ -183,6 +186,7 @@ class IndividuationConfig:
             "battery_path",
             "language_quiet_s",
             "probe_temperature",
+            "allow_reconstructed",
         } | producer_keys | scheduler_keys
 
         extra = sorted(set(d) - allowed)
@@ -233,6 +237,10 @@ class IndividuationConfig:
         ):
             raise ValueError("probe_temperature must be a finite number >= 0")
 
+        allow_reconstructed = explicit.get("allow_reconstructed", cls.allow_reconstructed)
+        if not isinstance(allow_reconstructed, bool):
+            raise ValueError("allow_reconstructed must be a bool")
+
         try:
             producer = ProducerSettings(**producer_kwargs)
             scheduler = SchedulerSettings(**scheduler_kwargs)
@@ -245,6 +253,7 @@ class IndividuationConfig:
             battery_path=battery_path,
             language_quiet_s=language_quiet_s,
             probe_temperature=float(probe_temperature),
+            allow_reconstructed=allow_reconstructed,
             producer=producer,
             scheduler=scheduler,
         )
@@ -318,6 +327,38 @@ class IndividuationRuntime:
         if self.notify is not None:
             await self.notify(kind)
 
+    def _maybe_request_reconstructed(self) -> None:
+        """Request a reconstructed reference if the stored one is a capture.
+
+        Called at boot when ``allow_reconstructed`` is true and a reference
+        already exists.  The reconstructed capture replaces the capture
+        reference with one taken under reproducible maturation conditions.
+
+        Evidence checks: before triggering a reconstructed capture, we would
+        verify that the entity had no adapter at maturation and an empty
+        identity clause at maturation (fresh-start self-model).  Full evidence
+        checks require reading the adapter store history and self-model
+        history, which is not yet wired.  For now, the operator approval flag
+        alone controls reconstruction.
+        """
+        # TODO: implement full evidence checks (no adapter older than born_at,
+        # empty identity clause at maturation) once the adapter store and
+        # self-model history APIs are available.
+        try:
+            ref = load_reference(self.paths)
+        except ReferenceUnreadable:
+            log.warning("individuation cannot read reference for reconstructed check")
+            return
+        if ref is None:
+            return
+        if ref.reference_kind == "capture":
+            log.info(
+                "individuation requesting reconstructed capture to replace "
+                "capture reference %s",
+                ref.reference_id,
+            )
+            self.scheduler.request_capture("reconstructed", regenerate=True)
+
     def on_maturation(self) -> None:
         log.info("individuation maturation hook: writing maturation marker and requesting maturation capture")
         try:
@@ -361,6 +402,11 @@ class IndividuationRuntime:
                     clear_capture_stretch(self.paths)
                 except OSError as exc:
                     log.warning("individuation failed to remove stale capture stretch: %s", exc)
+                # Task 6.2: when the operator has approved reconstructed references
+                # and the stored reference is a capture (not maturation), request a
+                # reconstructed capture at boot.
+                if self.config.allow_reconstructed:
+                    self._maybe_request_reconstructed()
             elif self.paths.maturation_pending.exists():
                 log.info("individuation resuming pending maturation capture")
                 self.scheduler.request_capture("maturation")
