@@ -4,12 +4,8 @@
 """Off equals absent: with stimulus control off the build behaves as one without it.
 
 ``GOLDEN`` is the digest of ``tests/stimulus_identity_harness.py`` run on the
-build without stimulus control: commit 9327caea on origin/main.
-On d7fabdc0 itself the digest is
-8806003e8f337aae5d18cfb0cec1f53363fe75f368a7e27d304c889ad1a7fd49; the welfare
-gates change only the welfare observer's ``affect_welfare`` rows, which gain the
-A.4 indicator fields (``indicator_span_awake_seconds`` and each indicator's
-value, bar and over flag).
+build without stimulus control: commit 9327caea on origin/main. To regenerate,
+run ``python tests/stimulus_identity_harness.py`` from the repo root.
 
 The harness drives the affect module, the action layer, the effectors module,
 the welfare observer's records, the playlist video source and the real playlist
