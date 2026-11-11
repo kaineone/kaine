@@ -70,6 +70,7 @@ The pre-boot check (`python -m kaine.preboot`) prints a `Tier fit` row. It fails
 | Speech out ([Vocal](../09-modules/vocal.md)) | unsupported | Kokoro through sherpa-onnx | Chatterbox | Chatterbox |
 | Memory embeddings | NumPy MiniLM (default) | NumPy MiniLM (default) | NumPy MiniLM (default) | NumPy MiniLM (default) |
 | Vector store ([Episodic memory](../09-modules/episodic-memory.md)) | `sqlite_vec` | `sqlite_vec` | `qdrant` | `qdrant` |
+| Perceptual identity ([Social cognition](../09-modules/social-cognition.md)) | unsupported | off (speaker, face, expression and gaze forced disabled) | available (ships disabled, operator enables per-pipeline) | as Tier 2 |
 | `unsupported_modules` | Vision, Audition, Vocal, Social cognition, World model | none | none | none |
 | `oscillator_supported` | `false` | `true` | `true` | `true` |
 
@@ -80,6 +81,7 @@ Read these constraints before choosing a tier:
 - A language model of 2B parameters or more does not fit a Tier 0 host of about 512 MB, so Tier 0 is not a conversational host.
 - Torch is required wherever the vision module runs. The episodic memory, social cognition and sleep modules use the shared NumPy MiniLM embedder by default and need torch only when `[embedding].backend = "sentence_transformers"`.
 - Termux support for the NumPy engines and sherpa-onnx is built but has not been verified on a device. The vision module still needs torch there.
+- Perceptual identity (speaker and face identification, expression classification, gaze estimation) is a Tier 2+ capability. `tier1.toml` forces all four flags to `false`; Tier 2 and 3 ship them disabled but the operator can enable them per-pipeline. The speaker embedder (WeSpeaker CAM++ through sherpa-onnx, about 29 MB) and face detector (YuNet + SFace through OpenCV, about 35 MB) are consent-gated downloads provisioned at boot when enabled.
 
 ## Per-tier notes
 

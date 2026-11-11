@@ -786,3 +786,34 @@ def test_backend_failures_surface_on_health_snapshot():
     assert block["ok"] is False
     assert block["failures"][0]["module"] == "language"
     assert block["failures"][0]["fallback"] == "ollama"
+
+
+_IDENTITY_FLAGS = (
+    "speaker_identification_enabled",
+    "face_identification_enabled",
+    "expression_processing_enabled",
+    "gaze_processing_enabled",
+)
+
+SHIPPED_CONFIG = REPO_ROOT / "config" / "kaine.toml"
+OPERATOR_CONFIG = REPO_ROOT / "config" / "kaine.operator.toml"
+
+
+def test_tier1_forces_identity_disabled():
+    cfg = load_kaine_config(
+        SHIPPED_CONFIG, OPERATOR_CONFIG, profile="tier1",
+        profiles_dir=REPO_ROOT / PROFILES_DIR,
+    )
+    sc = cfg["social_cognition"]
+    for flag in _IDENTITY_FLAGS:
+        assert sc[flag] is False, f"tier1 must disable {flag}"
+
+
+def test_tier2_allows_identity_when_operator_enables():
+    cfg = load_kaine_config(
+        SHIPPED_CONFIG, OPERATOR_CONFIG, profile="tier2",
+        profiles_dir=REPO_ROOT / PROFILES_DIR,
+    )
+    sc = cfg["social_cognition"]
+    for flag in _IDENTITY_FLAGS:
+        assert sc[flag] is False, f"tier2 ships {flag} disabled by default"
