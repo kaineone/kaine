@@ -4,11 +4,7 @@
 """Off equals absent: with stimulus control off the build behaves as one without it.
 
 ``GOLDEN`` is the digest of ``tests/stimulus_identity_harness.py`` run on the
-build without stimulus control: commit 86e5d519, the welfare gates on
-origin/main d7fabdc0 (after the playlist A/V sync). Extract that commit's
-``kaine`` package to a directory, then from that directory run
-``python -c "import sys, runpy; sys.path.insert(0, '.');
-runpy.run_path('<worktree>/tests/stimulus_identity_harness.py', run_name='__main__')"``.
+build without stimulus control: commit 9327caea on origin/main.
 On d7fabdc0 itself the digest is
 8806003e8f337aae5d18cfb0cec1f53363fe75f368a7e27d304c889ad1a7fd49; the welfare
 gates change only the welfare observer's ``affect_welfare`` rows, which gain the
@@ -27,7 +23,7 @@ import pytest
 
 from tests import stimulus_identity_harness as harness
 
-GOLDEN = "e789651c14ece05fc0c17de51db69d4a27be4039f3f4d81d4e8ef9092c77e04a"
+GOLDEN = "0778e262c355c40b01b9deffdcecffb64074bd6ad3e098b290d48a92c82a1ccb"
 
 
 async def test_off_is_bit_identical_to_the_build_without_it(tmp_path):
