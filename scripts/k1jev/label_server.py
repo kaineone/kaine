@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import argparse
 import datetime
-import hmac
 import hashlib
+import hmac
 import json
 import os
 import secrets
@@ -41,8 +41,8 @@ PAGE_HTML = """<!doctype html>
 </head>
 <body>
 <div id="progress"></div>
-<div id="utterance"></div>
 <div id="context-wrap"></div>
+<div id="utterance-wrap"></div>
 <div id="question"></div>
 <div id="definition"></div>
 <div id="options"></div>
@@ -83,14 +83,21 @@ function renderItem(data) {
     return;
   }
   currentOptions = currentItem.options;
-  document.getElementById('utterance').textContent = currentItem.utterance;
+  // Context section first (v2 reading order)
   const cw = document.getElementById('context-wrap');
-  if (currentItem.context != null) {
-    const label = currentItem.context_label ? ' (' + currentItem.context_label + ')' : '';
-    cw.innerHTML = '<h3>Context' + label + '</h3><p>' + escapeHtml(currentItem.context) + '</p>';
+  const roleLabel = currentItem.context_label;
+  if (roleLabel === 'request' && currentItem.context != null) {
+    cw.innerHTML = '<h3>Someone said to the speaker:</h3><p>' + escapeHtml(currentItem.context) + '</p>';
+  } else if (roleLabel === 'trait' && currentItem.trait != null) {
+    cw.innerHTML = '<h3>Trait being asked about:</h3><p>' + escapeHtml(currentItem.trait) + '</p>';
+  } else if (roleLabel === 'reference event' && currentItem.context != null) {
+    cw.innerHTML = '<h3>Earlier event:</h3><p>' + escapeHtml(currentItem.context) + '</p>';
   } else {
     cw.innerHTML = '';
   }
+  // Utterance section
+  const uw = document.getElementById('utterance-wrap');
+  uw.innerHTML = '<h3>The speaker said:</h3><div id="utterance">' + escapeHtml(currentItem.utterance) + '</div>';
   document.getElementById('question').innerHTML = '<h2>' + escapeHtml(currentItem.instructions) + '</h2>';
   const defEl = document.getElementById('definition');
   if (currentItem.definition) {
@@ -445,6 +452,7 @@ class _Handler(BaseHTTPRequestHandler):
             "question_id": item["question_id"],
             "utterance": item["utterance"],
             "context": item.get("context"),
+            "trait": item.get("trait"),
             "instructions": question.instructions,
             "definition": question.definition,
             "context_label": question.context_label,

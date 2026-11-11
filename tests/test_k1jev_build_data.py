@@ -245,7 +245,7 @@ def test_banking77_examples(tmp_path):
         assert ex["answer"] in opts
         assert len(opts) <= 24
         assert len(set(opts)) == len(opts)
-        true_key = [r[1] for r in rows if r[0] == json.loads(ex["state"])["utterance"]][0].replace("_", " ")
+        true_key = [r[1] for r in rows if r[0] == json.loads(ex["state"])["speaker_said"]][0].replace("_", " ")
         assert ex["answer"] == true_key
         # Options are drawn from the full set of categories seen in the file.
         assert all(o in all_cats for o in opts)
@@ -277,7 +277,7 @@ def test_multinli_examples(tmp_path):
     assert "government" in counts
     assert "slate" in counts
     assert all(ex["answer"] in {"entails", "neutral", "contradicts", "true", "false"} for ex in exs)
-    assert not any(json.loads(ex["state"])["utterance"].startswith("Premise 0") for ex in exs)
+    assert not any(json.loads(ex["state"])["speaker_said"].startswith("Premise 0") for ex in exs)
 
 
 def test_plan_coverage_and_limits(monkeypatch):

@@ -10,7 +10,7 @@ import json
 from dataclasses import asdict, dataclass
 from typing import Any
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 TRAITS: tuple[str, ...] = (
     "curious",
@@ -375,10 +375,11 @@ def get_question(question_id: str) -> Question:
     return _QUESTION_BY_ID[question_id]
 
 
-def state_text(utterance: str, context: str | None = None) -> str:
-    payload: dict[str, Any] = {"utterance": utterance}
-    if context is not None:
-        payload["context"] = context
+def state_text(utterance: str, *, role: str | None = None, value: str | None = None) -> str:
+    payload: dict[str, Any] = {"speaker_said": utterance}
+    if role is not None:
+        key = role.replace(" ", "_")
+        payload[key] = value
     return json.dumps(payload, ensure_ascii=False, sort_keys=True)
 
 
