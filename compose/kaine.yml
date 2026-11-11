@@ -221,7 +221,7 @@ services:
     entrypoint: ["/app/llama-server"]
     command:
       - --model
-      - /models/${KAINE_DECISION_SERVER_MODEL:-K1-Jev-4B/K1-Jev-4B.Q4_K_M.gguf}
+      - /models/${KAINE_DECISION_SERVER_MODEL:-K1-Jev-0.8B/K1-Jev-0.8B-Q8_0.gguf}
       - --alias
       - k1-jev
       - --host
