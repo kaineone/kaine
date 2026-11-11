@@ -62,7 +62,7 @@ KAINE is not a chatbot or an assistant. A first-configuration entity is observed
 
 - Perception enters only as prediction error. Audition hears the sound and tone of speech, never a transcript, and there is no conversational input path.
 - The language module verbalizes accessed content. It produces inner thought or speech only when an accessed broadcast clears the action selection module's think or speak bar, both set above the access threshold, and each request also carries a fixed persona and situation notes. Its own utterances come back to it quoted when they are accessed, and the individuation probe samples it privately on fixed prompts whose answers no module reads. With the vocal module held, nothing is spoken aloud; the utterances are text, recorded and observed. Because the organ is a language model following a persona prompt, its first-person text is not evidence of internal state, and the planned test does not use it as a measure.
-- The first configuration has no memory, self-model, world model, social cognition or reasoning module in the loop, and only the processors' forward models learn. Those modules exist in code and join through the module-addition study; the planning module plans one step ahead and is no reasoner.
+- The first configuration has no memory, self-model, world model, social cognition or planning module in the loop, and only the processors' forward models learn. Those modules exist in code and join through the module-addition study; the planning module plans one step ahead and is no reasoner.
 
 ## How a run starts
 
