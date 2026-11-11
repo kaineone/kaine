@@ -54,4 +54,4 @@
 - [x] 9.3 `scripts/k1jev/label_server.py`: labelled sections in reading order; render `trait`; still blind; the gold item ids are unchanged.
 - [x] 9.4 `kaine/decision/client.py`: one `/v1/systemone` request per context role; the sidecar's schema version and digest follow v2.
 - [x] 9.5 Tests: no `context` key in any v2 state; trait items carry `trait`; mixed-role asks are split; the page shows each role label and the trait, and never the generated label.
-- [ ] 9.6 Report: the per-category checker survival table (v1) next to the v2 assembled counts, in the PR.
+- [x] 9.6 Report: the per-category checker survival table (v1) next to the v2 assembled counts, in the PR.
