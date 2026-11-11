@@ -47,7 +47,7 @@ The audition module SHALL select its speech recogniser with `[audition].backend`
 
 ### Requirement: Speech models are fetched only with consent and verified
 
-Speech model archives SHALL be pinned by URL and sha256 in code, and SHALL be downloaded only by an explicit setup command after the operator confirms each archive's name, size and licence. An archive SHALL be verified before extraction and extracted without escaping its target directory. Nothing SHALL be downloaded at runtime.
+Speech model archives SHALL be pinned by URL and sha256 in code, and SHALL be downloaded only by an explicit setup command after the operator confirms each archive's name, size and licence. An archive SHALL be verified before extraction and extracted without escaping its target directory. Nothing SHALL be downloaded at runtime. When the vocal backend is `"qwen3_tts"`, the provisioning plan SHALL include the configured Qwen3-TTS HuggingFace model as an aux model entry, so the setup wizard downloads it alongside the other HuggingFace models. The download SHALL use the same `huggingface_hub` path as other aux models and SHALL require the same operator consent.
 
 #### Scenario: Digest mismatch is refused
 - **WHEN** a downloaded archive's sha256 differs from the pinned value
@@ -61,6 +61,14 @@ Speech model archives SHALL be pinned by URL and sha256 in code, and SHALL be do
 - **WHEN** the operator declines the confirmation
 - **THEN** no network request is made and the command exits reporting that nothing was fetched
 
+#### Scenario: Qwen3-TTS model appears in the provision plan
+- **WHEN** the vocal backend is `"qwen3_tts"` and `aux_models()` is called with that config
+- **THEN** the returned list includes an `AuxModel` whose repo matches the configured (or default) `qwen3_model_id`
+
+#### Scenario: Qwen3-TTS model is not provisioned for other backends
+- **WHEN** the vocal backend is `"chatterbox"` or `"sherpa_onnx"`
+- **THEN** no Qwen3-TTS model appears in the aux model list
+
 ### Requirement: The health surface probes the selected speech backend
 
 The dashboard health surface SHALL probe the Speaches or Chatterbox service only when its organ selects it. For `"sherpa_onnx"`, it SHALL report the organ healthy only after building the client and completing one real inference.
@@ -72,3 +80,11 @@ The dashboard health surface SHALL probe the Speaches or Chatterbox service only
 #### Scenario: A slow load never stacks
 - **WHEN** a sherpa probe's model load takes longer than the prober's timeout and the health surface is read repeatedly
 - **THEN** exactly one load runs for that model, the row reports DEGRADED "probe in progress" until it completes, and the completed result is reported afterwards
+
+### Requirement: Qwen3-TTS backend reports its speaker in prosody metadata
+
+When the vocal backend is `"qwen3_tts"`, `vocal.synthesized` SHALL carry `"backend": "qwen3_tts"` and SHALL carry the resolved speaker name in `"prosody_applied"` metadata, consistent with the other backends' disclosure.
+
+#### Scenario: Qwen3-TTS prosody disclosure
+- **WHEN** the vocal module synthesises with `backend = "qwen3_tts"`
+- **THEN** `vocal.synthesized` carries `"backend": "qwen3_tts"` and `"prosody_applied"` includes `"instruct"` and `"language"`
