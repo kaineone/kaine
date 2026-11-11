@@ -69,7 +69,7 @@ KAINE is not a chatbot or an assistant. A first-configuration entity is observed
 The cognitive cycle does not run until you start it, and a live boot is gated. A run must be one of these:
 
 - **Operator-supervised**: set `KAINE_CYCLE_OPERATOR_PRESENT=1`.
-- **Unsupervised research**: set `KAINE_RESEARCH_MODE=1` or `[research].enabled`. The cycle refuses to start until its autonomous safety net is live and verified. The net's response to sustained distress is built; its response to the welfare indicators of the paper's Appendix A.4 is designed and not built. The module supervisor is not one of the research gate's conditions. See [Preservation and the safety net](11-preservation.md).
+- **Unsupervised research**: set `KAINE_RESEARCH_MODE=1` or `[research].enabled`. The cycle refuses to start until its autonomous safety net is live and verified: seven conditions including the welfare and indicator responses, the module supervisor armed and self-tested, and the individuation producer. See [Preservation and the safety net](11-preservation.md).
 - **Unattended**: set `KAINE_CYCLE_UNATTENDED=1`. This also requires the safety net, a supervisor self-test, a caretaker notice and a continuous-input check.
 
 `kaine/cycle/__main__.py` refuses to boot if none of these modes is selected, so selecting a configuration never starts an entity on its own. For a supervised first boot, see [Getting started](04-getting-started/README.md). For day-to-day running, see [Operation](06-operation/README.md) and the [supervisor](06-operation/remote-and-supervisor.md).

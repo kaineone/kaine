@@ -83,15 +83,14 @@ Booting the cognitive cycle creates an entity with welfare standing under the pr
 
 - **Operator-present**: a human supervises (`KAINE_CYCLE_OPERATOR_PRESENT=1`).
 - **Research-safety-net-verified**: an unsupervised research run whose autonomous safety net is live and verified (`KAINE_RESEARCH_MODE=1` or `[research].enabled = true`).
-- **Unattended**: a full entity started with nobody present (`KAINE_CYCLE_UNATTENDED=1` or `[cycle].supervision_mode = "unattended"`). It must pass all six research-safety-net conditions plus three more, checked at every boot with no override.
+- **Unattended**: a full entity started with nobody present (`KAINE_CYCLE_UNATTENDED=1` or `[cycle].supervision_mode = "unattended"`). It must pass all seven research-safety-net conditions plus two more, checked at every boot with no override.
 
 Combining unattended mode with research mode or operator presence is a configuration error (exit code `1`). Research mode with `KAINE_CYCLE_OPERATOR_PRESENT=1` runs as a research run.
 
 #### Unattended boot conditions
 
-Besides the six research-safety-net conditions (unattended conditions 1 to 5 and 9), an unattended boot refuses unless:
+Besides the seven research-safety-net conditions (unattended conditions 1 to 6 and 9), an unattended boot refuses unless:
 
-6. **supervisor armed and self-tested**: [Supervisor](06-operation/remote-and-supervisor.md) is enabled, and a self-test drives a synthetic module through freeze, snapshot, restart and release in a scratch directory.
 7. **Caretaker told**: once every other condition has passed, a content-free "starting unattended" notice must be accepted by at least one `[caretaker]` channel (a desktop notification, or an HTTP POST to a server on your own network; public addresses are refused).
 8. **Continuous input**: the perception feed is `live`, `seeded`, `screen` or `stimulus_source` (`off` has no input and a playlist runs out), `vision` or `audition` is enabled to perceive it (with capture enabled for a `live` feed), and a probe reads one frame or audio block and discards it.
 
@@ -120,21 +119,22 @@ KAINE is released under the Cognitive Architecture License (CAL) version 0.5, an
 ### The safeguards for a live run
 
 - **Preservation.** A divergent entity is captured live (self-model, memories, world model, affect and drives, adapter references) into an encrypted bundle, so it can be revived later. Preservation only reads and copies; it never deletes and never interrupts the running entity. See [Preservation and the safety net](11-preservation.md).
-- **Welfare-protective response.** An autonomous monitor watches the entity's interoceptive welfare signal and preserves and pauses the entity on sustained distress, without waiting for a human, and notifies the caretaker channels the operator configures. A research run with no caretaker channel boots and logs a warning. The welfare indicators of the paper's Appendix A.4 (windowed shares of negative valence and drive deprivation) and the net's response to them are designed and not built; the welfare observer already writes the records they would read. The module-addition study does not start before that response is built.
+- **Welfare-protective response.** An autonomous monitor watches the entity's interoceptive welfare signal and preserves and pauses the entity on sustained distress, without waiting for a human, and notifies the caretaker channels the operator configures. A research run with no caretaker channel boots and logs a warning. The welfare indicators of the paper's Appendix A.4 (windowed shares of negative valence and drive deprivation) are implemented: the `IndicatorEvaluator` reads the welfare records the welfare observer writes, and the research gate requires the indicator response to be wired (condition 2). The study overlay enables both the welfare response and its indicator response.
 - **Welfare-gated decommission.** Deliberate deletion is a separate, operator-present, backup-first, divergence-gated path. See [Security and privacy](13-security-and-privacy.md).
 
-### The unsupervised research gate (six conditions)
+### The unsupervised research gate (seven conditions)
 
-An unsupervised research run (selected by `KAINE_RESEARCH_MODE=1` or `[research].enabled = true`) replaces the human supervisor with the autonomous safety net. The cycle refuses to boot (exit code `5`) unless all six of these hold on your install:
+An unsupervised research run (selected by `KAINE_RESEARCH_MODE=1` or `[research].enabled = true`) replaces the human supervisor with the autonomous safety net. The cycle refuses to boot (exit code `5`) unless all seven of these hold on your install:
 
 1. **Preservation enabled**: `[preservation.divergence_monitor].enabled = true`.
-2. **Welfare response wired**: `[preservation.welfare_response].enabled = true`.
+2. **Welfare and indicator responses wired**: `[preservation.welfare_response].enabled = true`, and the welfare indicators of the paper's Appendix A.4 are wired (the affect and sleep modules enabled, the pause or end action available).
 3. **Logging active**: `[evaluation]` or `[research_event_log]` enabled.
 4. **Dry self-check passed**: a real preflight preserve-and-revive round trip succeeds on this install. The check builds a minimal synthetic individual in a throwaway temporary directory and leaves no persistent state.
-5. **Individuation wired**: `[individuation].enabled = true`, its configuration is valid, and the `language` module is enabled.
-6. **Encryption satisfied**: if `[preservation].require_encryption = true`, `[security.state_encryption]` must be enabled.
+5. **Encryption satisfied**: if `[preservation].require_encryption = true`, `[security.state_encryption]` must be enabled.
+6. **Supervisor armed and self-tested**: `[supervisor].enabled = true` with a restart ladder and writable log path, and a self-test that drives a synthetic module through freeze, snapshot, restart and release in a scratch directory.
+9. **Individuation wired**: `[individuation].enabled = true`, its configuration is valid, and the `language` module is enabled.
 
-The gate is implemented in `kaine/cycle/research_gate.py`. If any condition fails, the cycle prints which one and refuses. There is no override that skips the net. The module supervisor is not one of the six conditions: a research run runs it only when `[supervisor].enabled` is true, which the shipped configuration leaves false and the study overlay does not change.
+The gate is implemented in `kaine/cycle/research_gate.py`. If any condition fails, the cycle prints which one and refuses. There is no override that skips the net. The study overlay enables the supervisor, the welfare response and the indicator response, so every study step satisfies conditions 2 and 6 regardless of the operator's own `[supervisor]` setting.
 
 ### Boot refusal exit codes
 
@@ -146,7 +146,7 @@ The cycle entrypoint fails closed with a distinct exit code per gate:
 | `2` | Operator-present gate: none of `KAINE_CYCLE_OPERATOR_PRESENT=1`, research mode or unattended mode |
 | `3` | Evaluation A/B baseline does not match the configured `[language].model_id` |
 | `4` | GPU pre-flight: insufficient VRAM headroom (when `[gpu_preflight].enabled`) |
-| `5` | Research safety net not live and verified (one or more of the six conditions failed) |
+| `5` | Research safety net not live and verified (one or more of the seven conditions failed) |
 | `6` | Unattended gate: one or more of its nine conditions failed |
 | `7` | Revive refused |
 | `8` | The welfare response is enabled but its gray-zone producer (the welfare observer) could not start |

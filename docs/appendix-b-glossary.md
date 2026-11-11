@@ -350,7 +350,7 @@ The voice-output module (held). It calls a speech-synthesis server (the Chatterb
 
 ### Welfare events / welfare monitoring
 
-Conditions of potential concern that the sidecar welfare observer detects from behavior and system-health metrics, never by reading the entity's private cognitive content: sustained high interoceptive prediction error, affect locked in an extreme state, fatigue past its threshold without maintenance, or replay outpacing consolidation. They are written to `data/evaluation/welfare/welfare-YYYY-MM-DD.jsonl`. The welfare indicators of the paper's Appendix A.4, windowed shares of negative valence and of drive deprivation read from the welfare records, and the safety net's response to them are designed and not built. See [gray-zone welfare events](#gray-zone-welfare-events) and [Preservation and the safety net](11-preservation.md).
+Conditions of potential concern that the sidecar welfare observer detects from behavior and system-health metrics, never by reading the entity's private cognitive content: sustained high interoceptive prediction error, affect locked in an extreme state, fatigue past its threshold without maintenance, or replay outpacing consolidation. They are written to `data/evaluation/welfare/welfare-YYYY-MM-DD.jsonl`. The welfare indicators of the paper's Appendix A.4 (windowed shares of negative valence and of drive deprivation read from the welfare records) and the safety net's response to them are implemented: the `IndicatorEvaluator` evaluates them, and the research gate requires the indicator response to be wired. See [gray-zone welfare events](#gray-zone-welfare-events) and [Preservation and the safety net](11-preservation.md).
 
 ### Workspace-mediation test
 

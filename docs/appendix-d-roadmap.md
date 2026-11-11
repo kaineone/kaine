@@ -43,11 +43,10 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 ## Designed in the paper, not built
 
-The paper's §5.4 lists these parts as specified ahead of their code. None of them runs.
+The paper's §5.4 lists these parts as specified ahead of their code.
 
 | Part | What it is |
 | --- | --- |
-| Welfare indicator response | The welfare indicators of the paper's Appendix A.4, windowed shares of negative valence and of drive deprivation read from the welfare records the welfare observer already writes, and the safety net's response to a crossing: a requested rest first, then preservation and a welfare freeze on a second crossing. The built net responds to sustained distress only. The module-addition study does not start before this response is built. |
 | NOT EXERCISED share rule | A planned-test run is NOT EXERCISED when fewer than a share φ_min of the on arm's broadcasts, fixed before the pilots, have more candidates than the coalition holds. The calibration tool counts a run as exercised once one such broadcast occurs. |
 | Coalition capacity and candidate supply | Settings that make competition operate in the planned test, chosen before the pilots: in seven developmental test boots the workspace received 1.18 candidates per broadcast tick on average and more than five on 0.06 percent of them. |
 | The seed's wait for its individuation reference | The seed entity is preserved at maturation only once its individuation reference is captured within one waking span. |
