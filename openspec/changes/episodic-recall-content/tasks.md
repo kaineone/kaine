@@ -48,5 +48,5 @@
 ## 7. Before any entity run with recall content on
 
 - [x] 7.1 Entity-free loop check (sustained negative episode then neutral period, content on and off) against the bound in the design, recorded under `docs/records/` — PASS, 0.0pp excess (2026-11-10)
-- [ ] 7.2 Entity-free recall-precision check on one study film's broadcast sequence: share of recalled traces sharing the cue's film position (`item_order`, since traces hold no media file name) or own-speech content, recorded under `docs/records/`
+- [x] 7.2 Entity-free recall-precision check on one study film's broadcast sequence: share of recalled traces sharing the cue's film position (`item_order`, since traces hold no media file name) or own-speech content, recorded under `docs/records/`
 - [ ] 7.3 Equivalence bounds for negative-valence share and open drive crossings written into the study's preregistration before its pilots

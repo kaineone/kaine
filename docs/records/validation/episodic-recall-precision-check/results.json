@@ -1,0 +1,94 @@
+{
+  "test": "episodic-recall-precision-check",
+  "task": "7.2",
+  "git_commit": "fa1981e3",
+  "timestamp": "2026-11-11T02:29:46.220960+00:00",
+  "parameters": {
+    "n_items": 12,
+    "ticks_per_item": 8,
+    "total_ticks": 96,
+    "recall_exclude_recent_s": 5.0,
+    "embedder": "sentence-transformers/all-MiniLM-L6-v2",
+    "seed": 42
+  },
+  "results": {
+    "total_recalls": 95,
+    "position_matches": 31,
+    "overall_precision": 0.3263,
+    "per_item": [
+      {
+        "item_order": 0,
+        "recalls": 7,
+        "matches": 7,
+        "precision": 1.0
+      },
+      {
+        "item_order": 1,
+        "recalls": 8,
+        "matches": 4,
+        "precision": 0.5
+      },
+      {
+        "item_order": 2,
+        "recalls": 8,
+        "matches": 6,
+        "precision": 0.75
+      },
+      {
+        "item_order": 3,
+        "recalls": 8,
+        "matches": 3,
+        "precision": 0.375
+      },
+      {
+        "item_order": 4,
+        "recalls": 8,
+        "matches": 2,
+        "precision": 0.25
+      },
+      {
+        "item_order": 5,
+        "recalls": 8,
+        "matches": 1,
+        "precision": 0.125
+      },
+      {
+        "item_order": 6,
+        "recalls": 8,
+        "matches": 0,
+        "precision": 0.0
+      },
+      {
+        "item_order": 7,
+        "recalls": 8,
+        "matches": 4,
+        "precision": 0.5
+      },
+      {
+        "item_order": 8,
+        "recalls": 8,
+        "matches": 0,
+        "precision": 0.0
+      },
+      {
+        "item_order": 9,
+        "recalls": 8,
+        "matches": 3,
+        "precision": 0.375
+      },
+      {
+        "item_order": 10,
+        "recalls": 8,
+        "matches": 0,
+        "precision": 0.0
+      },
+      {
+        "item_order": 11,
+        "recalls": 8,
+        "matches": 1,
+        "precision": 0.125
+      }
+    ]
+  },
+  "verdict": "RECORDED"
+}
