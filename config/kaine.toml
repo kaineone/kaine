@@ -1905,6 +1905,11 @@ capture_retry_initial_s = 60.0
 capture_retry_max_s = 3600.0
 # Scheduler tick interval.
 idle_poll_s = 1.0
+# Operator approval flag: allow the scheduler to request a 'reconstructed'
+# reference when the stored reference is a 'capture' (not maturation) and the
+# maturation conditions can be reproduced (no adapter, empty identity clause at
+# birth).  False by default: a 'capture' reference suffices for most entities.
+allow_reconstructed = false
 
 [lifecycle]
 # Fork/merge snapshot store. Operator-initiated; nothing runs automatically.

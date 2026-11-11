@@ -690,6 +690,12 @@ class IndividuationScheduler:
             else:
                 updates["conditions_alerted_reference"] = ledger.reference_id
 
+            # Task 6.3: auto-regenerate non-maturation references when
+            # conditions change.  Maturation references are never
+            # auto-regenerated (the producer blocks regenerate=True with
+            # kind="maturation" at line 178-182).
+            self._maybe_regenerate_on_conditions_changed()
+
         try:
             since = datetime.fromisoformat(current_since)
             elapsed = (self._now_dt() - since).total_seconds()
@@ -727,6 +733,36 @@ class IndividuationScheduler:
                 log.warning("failed to save inconclusive ledger updates: %s", exc)
 
         self._refresh_state()
+
+    def _maybe_regenerate_on_conditions_changed(self) -> None:
+        """Auto-regenerate a non-maturation reference when conditions change.
+
+        Maturation references are never auto-regenerated: the producer blocks
+        ``regenerate=True`` with ``kind="maturation"`` (it needs the stored
+        maturation adapter, which is not yet supported).  A ``capture`` or
+        ``reconstructed`` reference is regenerated in place so the ledger
+        stays consistent with the current probe conditions.
+        """
+        if self._capture_kind is not None:
+            # A capture is already pending; do not override it.
+            return
+        ref_kind = self._reference_kind
+        if ref_kind is None:
+            # Try to read the reference kind from disk.
+            try:
+                ref = load_reference(self._paths)
+            except ReferenceUnreadable:
+                return
+            if ref is None:
+                return
+            ref_kind = ref.reference_kind
+            self._reference_kind = ref_kind
+        if ref_kind in ("capture", "reconstructed"):
+            log.info(
+                "individuation auto-regenerating %s reference after conditions changed",
+                ref_kind,
+            )
+            self.request_capture(ref_kind, regenerate=True)
 
     def _note_skip(self, reason: str) -> None:
         if reason != self._last_skip:
