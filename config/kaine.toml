@@ -1930,7 +1930,7 @@ idle_poll_s = 1.0
 # Operator approval flag: allow the scheduler to request a 'reconstructed'
 # reference when the stored reference is a 'capture' (not maturation) and the
 # maturation conditions can be reproduced (no adapter, empty identity clause at
-# birth).  False by default: a 'capture' reference suffices for most entities.
+# spawn).  False by default: a 'capture' reference suffices for most entities.
 allow_reconstructed = false
 
 [lifecycle]
