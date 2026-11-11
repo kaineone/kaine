@@ -4,7 +4,7 @@ This page explains how KAINE loads external plugins that swap model objects insi
 
 ## How plugins work
 
-A KAINE plugin is an external Python package that replaces one of the model objects inside a core module while leaving the module's bus subscriptions, event shapes, and lifecycle wiring unchanged. The loader is in `kaine/plugins.py`; there is no `kaine/plugins/` package. Plugins are discovered through the `kaine.plugins` importlib metadata entry-point group, but they are loaded only when the operator explicitly names them in the run configuration.
+A KAINE plugin is an external Python package that replaces one of the model objects inside a core module while leaving the module's bus subscriptions, event shapes, and lifecycle wiring unchanged. Four modules declare model seams (the sequence, interoception, planning and audition modules), and every module has an oscillator seam (see [Seams](#seams)). The workspace, its scoring and the broadcast context have no seam, so changing them, or rebuilding a whole module, takes a code change. The loader is in `kaine/plugins.py`; there is no `kaine/plugins/` package. Plugins are discovered through the `kaine.plugins` importlib metadata entry-point group, but they are loaded only when the operator explicitly names them in the run configuration.
 
 ## Enabling a plugin
 

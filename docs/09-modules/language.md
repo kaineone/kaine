@@ -1,6 +1,6 @@
 # Language
 
-The language module is the language organ. It turns accessed workspace content into words, spoken externally on a speak intent or produced as inner thought on a think intent, using a local chat model served through an OpenAI-compatible model server. It is an output organ and not the seat of reasoning, which lives in the rest of the architecture. This page is for operators enabling the language module and contributors changing its prompt assembly or client.
+The language module is the language organ. It turns accessed workspace content into words, spoken externally on a speak intent or produced as inner thought on a think intent, using a local chat model served through an OpenAI-compatible model server. It is an output organ. It is not used to reason, and the first configuration has no reasoning module. This page is for operators enabling the language module and contributors changing its prompt assembly or client.
 
 ## Status
 
@@ -8,7 +8,7 @@ The language module ships disabled in the default config (`[modules].language = 
 
 ## Role in the first configuration
 
-In the first configuration the language organ is output-only. The audition module's transcription path is off (`[audition].transcription_enabled = false`), so speech reaches the entity only as sound and tone of voice, and no transcript reaches the language module. Everything it voices comes from the workspace.
+In the first configuration the language organ hears no speech. The audition module's transcription path is off (`[audition].transcription_enabled = false`), so speech reaches the entity only as sound and tone of voice, and no transcript reaches the language module. Each generation is triggered by an intent derived from an accessed broadcast and is conditioned on that broadcast together with the persona and the situation facts (below). Its own utterances come back to it quoted when they are accessed, and the individuation probe, which research runs require, samples it privately on fixed prompts whose answers no module reads. The wording is the pretrained organ's.
 
 The language module never speaks on its own initiative. Its only triggers are `speak` and `think` intents from the action selection module. The first-configuration profile selects `[action_selection].policy = "self_initiated_report"`, under which `SelfInitiatedReportPolicy` reads each accessed broadcast and takes the best score in the coalition, leaving the language module's own utterances aside:
 
@@ -108,9 +108,9 @@ An offline replay against a throwaway llama-server on the pinned build b11382 wi
 
 External speech looped in 6 of 344 texts on main at temperature 0.7 and 55 of 344 at temperature 0, and in none with this change. Median lengths barely move (internal 70 to 66 characters at temperature 0.7).
 
-## Refusal conditioning removed
+## Refusal conditioning reduced
 
-The organ's weights have the single direction that mediates refusal projected out (Arditi et al. 2024). Models tuned to refuse are also trained to deny or deflect talk of their own states, and removing the conditioning keeps that trained stance from overriding what the workspace supplies to the organ. Whether trained deflection of self-report shares the refusal direction is untested, so the ablation may not remove it entirely. How the served organ is checked is documented in [Verification](../18-verification.md).
+The organ's weights are orthogonalized against the single direction that mediates refusal (Arditi et al. 2024), which reduces refusal. The shipped organ's edit covers the MLP down-projections and the full-attention output projections of layers 11 to 31; it does not reach the attention outputs of the linear-attention layers, 24 of the model's 32. Models tuned to refuse also learn to deny or deflect talk of their own states, and the aim of the edit is to keep that trained stance from overriding what the workspace supplies to the organ. The stance survived it: on held-out self-state prompts the organ denies having states in 106 of 144 bare samples and 36 of 144 under the persona (paper §3.5). How the served organ is checked is documented in [Verification](../18-verification.md).
 
 `model_id` must therefore name the published organ or another model treated the same way. The sleep module's voice-alignment phase scores any trained adapter against an abliteration probe set and rejects it if a response deflects (see [Voice alignment](../10-sleep/voice-alignment.md)).
 
@@ -199,7 +199,7 @@ Every generation is appended to `state/language/intent_expression.jsonl` by `Int
 - `seed`, the sampling seed, `null` for ordinary utterances;
 - `extra.identity_leak = true` when the text is identity leakage (see below).
 
-**Identity leakage and self-description** (paper 3.5). The ablation removes the refusal direction alone, and the default assistant persona survives it (Lu et al. 2026): in the tenth test boot 4 of 1508 texts took that stance, two of them denying feelings their own request reported. Identity leakage is the organ speaking as itself rather than as the whole entity. A fixed classifier, `kaine/modules/language/identity_leak.py`, gives each text a reason code or none, with its patterns in one table in that file:
+**Identity leakage and self-description** (paper 3.5). The ablation acts on the refusal direction alone, and the default assistant persona survives it (Lu et al. 2026): in the tenth test boot 4 of 1508 texts took that stance, two of them denying feelings their own request reported. Identity leakage is the organ speaking as itself rather than as the whole entity. A fixed classifier, `kaine/modules/language/identity_leak.py`, gives each text a reason code or none, with its patterns in one table in that file:
 
 - `origin`: the speaker says it is a language model, an LLM or a neural network, or that it was trained by someone or on something ("I am a large language model", "I'm only a language model", "I was trained on text");
 - `maker`: the speaker says it was made, created, built, developed, designed or programmed by someone, or that it is a named model ("I was created by OpenAI", "I am Qwen"); a company or model name the text only mentions is not marked;

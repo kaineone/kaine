@@ -37,7 +37,7 @@ KAINE_CYCLE_OPERATOR_PRESENT=1 KAINE_PROFILE=first_configuration python -m kaine
 # or: KAINE_CYCLE_OPERATOR_PRESENT=1 python -m kaine.cycle --profile first_configuration
 ```
 
-`first_configuration` turns on seven modules: the interoception, sequence (temporal prediction), vision (foveated), audition (raw sound as prediction error, speech-to-text off), affect (the affective core), sleep (fatigue-triggered sleep, voice alignment off), and language (the output-only language organ with a self-initiated voice) modules. It turns every other module off, including the effectors, vocal, self-model, episodic memory, planning, social cognition, world model, perceptual locus, embodiment and recorder modules. It also sets `[perception_feed]` to `mode = "seeded"` with `seed = 0`, `[vision].foveation = true`, `[sequence].forward_prediction = true`, `[audition].transcription_enabled = false`, `[audition].general_audition = true`, and `[action_selection].policy = "self_initiated_report"` with `drive_initiative = false` and `sig_expiry_s = 300.0`. Every other value (organ model, rates, encryption, speech-to-text model, world model backend and the rest) comes from the shipped `config/kaine.toml`.
+`first_configuration` turns on seven modules: the interoception, sequence (temporal prediction), vision (foveated), audition (raw sound as prediction error, speech-to-text off), affect (the affective core), sleep (fatigue-triggered sleep, voice alignment off), and language (the language organ, which hears no speech, with a self-initiated voice) modules. It turns every other module off, including the effectors, vocal, self-model, episodic memory, planning, social cognition, world model, perceptual locus, embodiment and recorder modules. It also sets `[perception_feed]` to `mode = "seeded"` with `seed = 0`, `[vision].foveation = true`, `[sequence].forward_prediction = true`, `[audition].transcription_enabled = false`, `[audition].general_audition = true`, and `[action_selection].policy = "self_initiated_report"` with `drive_initiative = false` and `sig_expiry_s = 300.0`. Every other value (organ model, rates, encryption, speech-to-text model, world model backend and the rest) comes from the shipped `config/kaine.toml`.
 
 For the full overlay, see `config/profiles/first_configuration.toml`. For how profile resolution works, see [Configuration](../appendix-a-configuration/README.md).
 
@@ -50,7 +50,7 @@ sequence    = true   # temporal awareness
 vision      = true   # foveated vision; [vision] extra required
 audition   = true   # raw sound as prediction error; [audio] extra required; transcription off
 affect     = true   # affective core
-language     = true   # output-only language organ; the model server must be serving
+language     = true   # language organ (hears no speech); the model server must be serving
 effectors     = false  # no effectors on first boot
 vocal        = false  # TTS not part of the first-configuration voice path
 self_model    = false  # held module

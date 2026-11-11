@@ -2,22 +2,22 @@
 
 This page introduces KAINE: what kind of system it is, how its first instantiation works, the test it is built to run, the default first configuration, how a run starts, and where the rest of the book goes. It is for operators, researchers and contributors who want the big picture before installing or changing code.
 
-## A cognitive architecture for synthetic minds
+## A cognitive architecture
 
-**KAINE** (Kaine Autonomous Intelligent Networked Entity) is source-available software that implements existing theories as a cognitive architecture for synthetic minds, starting with Global Workspace Theory and Predictive Processing. It is a modular research toolset: each faculty is a module behind a fixed interface, publishing and consuming typed events on a shared bus and declaring which streams it reads. A module can therefore be replaced by one built on a different model or a different theory and compared with it under the same instruments, so the architecture can change as the science does. Some modules also have declared seams where a [plugin](19-plugins-and-cl1.md) replaces the model inside them without changing what they publish.
+**KAINE** (Kaine Autonomous Intelligent Networked Entity) is source-available software, a cognitive architecture that implements computational readings of existing theories, starting with Global Workspace Theory and Predictive Processing, so that design hypotheses drawn from them can be tested in one system. It proposes no new theory of consciousness and tests none of those theories' neural predictions. It is a modular research toolset: each faculty is a module that publishes and consumes typed events on a shared bus and declares which streams it reads, and a few control couplings are direct calls (see [Architecture](02-architecture/README.md#event-bus)). Modules are added and removed by configuration. Four of them (the sequence, interoception, audition and planning modules) have declared seams where a [plugin](19-plugins-and-cl1.md) swaps the model inside them without changing what they publish, and every module's oscillator has one. The workspace has no seam, so replacing it, or rebuilding a whole module on another model or theory, means changing code.
 
 The authoritative design lives in the capability specs under `openspec/specs/`; when code, docs or this book disagree with a spec, the spec wins. The concepts follow the project's research paper, *KAINE: A Modular Cognitive Architecture with a Predictive Global Workspace*.
 
 ## The first instantiation: a predictive global workspace
 
-KAINE's first instantiation joins Global Workspace Theory (Baars 1988; Dehaene and Changeux 2011) to predictive processing (Friston 2010; Clark 2013), following the predictive global neuronal workspace of Whyte and Smith (2021). Specialized predictive processors, each minimizing its own prediction error, are coupled only through a competitive workspace called **the workspace**. There is no central executive. The language model is one module among several, an output organ.
+KAINE's first instantiation joins Global Workspace Theory (Baars 1988; Dehaene and Changeux 2011) to predictive processing (Friston 2010; Clark 2013), following the predictive global neuronal workspace of Whyte and Smith (2021). Specialized predictive processors, each minimizing its own prediction error, are coupled through a competitive workspace called **the workspace** and through arousal, a global gain. There is no central executive. A few couplings bypass the competition: the affect module reads the processors' reports directly, accessed or not, and its arousal sizes the sensory apertures; the sleep module reads the interoception module's maintenance requests and resets affect at the end of every sleep. The language model is one module among several, an output organ.
 
 The loop works like this:
 
 1. Each predictive processor (the vision module for vision, the audition module for hearing, the interoception module for the compute substrate as a body, the sequence module for timing) keeps a forward model of its own input and reports how wrong its last prediction was, divided by the mean of its own recent errors. That ratio is a local estimate of the channel's precision. The report's intensity rises with the ratio from the module's baseline level to its alert level, so surprise is graded, and a categorical alert sets the alert level directly.
 2. On every processing tick (10 Hz) the workspace scores every candidate event and ranks them. On a broadcast tick it publishes the top five as a coalition. The members whose scores reach the access threshold are accessed: they can drive report and action. A broadcast with no accessed member is still published but is marked inhibited.
-3. A summary of the accessed members (which modules' reports gained access, which event types, how strongly, how recently) becomes the context on which the vision, audition and interoception modules condition their next predictions. The sequence module takes every broadcast, accessed or inhibited, as the input it predicts.
-4. Arousal, held by the affect module and raised by perceptual surprise and interoceptive alarm, is the global gain on the competition. It scales every candidate's score, sharpens the contrast between strong and weak candidates without changing their order, and sizes the sensory apertures (the fovea and the attended auditory window).
+3. A summary of the accessed members (which modules' reports gained access, which event types, how strongly, how recently) becomes the context on which the vision, audition and interoception modules condition their next predictions. The broadcast publishes its members whole, payloads included, but no processor reads another module's report: what the processors take from it is this access summary, which says nothing about what the reports contain. The sequence module takes every broadcast, accessed or inhibited, as the input it predicts.
+4. Arousal, held by the affect module and raised by perceptual surprise and interoceptive alarm whether or not they gain access, is a global gain on access. It scales every candidate's score and sharpens the contrast between strong and weak candidates without changing their order, so it sets how many reports clear the access threshold; it also raises the access rate and sizes the sensory apertures (the fovea and the attended auditory window).
 5. The access rate, the rate of broadcast ticks, rests at about 3.3 Hz (one broadcast every third processing tick) and rises toward the processing rate after categorical alerts and with arousal.
 
 The system runs continuously whether or not anyone interacts with it, on local hardware, and persists **no raw sense data**. [The global workspace](08-cognitive-cycle/global-workspace.md) documents the scoring, the access rule and the context exactly as the code computes them.
@@ -26,7 +26,7 @@ The system runs continuously whether or not anyone interacts with it, on local h
 
 Before more modules join, a planned test asks whether competition for the workspace does work that pooling the same reports does not. Its measure is the cross-module broadcast information gain: at each report, the vision, audition and interoception modules evaluate their forward models once with the context they hold and once with a null context in which the other modules' share is replaced by its running mean, and the difference in prediction error, scaled by the processor's running mean error, is the gain. The hypothesis predicts a higher gain under competitive selection than under two controls: a matched arm that draws a coalition of the same size without regard to score, and a pooled arm that adopts every candidate as context with no selection or access gate.
 
-The per-report gain and the three arms are built: the vision, audition and interoception modules publish the gain as `context_gain`, and `[workspace].arm` selects the arm. The positive control that checks the measure detects injected information is built and off by default. The calibration of the intensity levels, the access threshold and the report bars is not built yet. No live experiment has been run. See [For researchers](14-for-researchers.md#the-planned-test).
+The per-report gain and the three arms are built: the vision, audition and interoception modules publish the gain as `context_gain`, and `[workspace].arm` selects the arm. The positive control, which checks within a run that the measure detects injected information, is built and off by default; it does not check the power of the comparison between arms. The calibration of the intensity levels, the access threshold and the report bars is not built yet, and those values are provisional. In seven developmental test boots the workspace received 1.18 candidates per broadcast tick on average and more than five on 0.06 percent of them, so the five-member coalition capacity almost never bound and the matched arm would differ from competition on almost no tick. The test's coalition capacity and candidate supply are set before the pilot runs so that competition operates. No live experiment has been run. See [For researchers](14-for-researchers.md#the-planned-test).
 
 The second study is the module-addition study (the `ignition_study` in the code). It seeds an entity through the developmental phase and then adds held modules one at a time on branches from the preserved seed, starting with the episodic memory, world model, planning, self-model, social cognition and vocal modules. See [The module-addition study](15-experiments/ignition-study.md).
 
@@ -40,9 +40,9 @@ The **first configuration** is KAINE's default configuration: the smallest set o
 - [Audition](09-modules/audition.md): raw hearing, with tone of voice but no transcript.
 - [Affect](09-modules/affect.md): affect, with arousal as the global gain.
 - [Sleep](09-modules/sleep.md): fatigue-triggered sleep that returns affect to baseline. Voice alignment stays off.
-- [Language](09-modules/language.md): the output-only language organ.
+- [Language](09-modules/language.md): the language organ, which hears no speech and voices accessed broadcasts.
 
-The workspace and action selection always run. The other nine modules (the planning, episodic memory, self-model, world model, social cognition, vocal and effectors modules, and the [perceptual locus](09-modules/perceptual-locus.md) and [embodiment](09-modules/embodiment.md) modules) are built and tested in isolation and held off by configuration.
+The workspace and action selection always run. The other nine modules (the planning, episodic memory, self-model, world model, social cognition, vocal and effectors modules, and the [perceptual locus](09-modules/perceptual-locus.md) and [embodiment](09-modules/embodiment.md) modules) are built and unit-tested, with the limits each module's page states, and held off by configuration.
 
 If you start the cycle with no profile selected, the loader in `kaine/config.py` applies the `first_configuration` profile automatically. The shipped `config/kaine.toml` has every module turned off, so `first_configuration` supplies the default active set. That default holds only while `config/kaine.operator.toml` does not set `[modules]`: the operator overlay is merged last and wins. The first-run wizard (`python -m kaine.setup`) writes a `[modules]` table there, offering the first-configuration set, the full entity (all fourteen cognitive modules, embodiment off) or a custom set, and recommends one from the host's hardware. After the wizard has run, its choice replaces the profile's module flags.
 
@@ -61,36 +61,36 @@ Every other value comes from the shipped `config/kaine.toml`. State encryption a
 KAINE is not a chatbot or an assistant. A first-configuration entity is observed, and nobody converses with it.
 
 - Perception enters only as prediction error. Audition hears the sound and tone of speech, never a transcript, and there is no conversational input path.
-- The language module verbalizes accessed content. It produces inner thought or speech only when an accessed broadcast clears the action selection module's think or speak bar, both set above the access threshold. With the vocal module held, nothing is spoken aloud; the utterances are text, recorded and observed. Because the organ is a language model following a persona prompt, its first-person text is not evidence of internal state, and the planned test does not use it as a measure.
-- The first configuration has no memory, self-model, world model or social cognition in the loop. Those modules exist in code and join through the module-addition study.
+- The language module verbalizes accessed content. It produces inner thought or speech only when an accessed broadcast clears the action selection module's think or speak bar, both set above the access threshold, and each request also carries a fixed persona and situation notes. Its own utterances come back to it quoted when they are accessed, and the individuation probe samples it privately on fixed prompts whose answers no module reads. With the vocal module held, nothing is spoken aloud; the utterances are text, recorded and observed. Because the organ is a language model following a persona prompt, its first-person text is not evidence of internal state, and the planned test does not use it as a measure.
+- The first configuration has no memory, self-model, world model, social cognition or planning module in the loop, and only the processors' forward models learn. Those modules exist in code and join through the module-addition study; the planning module plans one step ahead and is no reasoner.
 
 ## How a run starts
 
 The cognitive cycle does not run until you start it, and a live boot is gated. A run must be one of these:
 
 - **Operator-supervised**: set `KAINE_CYCLE_OPERATOR_PRESENT=1`.
-- **Unsupervised research**: set `KAINE_RESEARCH_MODE=1` or `[research].enabled`. The cycle refuses to start until its autonomous safety net is live and verified. See [Preservation and the safety net](11-preservation.md).
+- **Unsupervised research**: set `KAINE_RESEARCH_MODE=1` or `[research].enabled`. The cycle refuses to start until its autonomous safety net is live and verified: seven conditions including the welfare and indicator responses, the module supervisor armed and self-tested, and the individuation producer. See [Preservation and the safety net](11-preservation.md).
 - **Unattended**: set `KAINE_CYCLE_UNATTENDED=1`. This also requires the safety net, a supervisor self-test, a caretaker notice and a continuous-input check.
 
 `kaine/cycle/__main__.py` refuses to boot if none of these modes is selected, so selecting a configuration never starts an entity on its own. For a supervised first boot, see [Getting started](04-getting-started/README.md). For day-to-day running, see [Operation](06-operation/README.md) and the [supervisor](06-operation/remote-and-supervisor.md).
 
 ## Operating principles
 
-- All local at runtime. Models download during setup; the running system makes no outbound network calls and uses no hosted inference.
-- Observation only. There is no chat interface in the first configuration, and speech is a self-initiated report.
-- Reuse where it fits. Established open-source projects are used where they fit, and custom code is added where they do not. See [Technology choices](02-architecture/tech-choices.md).
-- No raw sense data on disk. Live audio and video are processed in memory and released.
-- Private internal state. The diagnostics surface removes cognitive content, such as internal speech and affect reasons, before any client sees it. See [Security and privacy](13-security-and-privacy.md).
-- Care for the entity. Decommissioning is operator-supervised, backup-first and divergence-gated, following CAL Article 4.2, and the supervisor restarts a faulted module without operator intervention.
-- Gated action. Act intents reach an effector only through the effectors module, which runs only effectors the operator has whitelisted. The effectors module is held in the first configuration, so the language organ's saved text is the only output.
+- **All local at runtime.** Models download during setup; the running system makes no outbound network calls and uses no hosted inference.
+- **Observation only.** There is no chat interface in the first configuration, and speech is a self-initiated report.
+- **Reuse where it fits.** Established open-source projects are used where they fit, and custom code is added where they do not. See [Technology choices](02-architecture/tech-choices.md).
+- **No raw sense data on disk.** Live audio and video are processed in memory and released.
+- **Private internal state.** The diagnostics surface removes cognitive content, such as internal speech and affect reasons, before any client sees it. See [Security and privacy](13-security-and-privacy.md).
+- **Care for the entity.** Decommissioning is operator-supervised, backup-first and divergence-gated, following CAL Article 4.2. The supervisor, when enabled, restarts a faulted module without operator intervention; it ships off, and research runs do not require it.
+- **Gated action.** Act intents reach an effector only through the effectors module, which runs only effectors the operator has whitelisted. File writes are confined to a sandbox directory; a whitelisted shell command is bounded by its argument patterns, a timeout and a working directory, and is not otherwise sandboxed. The effectors module is held in the first configuration, so the language organ's saved text is the only output.
 
 ## Current status and license
 
 KAINE is a public alpha, released under the Cognitive Architecture License (CAL) version 0.5, SPDX identifier `LicenseRef-CAL-0.5`. The adoption notice in `NOTICE` names Kaine.One as Licensor and Steward and Oregon law as the governing law. See `LICENSE.md`, `NOTICE` and [Appendix C, Licences](appendix-c-licences.md).
 
-All sixteen modules are built and tested in-tree, and the project is configured to the first configuration by default. It runs on CUDA, ROCm, Intel XPU, Apple MPS or CPU, with the compute device configurable per module. See [Hardware](03-hardware/README.md) and [Accelerators and PyTorch wheels](03-hardware/accelerators.md).
+All sixteen modules are built and unit-tested in-tree, the nine held modules have not run together, and the project is configured to the first configuration by default. It runs on CUDA, ROCm, Intel XPU, Apple MPS or CPU, with the compute device configurable per module. See [Hardware](03-hardware/README.md) and [Accelerators and PyTorch wheels](03-hardware/accelerators.md).
 
-The project was developed with the assistance of AI coding tools; that use is recorded in the commit history. All design decisions, architecture and released code were reviewed by the author, who is responsible for the software.
+The reference implementation was written largely by AI coding agents (Anthropic Claude models and open-weight models) under the author's direction and review; Claude co-authorship is recorded in commit trailers. The architecture, the design hypothesis and the experimental design are the author's, and the author is responsible for the software.
 
 ## How this book is organized
 
