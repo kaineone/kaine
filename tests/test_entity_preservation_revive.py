@@ -1346,6 +1346,8 @@ async def test_preserve_revive_social_cognition_with_embeddings(
     assert len(r.voice_exemplars) == 2
     assert len(r.face_exemplars) == 1
     assert r.voice_exemplars[0]["embedding"] == [0.11, 0.21, 0.31, 0.41]
+    assert r.voice_exemplars[1]["embedding"] == [0.12, 0.22, 0.32, 0.42]
+    assert r.face_exemplars[0]["embedding"] == [0.51, 0.61, 0.71]
     assert r.voice_sample_count == 2
     assert r.face_sample_count == 1
     assert r.binding_state == "bound"
