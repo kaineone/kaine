@@ -5,7 +5,10 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
+
+if TYPE_CHECKING:
+    from kaine.residency.router import ResidencyRouter
 
 from kaine.boot.config_kwargs import config_kwargs
 from kaine.boot.errors import _require_keys
@@ -24,6 +27,7 @@ def make_vision(
     section: dict[str, Any],
     *,
     entity_clock: Optional[EntityClock] = None,
+    router: ResidencyRouter | None = None,
 ) -> BaseModule:
     from kaine.modules.vision.live import LiveCameraConfig
     from kaine.modules.vision.module import Vision
@@ -249,7 +253,9 @@ def make_vision(
 
             det_path = vision_model_path("yunet")
             rec_path = vision_model_path("sface") if _vision_installed("sface") else None
-            kwargs["face_detector"] = FaceDetector(det_path, rec_path)
+            kwargs["face_detector"] = FaceDetector(det_path, rec_path, router=router)
+            if router is not None:
+                router.register("face_detector")
         except Exception:
             log.warning("face detector disabled: model not provisioned", exc_info=True)
 
@@ -259,7 +265,11 @@ def make_vision(
         try:
             from kaine.modules.vision.face_expression import FaceExpressionClassifier
 
-            kwargs["face_expression"] = FaceExpressionClassifier(vision_model_path("fer"))
+            kwargs["face_expression"] = FaceExpressionClassifier(
+                vision_model_path("fer"), router=router,
+            )
+            if router is not None:
+                router.register("face_expression")
         except Exception:
             log.warning("face expression disabled: model not provisioned", exc_info=True)
 
@@ -276,8 +286,10 @@ def make_vision(
                 from kaine.modules.vision.gaze_estimator import LearnedGazeEstimator
 
                 kwargs["gaze_estimator"] = LearnedGazeEstimator(
-                    vision_model_path("gaze-mobilenetv2")
+                    vision_model_path("gaze-mobilenetv2"), router=router,
                 )
+                if router is not None:
+                    router.register("gaze_estimator")
             except Exception:
                 log.warning(
                     "learned gaze disabled: model not provisioned", exc_info=True

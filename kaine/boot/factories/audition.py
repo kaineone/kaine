@@ -9,7 +9,7 @@ from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Mapping, Optional
 
 if TYPE_CHECKING:
-    pass
+    from kaine.residency.router import ResidencyRouter
 from kaine.boot.common import _check_injections
 from kaine.boot.config_kwargs import config_kwargs
 from kaine.boot.errors import ConfigurationError, _require_keys
@@ -50,6 +50,7 @@ def make_audition(
     *,
     injections: Optional[Mapping[str, Any]] = None,
     entity_clock: Optional[EntityClock] = None,
+    router: ResidencyRouter | None = None,
 ) -> BaseModule:
     from kaine.modules.audition.acoustic import ACOUSTIC_ENCODERS, build_acoustic_encoder
     from kaine.modules.audition.live import LiveMicConfig
@@ -279,7 +280,10 @@ def make_audition(
             kwargs["speaker_embedder"] = SpeakerEmbedder(
                 se_model_path,
                 num_threads=se_num_threads,
+                router=router,
             )
+            if router is not None:
+                router.register("speaker_embedder")
         except Exception as exc:
             log.warning(
                 "speaker embedding disabled: %s. "
@@ -288,6 +292,18 @@ def make_audition(
                 exc,
                 se_model_id,
             )
+
+    # Emotion classifier: when residency is active, build in the factory so the
+    # router is wired; otherwise the module builds its own.
+    emotion_model_id = str(kwargs.get("emotion_model_id", "emotion2vec/emotion2vec_plus_base")).strip()
+    emotion_device = str(kwargs.get("emotion_device", "cpu")).strip()
+    if router is not None and emotion_model_id:
+        from kaine.modules.audition.emotion import Emotion2vecClassifier
+
+        kwargs["emotion_classifier"] = Emotion2vecClassifier(
+            model_id=emotion_model_id, device=emotion_device, router=router,
+        )
+        router.register("emotion_classifier")
 
     # Backend seam (openspec runtime-backends). The backend value is normalised
     # once and all disclosures derive from the resolved backend.

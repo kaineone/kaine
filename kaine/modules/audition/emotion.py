@@ -15,9 +15,12 @@ import gc
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, Optional, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Optional, Protocol, runtime_checkable
 
 from kaine.residency.inflight import InflightGate
+
+if TYPE_CHECKING:
+    from kaine.residency.router import ResidencyRouter
 
 log = logging.getLogger(__name__)
 
@@ -114,6 +117,7 @@ class Emotion2vecClassifier:
         *,
         device: str = "cpu",
         hub: str = "hf",
+        router: ResidencyRouter | None = None,
     ) -> None:
         self._model_id = model_id
         self._device = device
@@ -130,6 +134,8 @@ class Emotion2vecClassifier:
         self._warned_missing = False
         self._load_lock: Optional[asyncio.Lock] = None
         self._gate = InflightGate()
+        self._router = router
+        self._residency_name = "emotion_classifier"
 
     @property
     def model_id(self) -> str:
@@ -159,6 +165,8 @@ class Emotion2vecClassifier:
             return
         if self._funasr_available is False or self._load_failed:
             return
+        if self._router:
+            await self._router.before_load(self._residency_name)
         if self._funasr_available is None:
             try:
                 import funasr  # type: ignore[import-untyped]
@@ -228,6 +236,8 @@ class Emotion2vecClassifier:
                         self._model = None
                         return
             log.info("emotion2vec+ loaded: %s on %s", self._model_id, self._device)
+            if self._router:
+                self._router.after_load(self._residency_name)
         except Exception:
             log.exception("emotion2vec+ load failed; degrading to neutral")
             self._load_failed = True
@@ -248,10 +258,14 @@ class Emotion2vecClassifier:
 
     async def unload(self) -> None:
         """Release the underlying model. Idempotent."""
+        if self._router:
+            self._router.before_unload(self._residency_name)
         lock = self._lock()
         async with lock:
             await self._gate.wait_idle()
             self._model = None
+        if self._router:
+            self._router.after_unload(self._residency_name)
         await asyncio.to_thread(gc.collect)
         if self._device.startswith("cuda"):
             import torch
@@ -273,6 +287,8 @@ class Emotion2vecClassifier:
             await self._ensure_loaded_locked()
             if self._funasr_available is False or self._load_failed or self._model is None:
                 return self._degraded_result()
+            if self._router:
+                self._router.record_use(self._residency_name)
             local_model = self._model
             ticket = self._gate.admit()
 

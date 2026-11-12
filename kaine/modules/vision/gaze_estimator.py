@@ -21,9 +21,12 @@ import math
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from kaine.residency.router import ResidencyRouter
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +132,7 @@ class LearnedGazeEstimator:
         model_path: Path | str,
         *,
         input_size: tuple[int, int] = (448, 448),
+        router: ResidencyRouter | None = None,
     ) -> None:
         self._model_path = Path(model_path)
         self._input_size = input_size
@@ -138,6 +142,8 @@ class LearnedGazeEstimator:
         )
         self._closed = False
         self._state_lock: asyncio.Lock | None = None
+        self._router = router
+        self._residency_name = "gaze_estimator"
 
     @property
     def loaded(self) -> bool:
@@ -158,11 +164,15 @@ class LearnedGazeEstimator:
             return
         if self._closed or self._executor is None:
             raise RuntimeError("gaze estimator is closed")
+        if self._router:
+            await self._router.before_load(self._residency_name)
         loop = asyncio.get_running_loop()
         net = await loop.run_in_executor(self._executor, self._build)
         if self._closed:
             raise RuntimeError("gaze estimator is closed")
         self._net = net
+        if self._router:
+            self._router.after_load(self._residency_name)
 
     async def warm_up(self) -> None:
         if self._closed or self._executor is None:
@@ -174,8 +184,12 @@ class LearnedGazeEstimator:
 
     async def unload(self) -> None:
         """Release loaded model. Next estimate() call will reload."""
+        if self._router:
+            self._router.before_unload(self._residency_name)
         async with self._ensure_state_lock():
             self._net = None
+        if self._router:
+            self._router.after_unload(self._residency_name)
         logger.info("Gaze estimator unloaded")
 
     async def estimate(
@@ -201,6 +215,8 @@ class LearnedGazeEstimator:
             logger.warning("gaze estimator failed to load", exc_info=True)
             return None
 
+        if self._router:
+            self._router.record_use(self._residency_name)
         loop = asyncio.get_running_loop()
         try:
             return await loop.run_in_executor(

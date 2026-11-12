@@ -8,7 +8,7 @@ import logging
 from typing import TYPE_CHECKING, Any, Mapping, Optional
 
 if TYPE_CHECKING:
-    pass
+    from kaine.residency.router import ResidencyRouter
 from kaine.boot.common import ModuleFactory, shared_embedder
 from kaine.boot.errors import ConfigurationError
 from kaine.boot.factories.affect import make_affect
@@ -164,6 +164,22 @@ def build_registry(
     # starts); the self-model module adopts it. None for a bare test setup.
     registry.identity_name = identity_name
     registry.identity_name_pending = identity_name_pending
+    # Residency router (module-residency-and-speech-tiers task 4.6). Built once
+    # from [residency] and stashed on the registry so the supervisor's restart
+    # path can hand the same router to rebuilt modules. None when disabled.
+    from kaine.residency.config import from_config as residency_from_config
+
+    _residency_cfg = residency_from_config(kaine_config)
+    _residency_router: ResidencyRouter | None = None
+    if _residency_cfg.enabled:
+        from kaine.residency.ledger import Ledger as ResidencyLedger
+        from kaine.residency.router import ResidencyRouter
+
+        _budget = _residency_cfg.reserve_bytes or 0
+        _residency_router = ResidencyRouter(
+            ResidencyLedger(_budget, pin=_residency_cfg.pin)
+        )
+    registry.residency_router = _residency_router
     # The unified perception feed is a single top-level [perception_feed] section
     # (unified-perception-feed) that parameterizes BOTH the vision surface
     # (the vision module) and the hearing surface (the audition module) from one source of truth. Read
@@ -292,6 +308,7 @@ def build_registry(
             entity_clock=entity_clock,
             intent_secret=intent_secret,
             injections=plugin_injections(plugins, name),
+            router=_residency_router,
         )
         if module is None:
             log.warning(
@@ -338,6 +355,7 @@ def construct_module(
     entity_clock: Optional[EntityClock] = None,
     intent_secret: Optional[bytes] = None,
     injections: Optional[Mapping[str, Any]] = None,
+    router: ResidencyRouter | None = None,
 ) -> Optional[BaseModule]:
     """Construct a single module exactly as `build_registry` would.
 
@@ -371,7 +389,7 @@ def construct_module(
         section[FEEDBACK_SECTION_KEY] = feedback_section(kaine_config)
 
     if name in ("episodic_memory", "social_cognition"):
-        section["_embedder"] = shared_embedder(registry, kaine_config)
+        section["_embedder"] = shared_embedder(registry, kaine_config, router=router)
 
     if name == "sleep":
         episodic_memory = registry.get("episodic_memory") if "episodic_memory" in registry else None
@@ -389,7 +407,14 @@ def construct_module(
 
     factory = SIMPLE_FACTORIES[name]
     if name in _CLOCKED_FACTORIES:
-        if name in {"audition", "sequence", "interoception", "planning"}:
+        if name == "audition":
+            return factory(
+                bus, section, entity_clock=entity_clock, injections=injections,
+                router=router,
+            )
+        if name == "vision":
+            return factory(bus, section, entity_clock=entity_clock, router=router)
+        if name in {"sequence", "interoception", "planning"}:
             return factory(
                 bus, section, entity_clock=entity_clock, injections=injections
             )
