@@ -41,7 +41,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from kaine import legacy_aliases
 from kaine.experiment.run_context import _utc_iso, get_run_context
@@ -53,6 +53,9 @@ from kaine.lifecycle.identity import (
 )
 from kaine.lifecycle.snapshot import ForkSnapshot, save_snapshot
 from kaine.storage import resolve
+
+if TYPE_CHECKING:
+    from kaine.security.custody.encryptor import EntityEncryptor
 
 log = logging.getLogger(__name__)
 
@@ -159,6 +162,7 @@ async def preserve_live(
     individuation_root: Path | None = None,
     identity: EntityIdentity | None = None,
     identity_unreadable: str | None = None,
+    encryptor: EntityEncryptor | None = None,
 ) -> PreservationResult:
     """Preserve the whole individual from a LIVE registry. Read-only; fail-loud.
 
@@ -197,7 +201,7 @@ async def preserve_live(
     # process-global encryptor is not actively encrypting, write NOTHING (no
     # plaintext snapshot, no plaintext bundle). A loud refusal is safer than a
     # complete-looking plaintext capture of the whole individual.
-    if require_encryption:
+    if require_encryption and encryptor is None:
         from kaine.security.crypto import get_state_encryptor
 
         if not getattr(get_state_encryptor(), "enabled", False):
@@ -303,7 +307,7 @@ async def preserve_live(
     # Snapshot json+encrypt+write is synchronous disk/crypto work; run it off the
     # event loop so a preservation (which fires during distress/divergence) does
     # not stall the cognitive cycle.
-    await asyncio.to_thread(save_snapshot, fork_root, snap)
+    await asyncio.to_thread(save_snapshot, fork_root, snap, encryptor=encryptor)
 
     # --- 4. Write the encrypted, self-contained bundle ------------------
     # The bundle is made structurally consistent with the decommission backup:
@@ -418,10 +422,13 @@ async def preserve_live(
         # Tar the staged content and (when enabled) encrypt the tar via the same
         # StateEncryptor path the decommission backup uses, then remove the
         # plaintext originals. The manifest is excluded (stays loose + readable).
-        from kaine.security.crypto import get_state_encryptor
-
-        encryptor = get_state_encryptor()
-        bundle_encrypted = bool(getattr(encryptor, "enabled", False))
+        if encryptor is not None:
+            _enc = encryptor
+            bundle_encrypted = True
+        else:
+            from kaine.security.crypto import get_state_encryptor
+            _enc = get_state_encryptor()
+            bundle_encrypted = bool(getattr(_enc, "enabled", False))
         tar_member_names = ["snapshot.json"]
         if (bundle_dir / wm_member).is_dir():
             tar_member_names.append(wm_member)
@@ -438,8 +445,12 @@ async def preserve_live(
         raw = tar_bytes_path.read_bytes()
         tar_bytes_path.unlink()
         if bundle_encrypted:
-            blob = encryptor.encrypt(raw)  # bytes in, base64 bytes out
-            (bundle_dir / "bundle.tar.enc").write_text(blob.decode("ascii"))
+            if encryptor is not None:
+                blob = encryptor.encrypt(raw, kind="bundle")
+                (bundle_dir / "bundle.tar.enc").write_bytes(blob)
+            else:
+                blob = _enc.encrypt(raw)
+                (bundle_dir / "bundle.tar.enc").write_text(blob.decode("ascii"))
             _chmod_quietly(bundle_dir / "bundle.tar.enc", 0o600)
             bundle_artifact = "bundle.tar.enc (encrypted)"
         else:
@@ -555,7 +566,12 @@ async def preserve_live(
     )
 
 
-async def revive(bundle: Path, registry: Any) -> ForkSnapshot:
+async def revive(
+    bundle: Path,
+    registry: Any,
+    *,
+    encryptor: EntityEncryptor | None = None,
+) -> ForkSnapshot:
     """Reconstruct the same individual from a preservation bundle into ``registry``.
 
     ``registry`` must already have the modules built (revive rehydrates state; it
@@ -567,7 +583,7 @@ async def revive(bundle: Path, registry: Any) -> ForkSnapshot:
     # The bundle stores entity-interior content inside bundle.tar(.enc); a legacy
     # bundle stored snapshot.json + world_model/ loose. Resolve the snapshot from
     # whichever layout is present (fail loud if neither carries a snapshot).
-    members = _read_bundle_members(bundle)
+    members = _read_bundle_members(bundle, encryptor=encryptor)
     if "snapshot.json" not in members:
         raise ReviveError(
             f"preservation bundle has no snapshot.json (tar or loose): {bundle}"
@@ -736,7 +752,11 @@ def _manifest_identity(bundle: Path) -> tuple[str, tuple[str, ...]] | None:
     return entity_id, tuple(lineage)
 
 
-def _extract_stage_from_bundle(bundle: Path) -> bytes | None:
+def _extract_stage_from_bundle(
+    bundle: Path,
+    *,
+    encryptor: EntityEncryptor | None = None,
+) -> bytes | None:
     """Decrypt/open the bundle tar (or a legacy loose layout) and return raw
     ``stage.json`` bytes, if present.  Mirrors the tar handling in
     :func:`_read_bundle_members` so :func:`read_bundle_stage` can inspect the
@@ -746,21 +766,32 @@ def _extract_stage_from_bundle(bundle: Path) -> bytes | None:
     import io
     import tarfile
 
-    from kaine.security.crypto import get_state_encryptor
-
-    encryptor = get_state_encryptor()
+    if encryptor is None:
+        from kaine.security.crypto import get_state_encryptor
+        global_enc = get_state_encryptor()
+    else:
+        global_enc = None
 
     enc_tar = bundle / "bundle.tar.enc"
     plain_tar = bundle / "bundle.tar"
     raw_tar: bytes | None = None
     if enc_tar.is_file():
-        try:
-            raw_tar = encryptor.decrypt(enc_tar.read_text().encode("ascii"))
-        except Exception as exc:
-            raise ReviveError(
-                f"revive: could not decrypt preservation bundle tar {enc_tar} "
-                f"({type(exc).__name__}: {exc}) — wrong/absent KAINE_STATE_KEY?"
-            ) from exc
+        if encryptor is not None:
+            try:
+                raw_tar = encryptor.maybe_decrypt(enc_tar.read_bytes(), kind="bundle")
+            except Exception as exc:
+                raise ReviveError(
+                    f"revive: could not decrypt preservation bundle tar {enc_tar} "
+                    f"({type(exc).__name__}: {exc})"
+                ) from exc
+        else:
+            try:
+                raw_tar = global_enc.decrypt(enc_tar.read_text().encode("ascii"))
+            except Exception as exc:
+                raise ReviveError(
+                    f"revive: could not decrypt preservation bundle tar {enc_tar} "
+                    f"({type(exc).__name__}: {exc}) — wrong/absent KAINE_STATE_KEY?"
+                ) from exc
     elif plain_tar.is_file():
         raw_tar = plain_tar.read_bytes()
 
@@ -787,7 +818,9 @@ def _extract_stage_from_bundle(bundle: Path) -> bytes | None:
     # Legacy loose layout.
     loose_stage = bundle / "stage.json"
     if loose_stage.is_file():
-        return encryptor.maybe_decrypt(loose_stage.read_bytes())
+        if encryptor is not None:
+            return encryptor.maybe_decrypt(loose_stage.read_bytes(), kind="stage")
+        return global_enc.maybe_decrypt(loose_stage.read_bytes())
     return None
 
 
@@ -807,7 +840,12 @@ def set_aside_development_files(dest_dir: Path) -> list[Path]:
     return moved
 
 
-def extract_bundle_development(bundle: Path, dest_dir: Path) -> list[str]:
+def extract_bundle_development(
+    bundle: Path,
+    dest_dir: Path,
+    *,
+    encryptor: EntityEncryptor | None = None,
+) -> list[str]:
     """Restore the bundled developmental-phase files into ``dest_dir``; return the names restored.
 
     Opens the bundle tar as :func:`_extract_stage_from_bundle` does. A legacy
@@ -816,21 +854,32 @@ def extract_bundle_development(bundle: Path, dest_dir: Path) -> list[str]:
     import io
     import tarfile
 
-    from kaine.security.crypto import get_state_encryptor
-
-    encryptor = get_state_encryptor()
+    if encryptor is None:
+        from kaine.security.crypto import get_state_encryptor
+        global_enc = get_state_encryptor()
+    else:
+        global_enc = None
 
     enc_tar = bundle / "bundle.tar.enc"
     plain_tar = bundle / "bundle.tar"
     data: bytes | None = None
     if enc_tar.is_file():
-        try:
-            data = encryptor.decrypt(enc_tar.read_text().encode("ascii"))
-        except Exception as exc:
-            raise ReviveError(
-                f"revive: could not decrypt preservation bundle tar {enc_tar} "
-                f"({type(exc).__name__}: {exc}) — wrong/absent KAINE_STATE_KEY?"
-            ) from exc
+        if encryptor is not None:
+            try:
+                data = encryptor.maybe_decrypt(enc_tar.read_bytes(), kind="bundle")
+            except Exception as exc:
+                raise ReviveError(
+                    f"revive: could not decrypt preservation bundle tar {enc_tar} "
+                    f"({type(exc).__name__}: {exc})"
+                ) from exc
+        else:
+            try:
+                data = global_enc.decrypt(enc_tar.read_text().encode("ascii"))
+            except Exception as exc:
+                raise ReviveError(
+                    f"revive: could not decrypt preservation bundle tar {enc_tar} "
+                    f"({type(exc).__name__}: {exc}) — wrong/absent KAINE_STATE_KEY?"
+                ) from exc
     elif plain_tar.is_file():
         data = plain_tar.read_bytes()
 
@@ -878,7 +927,11 @@ def extract_bundle_development(bundle: Path, dest_dir: Path) -> list[str]:
     return written
 
 
-def read_bundle_stage(bundle: Path) -> dict | None:
+def read_bundle_stage(
+    bundle: Path,
+    *,
+    encryptor: EntityEncryptor | None = None,
+) -> dict | None:
     """Read and parse the ``stage.json`` member of a preservation bundle.
 
     Returns ``None`` when the bundle carries no stage member (older bundles).
@@ -889,10 +942,10 @@ def read_bundle_stage(bundle: Path) -> dict | None:
     # Use the generic member reader first; it may return stage.json as text or
     # bytes depending on the bundle layout.  If it does not surface the stage
     # member, fall back to a dedicated extraction so we do not miss it.
-    members = _read_bundle_members(bundle)
+    members = _read_bundle_members(bundle, encryptor=encryptor)
     raw: Any = members.get("stage.json")
     if raw is None:
-        raw = _extract_stage_from_bundle(bundle)
+        raw = _extract_stage_from_bundle(bundle, encryptor=encryptor)
 
     if raw is None:
         return None
@@ -915,7 +968,12 @@ def read_bundle_stage(bundle: Path) -> dict | None:
     return data
 
 
-def extract_bundle_individuation(bundle: Path, dest: Path) -> bool:
+def extract_bundle_individuation(
+    bundle: Path,
+    dest: Path,
+    *,
+    encryptor: EntityEncryptor | None = None,
+) -> bool:
     """Extract individuation evidence from a preservation bundle into ``dest``.
 
     Opens the bundle tar the same way :func:`read_bundle_stage` does (decrypt
@@ -935,24 +993,36 @@ def extract_bundle_individuation(bundle: Path, dest: Path) -> bool:
     import tarfile
 
     from kaine.lifecycle.individuation_store import CAPTURE_STRETCH_NAME
-    from kaine.security.crypto import get_state_encryptor
 
     bundle = Path(bundle)
     dest = Path(dest)
 
-    encryptor = get_state_encryptor()
+    if encryptor is None:
+        from kaine.security.crypto import get_state_encryptor
+        global_enc = get_state_encryptor()
+    else:
+        global_enc = None
 
     enc_tar = bundle / "bundle.tar.enc"
     plain_tar = bundle / "bundle.tar"
     raw_tar: bytes | None = None
     if enc_tar.is_file():
-        try:
-            raw_tar = encryptor.decrypt(enc_tar.read_text().encode("ascii"))
-        except Exception as exc:
-            raise ReviveError(
-                f"revive: could not decrypt preservation bundle tar {enc_tar} "
-                f"({type(exc).__name__}: {exc}) — wrong/absent KAINE_STATE_KEY?"
-            ) from exc
+        if encryptor is not None:
+            try:
+                raw_tar = encryptor.maybe_decrypt(enc_tar.read_bytes(), kind="bundle")
+            except Exception as exc:
+                raise ReviveError(
+                    f"revive: could not decrypt preservation bundle tar {enc_tar} "
+                    f"({type(exc).__name__}: {exc})"
+                ) from exc
+        else:
+            try:
+                raw_tar = global_enc.decrypt(enc_tar.read_text().encode("ascii"))
+            except Exception as exc:
+                raise ReviveError(
+                    f"revive: could not decrypt preservation bundle tar {enc_tar} "
+                    f"({type(exc).__name__}: {exc}) — wrong/absent KAINE_STATE_KEY?"
+                ) from exc
     elif plain_tar.is_file():
         raw_tar = plain_tar.read_bytes()
 
@@ -1022,7 +1092,11 @@ def extract_bundle_individuation(bundle: Path, dest: Path) -> bool:
     return True
 
 
-def _read_bundle_members(bundle: Path) -> dict[str, Any]:
+def _read_bundle_members(
+    bundle: Path,
+    *,
+    encryptor: EntityEncryptor | None = None,
+) -> dict[str, Any]:
     """Return the bundle's entity-interior members from bundle.tar(.enc) or loose.
 
     Resolves both the current (tar+optionally-encrypted) layout and a legacy
@@ -1038,8 +1112,7 @@ def _read_bundle_members(bundle: Path) -> dict[str, Any]:
     import tarfile
 
     from kaine.security.crypto import get_state_encryptor
-
-    encryptor = get_state_encryptor()
+    global_enc = get_state_encryptor()
     members: dict[str, Any] = {}
     wm_prefix = _member_dir(WORLD_MODEL_MEMBER) + "/"
 
@@ -1047,13 +1120,22 @@ def _read_bundle_members(bundle: Path) -> dict[str, Any]:
     plain_tar = bundle / "bundle.tar"
     raw_tar: bytes | None = None
     if enc_tar.is_file():
-        try:
-            raw_tar = encryptor.decrypt(enc_tar.read_text().encode("ascii"))
-        except Exception as exc:
-            raise ReviveError(
-                f"revive: could not decrypt preservation bundle tar {enc_tar} "
-                f"({type(exc).__name__}: {exc}) — wrong/absent KAINE_STATE_KEY?"
-            ) from exc
+        if encryptor is not None:
+            try:
+                raw_tar = encryptor.maybe_decrypt(enc_tar.read_bytes(), kind="bundle")
+            except Exception as exc:
+                raise ReviveError(
+                    f"revive: could not decrypt preservation bundle tar {enc_tar} "
+                    f"({type(exc).__name__}: {exc})"
+                ) from exc
+        else:
+            try:
+                raw_tar = global_enc.decrypt(enc_tar.read_text().encode("ascii"))
+            except Exception as exc:
+                raise ReviveError(
+                    f"revive: could not decrypt preservation bundle tar {enc_tar} "
+                    f"({type(exc).__name__}: {exc}) — wrong/absent KAINE_STATE_KEY?"
+                ) from exc
     elif plain_tar.is_file():
         raw_tar = plain_tar.read_bytes()
 
@@ -1069,9 +1151,14 @@ def _read_bundle_members(bundle: Path) -> dict[str, Any]:
                     data = fh.read()
                     name = legacy_aliases.map_bundle_member(member.name)
                     if name == "snapshot.json":
-                        members["snapshot.json"] = encryptor.maybe_decrypt(
-                            data
-                        ).decode("utf-8")
+                        if encryptor is not None:
+                            members["snapshot.json"] = encryptor.maybe_decrypt(
+                                data, kind="snapshot"
+                            ).decode("utf-8")
+                        else:
+                            members["snapshot.json"] = global_enc.maybe_decrypt(
+                                data
+                            ).decode("utf-8")
                     elif name.startswith(wm_prefix):
                         if name in members and name != member.name:
                             continue
@@ -1088,9 +1175,14 @@ def _read_bundle_members(bundle: Path) -> dict[str, Any]:
     # Legacy loose layout.
     snap_path = bundle / "snapshot.json"
     if snap_path.is_file():
-        members["snapshot.json"] = encryptor.maybe_decrypt(
-            snap_path.read_bytes()
-        ).decode("utf-8")
+        if encryptor is not None:
+            members["snapshot.json"] = encryptor.maybe_decrypt(
+                snap_path.read_bytes(), kind="snapshot"
+            ).decode("utf-8")
+        else:
+            members["snapshot.json"] = global_enc.maybe_decrypt(
+                snap_path.read_bytes()
+            ).decode("utf-8")
     # The loose layout predates the module rename, so its world-model directory
     # carries the old module name. Look under every name form; a file under the
     # new name wins over the same file under the old one.
