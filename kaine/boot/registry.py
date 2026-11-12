@@ -408,6 +408,19 @@ def construct_module(
             _hc = _host_class()
             _budget = router.ledger.headroom
             _selection = select_rung(_ladder, _component, _entries, _hc, _budget)
+            if _selection is None and _configured_backend:
+                from kaine.backend_state import record_backend_failure
+
+                record_backend_failure(
+                    module=name,
+                    backend=_configured_backend,
+                    reason="no installed speech rung fits residency budget",
+                )
+                log.warning(
+                    "residency: no rung fits for %s, keeping configured backend %s",
+                    name,
+                    _configured_backend,
+                )
             if _selection is not None:
                 section["backend"] = _selection.rung.backend
                 if _selection.rung.backend == "sherpa_onnx":

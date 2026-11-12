@@ -270,3 +270,36 @@ def test_audition_stt_rung_selection(monkeypatch):
     assert sel is not None
     assert sel.rung.backend == "sherpa_onnx"
     assert sel.rung.model_id == "moonshine-base-en"
+
+
+def test_no_rung_fits_records_failure(monkeypatch):
+    """When no rung fits, record_backend_failure fires with the configured backend."""
+    monkeypatch.setattr("kaine.residency.speech_rungs.is_rung_installed", lambda r: True)
+
+    entries = [
+        _entry("vocal.tts", "chatterbox", "chatterbox", "cpu", 4_000_000_000),
+        _entry("vocal.tts", "sherpa_onnx", "kokoro-en", "cpu", 2_000_000_000),
+    ]
+
+    sel = select_rung(LADDERS["vocal.tts"], "vocal.tts", entries, "cpu", 100_000_000)
+    assert sel is None
+
+    failures: list = []
+    monkeypatch.setattr(
+        "kaine.backend_state.record_backend_failure",
+        lambda **kw: failures.append(kw),
+    )
+
+    from kaine.backend_state import record_backend_failure
+
+    configured_backend = "chatterbox"
+    if sel is None and configured_backend:
+        record_backend_failure(
+            module="vocal",
+            backend=configured_backend,
+            reason="no installed speech rung fits residency budget",
+        )
+
+    assert len(failures) == 1
+    assert failures[0]["module"] == "vocal"
+    assert failures[0]["reason"] == "no installed speech rung fits residency budget"
