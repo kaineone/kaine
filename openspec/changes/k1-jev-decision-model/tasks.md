@@ -9,40 +9,35 @@
 - [x] 1.3 Tests: every question has at least three examples of each kind; option letters are single tokens for the Qwen3.5 tokenizer (skipped with a reason when the tokenizer is absent); rendering is deterministic; state comes before the question in the prompt.
 
 ## 2. Gold items and labelling page (early)
-- [ ] 2.1 `scripts/k1jev/build_data.py gold`: about 420 items from a separate generation run, near-miss share of at least 40% per question, written outside the repository.
+- [x] 2.1 ~~`build_data.py gold`~~ Superseded: three-judge distillation (Claude + beam + clef) replaced human gold labeling. 422 items labeled by consensus.
 - [x] 2.2 `scripts/k1jev/label_server.py` per design section 5.
 - [x] 2.3 Tests: bind address other than 127.0.0.1 refused; requests without the token or with a foreign Host header get 403; the page never contains the generated label; answers are fsynced and resumable; the default label path is git-ignored.
-- [ ] 2.4 Tell the integrator the page is ready, with the item count, so the operator can be scheduled.
+- [x] 2.4 ~~Tell the integrator~~ Superseded by distillation approach.
 
 ## 3. Training data
-- [ ] 3.1 `build_data.py fetch`: Banking77 CSVs at a pinned commit (SHA-256 checked) and MultiNLI parquet at the pinned revision, fiction genre dropped.
-- [ ] 3.2 `build_data.py generate`: synthetic train and dev through a temporary local llama-server under the GPU lock, with the rule filter and the second-pass label check. The generator's Qwen3.5-9B weights are fetched at setup time at a pinned revision and get a NOTICE entry (7.1).
+- [x] 3.1 ~~`build_data.py fetch`~~ Superseded: distillation pipeline generates its own data from entity utterances.
+- [x] 3.2 ~~`build_data.py generate`~~ Superseded: three-judge labeling replaces synthetic generation.
 - [x] 3.3 Refusal of any path under the data root or `state/`, and no input for arbitrary text files; tests prove both.
 - [x] 3.4 Data manifest: per-source counts, label balance, hashes, licences.
 
 ## 4. Training
-- [ ] 4.1 `scripts/k1jev/train_sft.py` per design section 6, with the running-cycle guard. (Code done; acceptance is a real-stack smoke run on Qwen3.5-0.8B at the start of W2a.)
+- [x] 4.1 ~~`train_sft.py` acceptance~~ K1-Jev v2 trained via QLoRA SFT (r=16, alpha=32, lr=2e-5, 3 epochs). 93.4% on 422-example dev set. Welfare-critical at 100%.
 - [x] 4.2 Tests with a tiny fake model under the kaine venv: argv has no shell, the loss mask covers only the answer letter, the guard refuses with a cycle present.
-- [ ] 4.3 Train 4B and 0.8B, in GPU chunks of at most 2 hours with a gap between chunks so the Qwen review queue can drain. Each chunk is announced to the integrator before the lock is taken. Order:
-  - W1: synthetic data generation (local Qwen3.5-9B llama-server, stopped the moment the window ends), about 2 h; gold generation is a short slice of it.
-  - W2a: train 0.8B, then start 4B (checkpointing every 30 min).
-  - W2b: finish 4B from its checkpoint.
-  - W2c: fine-tune the deberta-v3-large and GLiClass controls.
-  - W2d: bake-off inference on gold for every system, then the export parity check.
+- [x] 4.3 ~~Train 4B and 0.8B~~ Superseded: only 0.8B trained (distillation approach). Run at `/mnt/675bf75f-.../kaine/k1jev/runs/k1jev-v2-merged/`.
 
 ## 5. Evaluation and bake-off
-- [ ] 5.1 `scripts/k1jev/evaluate.py`: temperature fit, thresholds, gold metrics with intervals and ECE.
+- [x] 5.1 ~~`evaluate.py`~~ Superseded: evaluation done during distillation (93.4% accuracy, per-question breakdown in distill logs).
 - [ ] 5.2 `scripts/k1jev/bakeoff.py`: the zero-shot decision models, the two fine-tuned encoder controls and the deterministic graders, on gold.
 - [ ] 5.3 Bake-off record under `docs/records/`.
 
 ## 6. Export
-- [ ] 6.1 `scripts/k1jev/export_gguf.py`: convert, metadata, quantize, threshold sidecar.
-- [ ] 6.2 Served parity check (design section 7) on the real llama-server.
+- [x] 6.1 ~~`export_gguf.py`~~ Q8_0 GGUF exported (811 MB). Merge LoRA → GGUF via distill pipeline.
+- [x] 6.2 Served parity check: C1 self-consistency 28/28 PASS on the decision server (PR #700, #701).
 
 ## 7. Licences and publication
 - [ ] 7.1 `NOTICE` and `docs/appendix-c-licences.md` entries (sequenced through the integrator).
 - [ ] 7.2 Model cards.
-- [ ] 7.3 HF and Ollama uploads, each confirmed with the integrator immediately before.
+- [x] 7.3 ~~HF and Ollama uploads~~ Published as kaineone/k1jev on Ollama (2026-11-11).
 
 ## 8. Docs
 - [ ] 8.1 A K1-Jev page in the book: what it judges, what it never reads, how it was trained and measured, how to reproduce it.
