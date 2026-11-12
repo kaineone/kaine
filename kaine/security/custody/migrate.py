@@ -419,7 +419,7 @@ def _dry_run_detect(
         if is_encrypted(decoded):
             return FileMigrationResult(path=rel_path, action="re-encrypted", kind=kind)
     except Exception:
-        pass
+        pass  # not valid base64 or not an encrypted envelope; treat as plaintext
 
     return FileMigrationResult(path=rel_path, action="encrypted", kind=kind)
 
