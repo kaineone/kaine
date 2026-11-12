@@ -307,7 +307,7 @@ async def _organ_stream(
                     delta = json.loads(line[6:]).get("choices", [{}])[0].get("delta", {})
                     text += delta.get("content", "")
                 except (json.JSONDecodeError, IndexError, KeyError):
-                    pass
+                    continue  # SSE lines may be partial or non-JSON
     return first_token_ms, text
 
 
