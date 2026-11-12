@@ -83,7 +83,7 @@
 
 ## 12. Dilation that sees modules, and the lockstep barrier (engine semantics, high-risk)
 
-- [ ] 12.1 Stall indicator into `TimeScaleController.observe`; identical behaviour when `[residency]` is passive (test).
+- [x] 12.1 Stall indicator into `TimeScaleController.observe`; identical behaviour when `[residency]` is passive (test). (PR #775.)
 - [ ] 12.2 `Event.tick` and `Event.seq` optional fields; older events parse (test).
 - [ ] 12.3 `BaseModule`: tick context variable around `on_workspace`, `publish` stamps `tick` and `seq`, `self.track(task)`, `module.tick_done` emission; the `seq` counter travels in snapshots.
 - [ ] 12.4 the language module tracks its generation tasks; the interoception module and the perception sources gain a tick-driven lockstep mode fed by the seeded feed.
