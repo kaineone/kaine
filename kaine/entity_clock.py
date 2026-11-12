@@ -58,9 +58,14 @@ class EntityClock:
         monotonic: Callable[[], float] = time.monotonic,
         real_sleep: Callable[[float], Awaitable[Any]] = asyncio.sleep,
         origin: float = 0.0,
+        lockstep: bool = False,
+        tick_period: float = 0.1,
     ) -> None:
         if scale < 0:
             raise ValueError("time_scale must be >= 0 (0 = frozen)")
+        self._lockstep = bool(lockstep)
+        if self._lockstep and scale != 1.0:
+            raise ValueError("lockstep mode requires scale == 1.0")
         self._scale = float(scale)
         self._monotonic = monotonic
         self._real_sleep = real_sleep
@@ -68,6 +73,11 @@ class EntityClock:
         # now() starts at `origin` and advances at `scale` × real time.
         self._wall_origin = self._monotonic()
         self._origin = float(origin)
+        if self._lockstep:
+            if tick_period <= 0:
+                raise ValueError("tick_period must be positive")
+            self._tick_period = float(tick_period)
+            self._tick_count = 0
 
     # -- real (infrastructural) time ---------------------------------------
 
@@ -84,15 +94,21 @@ class EntityClock:
         At ``scale == 0`` this stops advancing (the frozen entity's subjective
         clock is stopped); at ``scale == 1`` it tracks real elapsed time.
         """
+        if self._lockstep:
+            return self._origin + self._tick_count * self._tick_period
         return self._origin + (self._monotonic() - self._wall_origin) * self._scale
 
     @property
     def scale(self) -> float:
         """The ``time_scale``: 0 = frozen, 1.0 = real-time, >1 = dilated-fast."""
+        if self._lockstep:
+            return 1.0
         return self._scale
 
     @scale.setter
     def scale(self, value: float) -> None:
+        if self._lockstep:
+            raise ValueError("cannot change time_scale in lockstep mode")
         if value < 0:
             raise ValueError("time_scale must be >= 0 (0 = frozen)")
         # Re-anchor so subjective time is continuous across a scale change: the
@@ -111,6 +127,8 @@ class EntityClock:
         ``scale == 0`` (a frozen entity has no finite tick period — it is frozen
         via the pause path, not paced).
         """
+        if self._lockstep:
+            return self._tick_period
         if hz <= 0:
             raise ValueError("hz must be positive")
         if self._scale <= 0:
@@ -129,7 +147,20 @@ class EntityClock:
         or block forever, so we return immediately and let the pause gate hold
         the loop.)
         """
+        if self._lockstep:
+            return
         if self._scale <= 0:
             # Frozen: no subjective time elapses; the pause path holds the loop.
             return
         await self._real_sleep(subjective_s / self._scale)
+
+    def advance_tick(self) -> None:
+        """Advance the logical clock by one tick period. Lockstep only."""
+        if not self._lockstep:
+            raise RuntimeError("advance_tick() is only valid in lockstep mode")
+        self._tick_count += 1
+
+    @property
+    def lockstep(self) -> bool:
+        """Whether this clock runs in lockstep (deterministic tick) mode."""
+        return self._lockstep

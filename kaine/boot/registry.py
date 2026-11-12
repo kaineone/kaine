@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Mapping, Optional
+from typing import TYPE_CHECKING, Any, Iterable, Mapping, Optional
 
 if TYPE_CHECKING:
     from kaine.residency.router import ResidencyRouter
@@ -101,6 +101,18 @@ def plugin_injections(plugins: Any, name: str) -> Optional[dict[str, Any]]:
     return plugins.injections_for(name) or None
 
 
+def validate_lockstep_modules(modules: Iterable[BaseModule], lockstep: bool) -> None:
+    """Refuse boot when lockstep is on and any module cannot take part in it."""
+    if not lockstep:
+        return
+    incapable = [m.name for m in modules if not getattr(m, "lockstep_capable", False)]
+    if incapable:
+        raise ConfigurationError(
+            "lockstep mode is enabled but these modules do not support it: "
+            f"{', '.join(sorted(incapable))}"
+        )
+
+
 def known_module_names() -> list[str]:
     """Every module name boot can construct (for validating oscillator seams)."""
     return [*SIMPLE_FACTORIES, "sleep"]
@@ -153,8 +165,18 @@ def build_registry(
     # constructed one, so build_registry and the cycle can share a single
     # instance regardless of construction order.
     if entity_clock is None:
-        time_scale = float((kaine_config.get("cycle") or {}).get("time_scale", 1.0))
-        entity_clock = EntityClock(scale=time_scale)
+        cycle_cfg = kaine_config.get("cycle") or {}
+        time_scale = float(cycle_cfg.get("time_scale", 1.0))
+        lockstep = bool(cycle_cfg.get("lockstep", False))
+        if lockstep:
+            processing_rate = float(cycle_cfg.get("processing_rate_hz", 10.0))
+            entity_clock = EntityClock(
+                lockstep=True,
+                tick_period=1.0 / processing_rate,
+                origin=0.0,
+            )
+        else:
+            entity_clock = EntityClock(scale=time_scale)
     registry.entity_clock = entity_clock
     # Stimulus control (stimulus-control-act): None while [stimulus_control] is
     # off, and then nothing below differs from a build without it.
@@ -339,6 +361,11 @@ def build_registry(
         )
         registry.register(sleep)
         log.info("registered module sleep")
+    validate_lockstep_modules(
+        registry.all_modules(),
+        bool((kaine_config.get("cycle") or {}).get("lockstep", False))
+        or bool(getattr(entity_clock, "lockstep", False)),
+    )
     _wire_self_hearing_gate(registry)
     _wire_language_self_model(registry)
     _wire_language_organ_adapter(registry, kaine_config)

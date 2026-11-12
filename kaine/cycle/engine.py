@@ -34,6 +34,18 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
+class LockstepBarrierTimeout(Exception):
+    """Raised when a lockstep tick barrier times out waiting for tick_done."""
+
+    def __init__(self, tick: int, pending: list[str]) -> None:
+        self.tick = tick
+        self.pending = pending
+        super().__init__(
+            f"lockstep barrier timed out at tick {tick}; "
+            f"still waiting for: {', '.join(pending)}"
+        )
+
+
 def _real_utc_now() -> datetime:
     """Default wall-clock seam: real UTC time."""
     return datetime.now(timezone.utc)
@@ -1114,6 +1126,8 @@ class CognitiveCycle:
                         log.exception("failed to publish cycle.time_scale event")
 
             if self._lockstep:
+                if self._entity_clock.lockstep:
+                    self._entity_clock.advance_tick()
                 await self._publish_tick_start(result.tick_index)
                 await self._await_barrier(result.tick_index)
 
@@ -1316,12 +1330,13 @@ class CognitiveCycle:
 
         while pending:
             if self._clock() > deadline:
+                timed_out = sorted(pending)
                 log.error(
                     "lockstep barrier timeout at tick %d; still waiting for: %s",
                     tick,
-                    ", ".join(sorted(pending)),
+                    ", ".join(timed_out),
                 )
-                break
+                raise LockstepBarrierTimeout(tick, timed_out)
 
             for name in list(pending):
                 stream = module_stream(name)

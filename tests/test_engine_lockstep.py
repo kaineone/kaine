@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 import pytest
 
 from kaine.bus.schema import Event
-from kaine.cycle.engine import CognitiveCycle
+from kaine.cycle.engine import CognitiveCycle, LockstepBarrierTimeout
 from kaine.cycle.types import WorkspaceSnapshot
 
 
@@ -306,3 +306,28 @@ async def test_barrier_completes_when_tick_done_received():
 
     cursor = cycle._tick_done_cursors.get("interoception.out", "0")
     assert cursor != "0", "barrier should have advanced the cursor"
+
+
+@pytest.mark.asyncio
+async def test_barrier_timeout_raises():
+    bus = FakeBus()
+    workspace = FakeWorkspace()
+    registry = FakeRegistry(["fake_module.out"])
+
+    cycle = CognitiveCycle(
+        bus,
+        workspace,
+        registry,
+        deterministic=True,
+        lockstep=True,
+        lockstep_timeout_s=0.01,
+        clock=time.monotonic,
+        sleep=asyncio.sleep,
+    )
+    cycle.set_lockstep_participants(["fake_module"])
+
+    with pytest.raises(LockstepBarrierTimeout) as excinfo:
+        await asyncio.wait_for(cycle._await_barrier(0), timeout=2.0)
+
+    assert excinfo.value.tick == 0
+    assert excinfo.value.pending == ["fake_module"]

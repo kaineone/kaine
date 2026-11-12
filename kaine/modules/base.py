@@ -41,6 +41,11 @@ class BaseModule(ABC):
     # (see kaine.workspace.strategies.build_drive_sources). Empty means none.
     relieves_drives: ClassVar[frozenset[str]] = frozenset()
 
+    # Whether this module can participate in lockstep (tick-driven) time, i.e. it
+    # emits tick_done through the workspace loop. Boot refuses lockstep when any
+    # registered module sets this False.
+    lockstep_capable: ClassVar[bool] = True
+
     def __init__(self, bus: AsyncBus) -> None:
         self._enforce_name()
         self._bus = bus
