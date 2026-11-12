@@ -17,8 +17,8 @@
 ## 3. Reversible unload
 
 - [x] 3.1 `ensure_loaded()` / `unload()` on `SherpaMoonshineSTT` and `SherpaKokoroTTS`: releasing the model keeps the client and its executor usable, `unload()` waits for in-flight inference, and `aclose()` stays terminal.
-- [ ] 3.2 The same pair on the vision encoders, the emotion classifier and the text embedders (freeing framework caches where the backend has them). (Text embedders done: NumPy, sentence-transformers and the shared wrapper.)
-- [ ] 3.3 A service controller for external model servers (organ `llama-server`, Chatterbox, Speaches): stop, start and a health confirmation, generalised from `OrganServerController`.
+- [x] 3.2 The same pair on the vision encoders, the emotion classifier and the text embedders (freeing framework caches where the backend has them). (Text embedders: PR #396. Vision encoders and emotion classifier: PR #399.)
+- [x] 3.3 A service controller for external model servers (organ `llama-server`, Chatterbox, Speaches): stop, start and a health confirmation, generalised from `OrganServerController`. (PR #727.)
 - [ ] 3.4 Tests: unload → reload gives results identical to a never-unloaded client; unload during inference waits; memory is actually released (RSS drops, measured). (Speech engines: done with fakes, including a weakref check that the model object is freed; the RSS measurement on real models runs with the calibration command in 2.2.)
 - [x] 3.5 NumPy text embedder: `read_safetensors` maps the file read-only (`numpy.memmap`) and builds tensor views; `unload()` drops the views and the map.
 - [ ] 3.6 Torch engines (the emotion classifier, the vision encoders) load through `safetensors.safe_open` on CPU; the vision encoder is built lazily through `ensure_loaded()`. (Done for the vision encoders: both load with `use_safetensors=True`, which transformers reads through `safe_open`, and never through pickle. The emotion classifier loads through funasr's own checkpoint reader, so its host copy is measured by calibration, not mapped. The lazy vision start moves to 4.6, so behaviour with the manager off matches main (9.4).)
