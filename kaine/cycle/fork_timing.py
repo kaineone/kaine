@@ -141,7 +141,10 @@ def apply_fork_timing_profile(
     }
 
     # 1) Subjective time scale — the existing re-anchoring setter (Phase 1).
-    entity_clock.scale = profile.time_scale
+    #    Lockstep clocks have a fixed scale; the ValueError from the setter
+    #    is the correct guard (lockstep study runs do not use fork timing).
+    if not getattr(entity_clock, "lockstep", False):
+        entity_clock.scale = profile.time_scale
 
     # 2) Optional rate overrides through the existing single setters (Phase 1).
     if profile.processing_rate_hz is not None:

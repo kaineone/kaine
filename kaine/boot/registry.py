@@ -153,8 +153,18 @@ def build_registry(
     # constructed one, so build_registry and the cycle can share a single
     # instance regardless of construction order.
     if entity_clock is None:
-        time_scale = float((kaine_config.get("cycle") or {}).get("time_scale", 1.0))
-        entity_clock = EntityClock(scale=time_scale)
+        cycle_cfg = kaine_config.get("cycle") or {}
+        time_scale = float(cycle_cfg.get("time_scale", 1.0))
+        lockstep = bool(cycle_cfg.get("lockstep", False))
+        if lockstep:
+            processing_rate = float(cycle_cfg.get("processing_rate_hz", 10.0))
+            entity_clock = EntityClock(
+                lockstep=True,
+                tick_period=1.0 / processing_rate,
+                origin=0.0,
+            )
+        else:
+            entity_clock = EntityClock(scale=time_scale)
     registry.entity_clock = entity_clock
     # Stimulus control (stimulus-control-act): None while [stimulus_control] is
     # off, and then nothing below differs from a build without it.
