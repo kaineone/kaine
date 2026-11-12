@@ -521,12 +521,17 @@ def migrate(
 def _default_kek() -> KekProvider:
     """Build a default KEK from the environment."""
     from kaine.security.custody.keyring import SoftwareKek
-    from kaine.security.crypto import _decode_key
 
-    # Try KAINE_CUSTODY_KEK first
+    # Try KAINE_CUSTODY_KEK first (hex-encoded 32 bytes, matching build_keyring)
     kek_raw = os.environ.get("KAINE_CUSTODY_KEK")
     if kek_raw:
-        return SoftwareKek(_decode_key(kek_raw))
+        try:
+            kek_bytes = bytes.fromhex(kek_raw.strip())
+        except ValueError as exc:
+            raise MigrationError(
+                f"KAINE_CUSTODY_KEK is not valid hex: {exc}"
+            ) from exc
+        return SoftwareKek(kek_bytes)
 
     # Fall back to KAINE_STATE_KEY (the operator key serves as KEK during migration)
     state_key_raw = os.environ.get("KAINE_STATE_KEY")
