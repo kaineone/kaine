@@ -13,7 +13,7 @@
 
 ## 1. Stage 1: speaking from memory (off by default)
 
-- [ ] 1.1 Context assembly adds the self-model module's values and norms, the episodic memory module's recall of the entity's own utterances and episodes with affect, and recent dialogue, within the token budget.
+- [x] 1.1 Context assembly adds the self-model module's values and norms, the episodic memory module's recall of the entity's own utterances and episodes with affect, and recent dialogue, within the token budget. PR #718.
 - [ ] 1.2 Offline A/B on a frozen synthetic memory store against the Stage 0 persona, scored by the D8 measures; recorded under `docs/records/`.
 
 ## 2. Stage 2: learning to say what it means (off by default)
