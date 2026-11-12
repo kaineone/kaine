@@ -104,3 +104,55 @@ def is_rung_installed(rung: SpeechRung) -> bool:
 
         return is_installed(rung.model_id)
     return False
+
+
+@dataclass(frozen=True)
+class RungSelection:
+    """Result of selecting the best speech rung for a component."""
+
+    rung: SpeechRung
+    reason: str
+    hints: tuple[str, ...]
+
+
+def select_rung(
+    ladder: tuple[SpeechRung, ...],
+    component: str,
+    entries: list[Any],
+    host_class: str,
+    budget_bytes: int | None,
+) -> RungSelection | None:
+    """Select the heaviest installed rung that fits within budget.
+
+    Walk the ladder from heaviest to lightest. For each rung:
+    1. If not installed, record a hint naming its fetch_command and skip.
+    2. Look up its calibrated footprint. If no calibration data, treat as
+       uncalibrated (fits by default, since we cannot prove it does not).
+    3. If budget_bytes is None (no budget constraint), accept it.
+    4. If the footprint fits within budget_bytes, accept it.
+    5. Otherwise skip (too large).
+
+    Return a RungSelection with the chosen rung, the reason for the choice,
+    and any hints about better rungs that are not installed.
+    Return None only when no rung in the ladder is installed.
+    """
+    hints: list[str] = []
+    for rung in ladder:
+        if not is_rung_installed(rung):
+            if rung.fetch_command:
+                hints.append(f"{rung.label} is not installed; fetch with: {rung.fetch_command}")
+            continue
+
+        footprint = lookup_footprint(rung, component, entries, host_class)
+
+        if budget_bytes is None or footprint is None:
+            reason = "heaviest installed rung"
+            if footprint is None:
+                reason += " (uncalibrated)"
+            return RungSelection(rung=rung, reason=reason, hints=tuple(hints))
+
+        if footprint <= budget_bytes:
+            reason = "heaviest installed rung that fits"
+            return RungSelection(rung=rung, reason=reason, hints=tuple(hints))
+
+    return None
