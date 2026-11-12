@@ -12,6 +12,7 @@ __all__ = [
     "inflight",
     "ledger",
     "policy",
+    "queue",
 ]
 
 # No eager imports of heavy modules; submodules are imported on demand.
