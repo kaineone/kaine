@@ -220,7 +220,7 @@ async def check_services(
                     GROUP_SERVICES,
                     "Dashboard (live)",
                     FAIL,
-                    f"Dashboard is not running on port {port}; start it (setup finish page \"Start Dashboard\", or python -m kaine.dashboard) before spawning",
+                    f'Dashboard is not running on port {port}; start it (setup finish page "Start Dashboard", or python -m kaine.dashboard) before spawning',
                 )
             )
     except Exception as exc:
@@ -645,6 +645,7 @@ def bus_budget(
     if not isinstance(per_stream, dict):
         raise ValueError("[bus.per_stream_maxlen] is not a table")
     from kaine.bus.streams import KNOWN_STREAMS
+
     for stream_name in per_stream:
         if stream_name not in KNOWN_STREAMS:
             log.warning(
@@ -697,9 +698,7 @@ async def _probe_bus(streams: list[str]) -> tuple[int, dict[str, int]]:
         sizes: dict[str, int] = {}
         for stream in streams:
             try:
-                size = await bus.stream_entry_bytes(
-                    stream, min_entries=BUS_SAMPLE_MIN_ENTRIES
-                )
+                size = await bus.stream_entry_bytes(stream, min_entries=BUS_SAMPLE_MIN_ENTRIES)
             except Exception:
                 log.debug("could not sample %s", stream, exc_info=True)
                 continue
@@ -836,12 +835,8 @@ def _preboot_settings(config: dict[str, Any]) -> dict[str, Any]:
             if not isinstance(value, str) or not value:
                 raise ValueError(f"[preboot].{key} must be a non-empty string")
         elif isinstance(default, list):
-            if not isinstance(value, list) or not all(
-                isinstance(v, str) and v for v in value
-            ):
-                raise ValueError(
-                    f"[preboot].{key} must be a list of non-empty strings"
-                )
+            if not isinstance(value, list) or not all(isinstance(v, str) and v for v in value):
+                raise ValueError(f"[preboot].{key} must be a list of non-empty strings")
         elif isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
             raise ValueError(f"[preboot].{key} must be a number >= 0")
         settings[key] = value
@@ -890,7 +885,10 @@ def durable_paths(config: dict[str, Any]) -> list[tuple[str, Path]]:
     paths: list[tuple[str, Path]] = [
         ("[preboot].state_root", resolve(Path(settings["state_root"]))),
         ("[preboot].data_root", resolve(Path(settings["data_root"]))),
-        ("[lifecycle].snapshots_path", resolve(_dir_of(lifecycle.get("snapshots_path"), "state/forks"))),
+        (
+            "[lifecycle].snapshots_path",
+            resolve(_dir_of(lifecycle.get("snapshots_path"), "state/forks")),
+        ),
         (
             "[preservation.divergence_monitor].out_root",
             resolve(Path(preservation.divergence_monitor.out_root)),
@@ -921,22 +919,31 @@ def durable_paths(config: dict[str, Any]) -> list[tuple[str, Path]]:
         ),
         (
             "[sleep.voice_alignment].trainer_workdir",
-            resolve(_dir_of(
-                str(voice.get("trainer_workdir") or "").strip() or None,
-                "state/sleep/voice_align_jobs",
-            )),
+            resolve(
+                _dir_of(
+                    str(voice.get("trainer_workdir") or "").strip() or None,
+                    "state/sleep/voice_align_jobs",
+                )
+            ),
         ),
         (
             "[sleep.voice_alignment].trainer_jobs_dir",
             resolve(_dir_of(trainer_jobs_dir(config), "state/sleep/voice_align_jobs")),
         ),
         ("[ignition_log].directory", resolve(Path(ignition.directory))),
-        ("[supervisor.incident_log].path", resolve(_dir_of(incident_log.get("path"), "state/cycle/incidents"))),
+        (
+            "[supervisor.incident_log].path",
+            resolve(_dir_of(incident_log.get("path"), "state/cycle/incidents")),
+        ),
         (
             "[self_model].persistence_path",
-            resolve(_dir_of(
-                self_model.get("persistence_path"), "state/self_model/self_model.json", is_file=True
-            )),
+            resolve(
+                _dir_of(
+                    self_model.get("persistence_path"),
+                    "state/self_model/self_model.json",
+                    is_file=True,
+                )
+            ),
         ),
     ]
     root = configured_data_root(config)
@@ -1218,9 +1225,54 @@ async def check_old_streams(config, *, probe=None) -> list[CheckResult]:
     ]
 
 
+def check_residency_fit(config: dict[str, Any]) -> list[CheckResult]:
+    """Residency fit row: can the enabled modules co-reside or multiplex?"""
+    name = "Residency fit"
+    try:
+        import importlib
+
+        quick_fit = importlib.import_module("kaine.setup.footprint").quick_fit
+    except Exception as exc:
+        return [CheckResult(GROUP_RESOURCES, name, SKIP, f"footprint module unavailable: {exc}")]
+
+    report = quick_fit(config)
+    if report is None:
+        return [
+            CheckResult(
+                GROUP_RESOURCES,
+                name,
+                SKIP,
+                "no footprint catalogue; run 'python -m kaine.setup.footprint' to calibrate",
+            )
+        ]
+
+    if report.co_resides:
+        return [CheckResult(GROUP_RESOURCES, name, PASS, "all enabled modules co-reside")]
+
+    for fit in report.domains:
+        if fit.status == "does-not-fit":
+            return [
+                CheckResult(
+                    GROUP_RESOURCES,
+                    name,
+                    FAIL,
+                    f"{fit.domain}: {fit.feel} (shortfall {fit.shortfall_bytes / (1 << 30):.2f} GiB)",
+                )
+            ]
+
+    plans: list[str] = []
+    for fit in report.domains:
+        if fit.multiplexed:
+            pinned = f"{fit.pinned} pinned" if fit.pinned else "no pin"
+            plans.append(f"{fit.domain}: {pinned}, {len(fit.multiplexed)} multiplexed")
+    detail = "; ".join(plans) if plans else "schedulable"
+    return [CheckResult(GROUP_RESOURCES, name, PASS, detail)]
+
+
 async def check_resources(config: dict[str, Any]) -> list[CheckResult]:
     """The RESOURCES group: the bus budget row, then the disk-free rows."""
     results = await check_bus_budget(config)
+    results.extend(check_residency_fit(config))
     results.extend(await check_old_streams(config))
     results.extend(check_storage(config))
     results.extend(check_disk(config))
@@ -1515,6 +1567,7 @@ def report_ok(results: list[CheckResult]) -> bool:
 
 def main(argv: list[str] | None = None) -> int:
     from kaine.config import ProfileError
+
     logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
     parser = argparse.ArgumentParser(
         prog="python -m kaine.preboot",
