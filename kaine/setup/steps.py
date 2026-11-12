@@ -83,8 +83,12 @@ OWNED_KEYS: frozenset[str] = frozenset(
         *(f"modules.{m}" for m in _SETUP_MODULES),
         # model / voice / STT
         "language.model_id",
+        "vocal.backend",
         "vocal.predefined_voice_id",
+        "vocal.sherpa_model_id",
+        "audition.backend",
         "audition.stt_model",
+        "audition.sherpa_model_id",
         # voice-alignment trainer provisioning
         "sleep.voice_alignment.trainer_python",
         "sleep.voice_alignment.trainer_backend",
