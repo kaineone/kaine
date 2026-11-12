@@ -98,7 +98,7 @@ class Audition(BaseModule):
         # Self-hearing suppression. Shared gate injected in build_registry; while
         # the vocal module is playing the entity's own voice, captured utterances are
         # dropped so the entity does not transcribe itself. None = no gate.
-        speaking_gate: Optional["SpeakingGate"] = None,
+        speaking_gate: Optional[SpeakingGate] = None,
         # Forward model knobs (disabled by default — purely additive).
         forward_model_units: int = 32,
         prediction_error_window: int = 32,
@@ -142,7 +142,7 @@ class Audition(BaseModule):
         entity_clock: Optional[EntityClock] = None,
         positive_control: Optional[PositiveControlSettings] = None,
         workspace_feedback: Optional[WorkspaceFeedbackSettings] = None,
-        speaker_embedder: Optional["SpeakerEmbedder"] = None,
+        speaker_embedder: Optional[SpeakerEmbedder] = None,
     ) -> None:
         super().__init__(bus)
         if not 0.0 <= baseline_salience <= 1.0:
@@ -233,7 +233,7 @@ class Audition(BaseModule):
 
         # Speaker embedding (perceptual identity). Injected by the factory when
         # speaker_embedding_enabled is true; None = disabled.
-        self._speaker_embedder: Optional["SpeakerEmbedder"] = speaker_embedder
+        self._speaker_embedder: Optional[SpeakerEmbedder] = speaker_embedder
 
         # sleep suspension state.
         self._in_sleep: bool = False
@@ -274,7 +274,7 @@ class Audition(BaseModule):
     def emotion_classifier(self) -> EmotionClassifier:
         return self._emotion_classifier
 
-    def set_speaking_gate(self, gate: "SpeakingGate") -> None:
+    def set_speaking_gate(self, gate: SpeakingGate) -> None:
         """Inject the shared self-hearing gate (wired in build_registry)."""
         self._speaking_gate = gate
 

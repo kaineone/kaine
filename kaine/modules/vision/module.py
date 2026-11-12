@@ -154,8 +154,8 @@ class Vision(BaseModule):
         workspace_feedback: Optional[WorkspaceFeedbackSettings] = None,
         # Face perception pipeline (social-cognition-identity). Injected by
         # the factory when the corresponding config flags are true; None = disabled.
-        face_detector: Optional["FaceDetector"] = None,
-        face_expression: Optional["FaceExpressionClassifier"] = None,
+        face_detector: Optional[FaceDetector] = None,
+        face_expression: Optional[FaceExpressionClassifier] = None,
         gaze_estimator: Optional[Any] = None,
     ) -> None:
         super().__init__(bus)
@@ -317,8 +317,8 @@ class Vision(BaseModule):
         self._preview_jpeg: Optional[bytes] = None
 
         # Face perception pipeline (social-cognition-identity).
-        self._face_detector: Optional["FaceDetector"] = face_detector
-        self._face_expression: Optional["FaceExpressionClassifier"] = face_expression
+        self._face_detector: Optional[FaceDetector] = face_detector
+        self._face_expression: Optional[FaceExpressionClassifier] = face_expression
         self._gaze_estimator: Optional[Any] = gaze_estimator
 
     def _ensure_feedback_wrap(self) -> None:
