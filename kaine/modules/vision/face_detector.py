@@ -134,6 +134,13 @@ class FaceDetector:
                 raise RuntimeError("face detector is closed")
             await self._ensure_loaded()
 
+    async def unload(self) -> None:
+        """Release loaded models. Next detect() call will reload."""
+        async with self._ensure_state_lock():
+            self._detector = None
+            self._recognizer = None
+        logger.info("Face detector unloaded")
+
     async def detect(
         self, frame: np.ndarray
     ) -> FaceDetectionResult:
