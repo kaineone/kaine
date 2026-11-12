@@ -29,7 +29,7 @@ from kaine.defaults import DEFAULT_CHAT_URL
 from kaine.faithful import FaithfulRenderer
 from kaine.faithful.external_input import EXTERNAL_INPUT_TYPES, iter_text_leaves
 from kaine.faithful.templates import HEARD_SPEECH_PLACEHOLDER, HEARD_TEXT_FIELDS
-from kaine.modules.base import BaseModule
+from kaine.modules.base import BaseModule, _current_tick
 from kaine.modules.language.client import (
     ChatClient,
     ChatRequest,
@@ -278,9 +278,7 @@ class Language(BaseModule):
         build_registry). Returns the persona-seeding dict; absent → minimal."""
         self._self_model_provider = provider
 
-    def set_memory_recall_provider(
-        self, provider: Callable[[str], list[dict[str, Any]]]
-    ) -> None:
+    def set_memory_recall_provider(self, provider: Callable[[str], list[dict[str, Any]]]) -> None:
         """Inject a recall provider for episodic memories (wired at boot).
 
         The provider receives the current ``about`` text and returns a list of
@@ -301,9 +299,7 @@ class Language(BaseModule):
         """Whether a self-model is part of this entity; when False, the probe conditions on a minimal self-model instead of waiting for a snapshot that never comes."""
         self._expects_self_model = expected
 
-    async def add_situation_fact(
-        self, text: str, *, replaces: tuple[str, ...] = ()
-    ) -> bool:
+    async def add_situation_fact(self, text: str, *, replaces: tuple[str, ...] = ()) -> bool:
         """A fact about the entity's situation that the language module renders in its own notes when no self-model carries it. It is held in memory and re-given at every boot. A fact listed in `replaces` (an earlier wording) is replaced in place."""
         text = text.strip()
         if not text:
@@ -518,9 +514,7 @@ class Language(BaseModule):
             old_sleep_stream = legacy_aliases.old_stream_name(SLEEP_STREAM)
             if old_sleep_stream:
                 try:
-                    old_recent_sleep = await self._bus.client.xrevrange(
-                        old_sleep_stream, count=200
-                    )
+                    old_recent_sleep = await self._bus.client.xrevrange(old_sleep_stream, count=200)
                 except Exception as exc:
                     log.debug(
                         "sleep sleep_index backfill from old stream %s failed: %s",
@@ -563,7 +557,10 @@ class Language(BaseModule):
             return False
         if self._gen_task is not None and not self._gen_task.done():
             return False
-        if self._last_produce_end is not None and time.monotonic() - self._last_produce_end < quiet_s:
+        if (
+            self._last_produce_end is not None
+            and time.monotonic() - self._last_produce_end < quiet_s
+        ):
             return False
         return True
 
@@ -589,7 +586,9 @@ class Language(BaseModule):
             "prompt_layout_digest": layout_digest(),
         }
 
-    def probe_request(self, about: str, *, seed: int, max_tokens: int, self_model: dict) -> ChatRequest:
+    def probe_request(
+        self, about: str, *, seed: int, max_tokens: int, self_model: dict
+    ) -> ChatRequest:
         """Build the individuation probe's request under fixed conditions.
 
         Working memory is empty and the current self-model seeds the persona.
@@ -724,17 +723,24 @@ class Language(BaseModule):
                 # starting the next. Non-interrupt intents queue, never overlap.
                 await self._settle_gen_task()
         self._gen_mode = "external" if kind == SPEAK else "internal"
-        self._gen_task = asyncio.create_task(
-            self._realize_intent(
-                kind,
-                about,
-                origin,
-                intent_entry_id=entry_id,
-                about_kind=about_kind,
-                about_values=about_values,
-            ),
-            name=f"{self.name}-gen",
-        )
+        tick = event.tick
+        token = _current_tick.set(tick) if tick is not None else None
+        try:
+            self._gen_task = asyncio.create_task(
+                self._realize_intent(
+                    kind,
+                    about,
+                    origin,
+                    intent_entry_id=entry_id,
+                    about_kind=about_kind,
+                    about_values=about_values,
+                ),
+                name=f"{self.name}-gen",
+            )
+            self.track(self._gen_task)
+        finally:
+            if token is not None:
+                _current_tick.reset(token)
 
     async def _realize_intent(
         self,
@@ -772,9 +778,7 @@ class Language(BaseModule):
             if self._shutting_down():
                 # A stop has begun, so the failure is the interruption, whatever the
                 # server did: one line, no traceback, and the interruption record.
-                log.info(
-                    "language: %s intent interrupted by stop (%s)", kind, type(exc).__name__
-                )
+                log.info("language: %s intent interrupted by stop (%s)", kind, type(exc).__name__)
                 await self._note_interrupted_by_stop(kind, type(exc).__name__)
                 return
             log.exception("language failed to realize %s intent", kind)
@@ -962,9 +966,7 @@ class Language(BaseModule):
                 if event.type in EXTERNAL_INPUT_TYPES:
                     for leaf in iter_text_leaves(event.payload):
                         heard_texts.add(leaf)
-                for leaf in _iter_field_values(
-                    event.payload, HEARD_TEXT_FIELDS - {"text"}
-                ):
+                for leaf in _iter_field_values(event.payload, HEARD_TEXT_FIELDS - {"text"}):
                     if event.source != "language":
                         foreign_field_texts.add(leaf)
         residual_texts = heard_texts | foreign_field_texts
@@ -972,9 +974,7 @@ class Language(BaseModule):
         # Only an external-input event makes an about heard. Field values (for
         # example a felt phrase the language module itself published as user_input) are
         # redacted from the log but never decide how the trigger is framed.
-        about_is_heard = (
-            about_kind not in ("felt", "event") or about.strip() in heard_texts
-        )
+        about_is_heard = about_kind not in ("felt", "event") or about.strip() in heard_texts
 
         # Situation facts are given in every organ call (paper 3.5). The individuation probe builds its own request and always carries them.
         self_model = self._self_model()
@@ -1053,9 +1053,7 @@ class Language(BaseModule):
             if len(heard) >= 3:
                 logged_prompt = logged_prompt.replace(heard, HEARD_SPEECH_PLACEHOLDER)
                 if logged_faithful is not None:
-                    logged_faithful = logged_faithful.replace(
-                        heard, HEARD_SPEECH_PLACEHOLDER
-                    )
+                    logged_faithful = logged_faithful.replace(heard, HEARD_SPEECH_PLACEHOLDER)
         logged_heard_turn = ctx.logged_heard_turn
         if logged_heard_turn is not None:
             for heard in residual_texts:
@@ -1142,9 +1140,7 @@ class Language(BaseModule):
             published_about = about
             for heard in heard_texts | foreign_field_texts:
                 if len(heard) >= 3:
-                    published_about = published_about.replace(
-                        heard, HEARD_SPEECH_PLACEHOLDER
-                    )
+                    published_about = published_about.replace(heard, HEARD_SPEECH_PLACEHOLDER)
             payload["user_input"] = published_about
         faithful = logged_faithful
         if faithful is not None:

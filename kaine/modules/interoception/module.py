@@ -14,7 +14,7 @@ from kaine.bus.client import AsyncBus, tail_id
 from kaine.bus.streams import CYCLE_STREAM, SLEEP_STREAM
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
-from kaine.modules.base import BaseModule
+from kaine.modules.base import BaseModule, _current_tick
 from kaine.modules.context import CONTEXT_DIM, BroadcastContext
 from kaine.modules.feedback import FeedbackChannel, TopDownBlend
 from kaine.modules.intensity import graded_intensity
@@ -126,6 +126,8 @@ class Interoception(BaseModule):
         positive_control: Optional[PositiveControlSettings] = None,
         # Paper A.5: awake fatigue builds at nu_act (1 + P^hk).
         housekeeping_pressure: Optional[Callable[[], float]] = None,
+        # Lockstep mode: sample once per cycle.tick_start instead of on a timer.
+        lockstep: bool = False,
     ) -> None:
         super().__init__(bus)
         if read_interval_s <= 0:
@@ -151,7 +153,11 @@ class Interoception(BaseModule):
         # Latest broadcast tick and context age when the pending prediction was formed (paper A.8).
         self._prediction_stamp: tuple[Optional[int], Optional[float]] = (None, None)
         # Workspace feedback and the positive control path are mutually exclusive.
-        if workspace_feedback is not None and positive_control is not None and positive_control.enabled:
+        if (
+            workspace_feedback is not None
+            and positive_control is not None
+            and positive_control.enabled
+        ):
             raise ValueError("workspace feedback runs with the positive control off")
         # Positive control of the information-gain measure; study configuration only.
         self._positive_control: Optional[PositiveControl] = (
@@ -185,12 +191,8 @@ class Interoception(BaseModule):
             )
         else:
             self._forward_model = forward_model
-        self._prediction_error_window: deque[float] = deque(
-            maxlen=int(prediction_error_window)
-        )
-        self._action_error_window: deque[float] = deque(
-            maxlen=int(prediction_error_window)
-        )
+        self._prediction_error_window: deque[float] = deque(maxlen=int(prediction_error_window))
+        self._action_error_window: deque[float] = deque(maxlen=int(prediction_error_window))
         self._last_prediction_error: float = 0.0
 
         # --- Learned expected prediction error ---
@@ -233,9 +235,7 @@ class Interoception(BaseModule):
         self._warmup_enabled = bool(regulation_warmup_enabled)
         self._warmup_min_samples = int(regulation_warmup_min_samples)
         self._warmup_min_seconds = float(regulation_warmup_min_seconds)
-        self._warmup_require_error_stabilized = bool(
-            regulation_warmup_require_error_stabilized
-        )
+        self._warmup_require_error_stabilized = bool(regulation_warmup_require_error_stabilized)
         self._warmup_stable_window = int(regulation_warmup_stable_window)
         self._warmup_stable_variance = float(regulation_warmup_stable_variance)
         # Runtime warm-up bookkeeping (ephemeral, per-boot / per-fork — never
@@ -245,6 +245,9 @@ class Interoception(BaseModule):
         self._boot_subjective_time: Optional[float] = None
         self._warmup_started_emitted: bool = False
         self._warmup_completed: bool = False
+
+        # --- lockstep mode ---
+        self._lockstep = bool(lockstep)
 
         # --- sleep flag ---
         self._in_sleep: bool = False
@@ -357,24 +360,16 @@ class Interoception(BaseModule):
         # no completion would leave the module asleep after a crash mid-sleep.
         self._sleep_cursor = await tail_id(self._bus, SLEEP_STREAM, strict=True)
         await super().initialize()
+        self._tasks.append(asyncio.create_task(self._produce_loop(), name=f"{self.name}-producer"))
         self._tasks.append(
-            asyncio.create_task(self._produce_loop(), name=f"{self.name}-producer")
+            asyncio.create_task(self._cycle_consumer_loop(), name=f"{self.name}-cycle-consumer")
         )
         self._tasks.append(
-            asyncio.create_task(
-                self._cycle_consumer_loop(), name=f"{self.name}-cycle-consumer"
-            )
-        )
-        self._tasks.append(
-            asyncio.create_task(
-                self._sleep_event_loop(), name=f"{self.name}-sleep-consumer"
-            )
+            asyncio.create_task(self._sleep_event_loop(), name=f"{self.name}-sleep-consumer")
         )
         if self._self_rhythm is not None:
             self._tasks.append(
-                asyncio.create_task(
-                    self._self_rhythm_loop(), name=f"{self.name}-self-rhythm"
-                )
+                asyncio.create_task(self._self_rhythm_loop(), name=f"{self.name}-self-rhythm")
             )
 
     async def shutdown(self) -> None:
@@ -448,9 +443,7 @@ class Interoception(BaseModule):
         if not self._pc_queue.submit(
             functools.partial(self._run_positive_control, *args, suspended=suspended)
         ):
-            await self._fail_positive_control(
-                control, "fell behind the reports; the queue is full"
-            )
+            await self._fail_positive_control(control, "fell behind the reports; the queue is full")
 
     async def _run_positive_control(
         self,
@@ -606,9 +599,8 @@ class Interoception(BaseModule):
             else:
                 prediction_error = self._forward_model.step(feature_vec, **feedback_kw)
         self._last_prediction_error = prediction_error
-        if (
-            getattr(self._forward_model, "context_dim", 0) > 0
-            and not getattr(self._forward_model, "last_reading_skipped", False)
+        if getattr(self._forward_model, "context_dim", 0) > 0 and not getattr(
+            self._forward_model, "last_reading_skipped", False
         ):
             self._prediction_stamp = self._context.last_reading
         else:
@@ -628,9 +620,7 @@ class Interoception(BaseModule):
         ):
             mean_err = sum(self._prediction_error_window) / len(self._prediction_error_window)
             if mean_err > 0.0:
-                context_gain = (
-                    self._forward_model.last_null_error - prediction_error
-                ) / mean_err
+                context_gain = (self._forward_model.last_null_error - prediction_error) / mean_err
                 null_prediction_error = self._forward_model.last_null_error
                 mean_prediction_error = mean_err
 
@@ -638,7 +628,10 @@ class Interoception(BaseModule):
         pc_suspended = False
         # Positive control (study mode only): shadows of the forward model, never the live one.
         # It is queued after the report is published, off the report path.
-        if self._positive_control is not None and getattr(self._forward_model, "context_dim", 0) > 0:
+        if (
+            self._positive_control is not None
+            and getattr(self._forward_model, "context_dim", 0) > 0
+        ):
             pc_args = (
                 feature_vec,
                 ctx,
@@ -664,11 +657,7 @@ class Interoception(BaseModule):
         self._samples_seen = int(getattr(self._forward_model, "adaptation_steps", 0))
 
         # --- Learned unexpected error (computed after now exists) ---
-        dt = (
-            0.0
-            if self._last_expected_time is None
-            else max(0.0, now - self._last_expected_time)
-        )
+        dt = 0.0 if self._last_expected_time is None else max(0.0, now - self._last_expected_time)
         self._last_expected_time = now
         learn = not bool(getattr(self._forward_model, "suspended", False))
 
@@ -810,9 +799,7 @@ class Interoception(BaseModule):
                 "disagreement": getattr(self._forward_model, "last_disagreement", None),
                 "error_ratio": error_ratio,
                 "gain": (
-                    self._feedback_channel.gain
-                    if self._feedback_settings.gain_active
-                    else 1.0
+                    self._feedback_channel.gain if self._feedback_settings.gain_active else 1.0
                 ),
                 "top_down_weight": getattr(self._forward_model, "last_top_weight", None),
                 "own_error": getattr(self._forward_model, "last_own_error", None),
@@ -927,6 +914,9 @@ class Interoception(BaseModule):
         return payload
 
     async def _produce_loop(self) -> None:
+        if self._lockstep:
+            await self._produce_loop_lockstep()
+            return
         try:
             while not self._stopped.is_set():
                 try:
@@ -946,6 +936,45 @@ class Interoception(BaseModule):
                 except asyncio.TimeoutError:
                     continue
                 break
+        except asyncio.CancelledError:
+            raise
+
+    async def _produce_loop_lockstep(self) -> None:
+        """In lockstep mode, sample once per cycle.tick_start event."""
+        cursor = self._cycle_cursor
+        try:
+            while not self._stopped.is_set():
+                try:
+                    entries, last_scanned = await self._bus.read_entries(
+                        self._cycle_stream,
+                        last_id=cursor,
+                        count=32,
+                        block_ms=0,
+                    )
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    log.exception("interoception lockstep read failed")
+                    await asyncio.sleep(0.05)
+                    continue
+                if last_scanned is not None:
+                    cursor = last_scanned
+                    for _, event in entries:
+                        if event.type == "cycle.tick_start":
+                            tick = event.payload.get("tick")
+                            token = _current_tick.set(tick)
+                            try:
+                                await self.tick_once()
+                            except Exception:
+                                log.exception("interoception lockstep tick failed")
+                            finally:
+                                _current_tick.reset(token)
+                else:
+                    try:
+                        await asyncio.wait_for(self._stopped.wait(), timeout=0.05)
+                    except asyncio.TimeoutError:
+                        continue
+                    break
         except asyncio.CancelledError:
             raise
 
@@ -974,17 +1003,13 @@ class Interoception(BaseModule):
                         log.debug("maternal drive provider failed; using None", exc_info=True)
                         external = None
                 try:
-                    self._self_rhythm.step(
-                        self._self_rhythm_own_drive, external_drive=external
-                    )
+                    self._self_rhythm.step(self._self_rhythm_own_drive, external_drive=external)
                 except Exception:
                     log.debug("self-rhythm step failed", exc_info=True)
                 try:
                     await asyncio.wait_for(
                         self._stopped.wait(),
-                        timeout=self._subjective_poll_timeout(
-                            1.0 / self._self_rhythm_step_hz
-                        ),
+                        timeout=self._subjective_poll_timeout(1.0 / self._self_rhythm_step_hz),
                     )
                 except asyncio.TimeoutError:
                     continue
@@ -1065,9 +1090,7 @@ class Interoception(BaseModule):
                             if event.type == "sleep.sleep.started":
                                 self._in_sleep = True
                                 self._fatigue.faster_decay = True
-                                log.debug(
-                                    "interoception: _in_sleep=True (sleep.sleep.started)"
-                                )
+                                log.debug("interoception: _in_sleep=True (sleep.sleep.started)")
                             elif event.type == "sleep.sleep.completed":
                                 self._in_sleep = False
                                 self._fatigue.faster_decay = False
@@ -1126,9 +1149,7 @@ class Interoception(BaseModule):
                     context_dim=getattr(fm, "context_dim", 0),
                 )
             elif hasattr(fm, "reservoir_seed"):
-                log.warning(
-                    "interoception: snapshot has no reservoir seed; the reservoir is new"
-                )
+                log.warning("interoception: snapshot has no reservoir seed; the reservoir is new")
             if "forward_model" in state:
                 # A readout whose structure differs from the running model (a
                 # different feature dimension, or two parents' rows concatenated
@@ -1154,8 +1175,7 @@ class Interoception(BaseModule):
                 # The statistics describe the discarded readout's errors; they
                 # go with it, and the fresh readout's are learned anew.
                 log.warning(
-                    "interoception: discarding expected-error statistics with "
-                    "the refused readout"
+                    "interoception: discarding expected-error statistics with the refused readout"
                 )
             else:
                 self._expected_error.load_state_dict(state["expected_error"])
