@@ -82,6 +82,7 @@ class TimeScaleController:
         now_wall_s: float,
         *,
         current_scale: float,
+        stalled: bool = False,
     ) -> ScaleChange | None:
         # Reject invalid / frozen inputs without mutating state.
         if (
@@ -95,7 +96,7 @@ class TimeScaleController:
         ):
             return None
 
-        u = busy_ms / period_ms
+        u = max(busy_ms / period_ms, 1.0 if stalled else 0.0)
 
         if self._ema is None:
             self._ema = u
