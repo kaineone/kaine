@@ -766,11 +766,10 @@ def _extract_stage_from_bundle(
     import io
     import tarfile
 
+    global_enc = None
     if encryptor is None:
         from kaine.security.crypto import get_state_encryptor
         global_enc = get_state_encryptor()
-    else:
-        global_enc = None
 
     enc_tar = bundle / "bundle.tar.enc"
     plain_tar = bundle / "bundle.tar"
@@ -854,11 +853,10 @@ def extract_bundle_development(
     import io
     import tarfile
 
+    global_enc = None
     if encryptor is None:
         from kaine.security.crypto import get_state_encryptor
         global_enc = get_state_encryptor()
-    else:
-        global_enc = None
 
     enc_tar = bundle / "bundle.tar.enc"
     plain_tar = bundle / "bundle.tar"
@@ -997,11 +995,10 @@ def extract_bundle_individuation(
     bundle = Path(bundle)
     dest = Path(dest)
 
+    global_enc = None
     if encryptor is None:
         from kaine.security.crypto import get_state_encryptor
         global_enc = get_state_encryptor()
-    else:
-        global_enc = None
 
     enc_tar = bundle / "bundle.tar.enc"
     plain_tar = bundle / "bundle.tar"

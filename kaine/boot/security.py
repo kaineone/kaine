@@ -47,7 +47,7 @@ def build_keyring(kaine_config: dict[str, Any]) -> KeyRing | None:
     default "env"), ``kek_env_var`` (default "KAINE_CUSTODY_KEK") and
     ``state_root`` (default "state"). TPM is not yet implemented (task 1.2).
     """
-    from kaine.security.crypto import CryptoConfigError
+    import kaine.security.crypto as _crypto
 
     section = (kaine_config.get("security") or {}).get("custody") or {}
     if not section.get("enabled", False):
@@ -57,13 +57,13 @@ def build_keyring(kaine_config: dict[str, Any]) -> KeyRing | None:
     state_root = section.get("state_root", "state")
 
     if kek_source == "tpm":
-        raise CryptoConfigError(
+        raise _crypto.CryptoConfigError(
             "custody kek_source='tpm' is not yet implemented (task 1.2); "
             "use kek_source='env' with KAINE_CUSTODY_KEK"
         )
 
     if kek_source != "env":
-        raise CryptoConfigError(
+        raise _crypto.CryptoConfigError(
             f"custody kek_source={kek_source!r} is not recognized; "
             f"use 'env' or (when implemented) 'tpm'"
         )
@@ -73,7 +73,7 @@ def build_keyring(kaine_config: dict[str, Any]) -> KeyRing | None:
     env_var = section.get("kek_env_var", "KAINE_CUSTODY_KEK")
     raw = os.environ.get(env_var)
     if not raw:
-        raise CryptoConfigError(
+        raise _crypto.CryptoConfigError(
             f"custody is enabled but {env_var} is not set or empty"
         )
     try:
@@ -89,7 +89,7 @@ def build_keyring(kaine_config: dict[str, Any]) -> KeyRing | None:
     try:
         kek = SoftwareKek(kek_bytes)
     except (ValueError, TypeError) as exc:
-        raise CryptoConfigError(
+        raise _crypto.CryptoConfigError(
             f"custody KEK is invalid (expected 32 bytes, got {len(kek_bytes)}): {exc}"
         ) from exc
     return _KeyRing(kek, state_root=state_root)
