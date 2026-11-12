@@ -4,8 +4,11 @@
 """Off equals absent: with stimulus control off the build behaves as one without it.
 
 ``GOLDEN`` is the digest of ``tests/stimulus_identity_harness.py`` run on the
-build without stimulus control: commit 9327caea on origin/main. To regenerate,
-run ``python tests/stimulus_identity_harness.py`` from the repo root.
+build without stimulus control, using an in-spec torch version (``<2.15`` per
+``pyproject.toml``). The harness output is sensitive to torch and snntorch
+versions; compute the golden with the CI-equivalent environment (CPU torch,
+current pip constraints). To regenerate, run
+``python tests/stimulus_identity_harness.py`` from the repo root.
 
 The harness drives the affect module, the action layer, the effectors module,
 the welfare observer's records, the playlist video source and the real playlist
@@ -19,7 +22,7 @@ import pytest
 
 from tests import stimulus_identity_harness as harness
 
-GOLDEN = "0778e262c355c40b01b9deffdcecffb64074bd6ad3e098b290d48a92c82a1ccb"
+GOLDEN = "e789651c14ece05fc0c17de51db69d4a27be4039f3f4d81d4e8ef9092c77e04a"
 
 
 async def test_off_is_bit_identical_to_the_build_without_it(tmp_path):
