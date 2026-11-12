@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
 
+from pathlib import Path
+
 import pytest
 
 from kaine.evaluation.config import EvaluationConfig, load_evaluation_config
@@ -61,8 +63,6 @@ def test_load_missing_file_returns_defaults(tmp_path):
 
 @pytest.mark.no_data_root
 def test_shipped_kaine_toml_has_evaluation_block():
-    from pathlib import Path
-
     config_path = Path(__file__).parent.parent / "config" / "kaine.toml"
     c = load_evaluation_config(config_path)
     assert c.enabled is True
@@ -101,8 +101,6 @@ def test_eval_baseline_explicit_mismatch_fails_closed():
 def test_shipped_config_omits_eval_model_so_it_derives(tmp_path):
     # The committed config must NOT pin its own eval model — it derives from
     # whatever organ the operator runs, so the two can never silently diverge.
-    from pathlib import Path
-
     config_path = Path(__file__).parent.parent / "config" / "kaine.toml"
     c = load_evaluation_config(config_path, language_model_id="operators-bigger:27b")
     assert c.chat_model_id == "operators-bigger:27b"
@@ -112,7 +110,6 @@ def test_shipped_language_organ_is_abliterated():
     # Guard against regressing the shipped organ to a stock, refusal-conditioned
     # model — abliteration is core to the sovereignty thesis (ABLITERATION.md).
     import tomllib
-    from pathlib import Path
 
     config_path = Path(__file__).parent.parent / "config" / "kaine.toml"
     raw = tomllib.loads(config_path.read_text())
@@ -290,10 +287,8 @@ def test_action_selection_interrupt_threshold_reaches_report_policy():
 def test_cycle_main_wires_interrupt_threshold():
     # The cycle entrypoint must actually read [action_selection].interrupt_threshold
     # and hand it to the report policy (interruptible-utterance reachability).
-    import pathlib
-
     import kaine.cycle.__main__ as cycle_main
 
-    src = pathlib.Path(cycle_main.__file__).read_text(encoding="utf-8")
+    src = Path(cycle_main.__file__).read_text(encoding="utf-8")
     assert "interrupt_threshold" in src
     assert 'action_selection_cfg.get("interrupt_threshold")' in src

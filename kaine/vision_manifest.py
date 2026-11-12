@@ -94,9 +94,20 @@ def is_installed(model_id: str, root: Path | str | None = None) -> bool:
     model = VISION_MANIFEST.get(model_id)
     if model is None:
         return False
-    from kaine.model_paths import vision_model_path  # lazy: break cycle with model_paths
+    # Inline the path computation to break the import cycle with model_paths.
+    # model_paths.vision_model_path imports VISION_MANIFEST from this module,
+    # so importing back from model_paths here would form a cycle.
+    import os
 
-    onnx_path = vision_model_path(model_id, root)
+    from kaine.storage import MODELS_DIR_ENV, resolve
+
+    if root is not None:
+        base = Path(root)
+    else:
+        override = os.environ.get(MODELS_DIR_ENV)
+        base = Path(override) if override else resolve(Path("state/models"))
+
+    onnx_path = base / "vision" / model.filename
     if not onnx_path.is_file():
         return False
     marker_path = onnx_path.with_suffix(".verified")
