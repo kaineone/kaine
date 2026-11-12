@@ -10,6 +10,7 @@ __all__ = [
     "fit",
     "inflight",
     "ledger",
+    "policy",
 ]
 
 # No eager imports of heavy modules; submodules are imported on demand.
