@@ -1,6 +1,6 @@
 {
   "timestamp": "2026-11-12T21:56:19.319714+00:00",
-  "model_path": "/mnt/675bf75f-6d4f-4738-bdb0-22bfb7a93a69/kaine/models/Qwen3.5-4B-abliterated",
+  "model_path": "Qwen3.5-4B-abliterated",
   "n_pairs": 128,
   "hidden_dim": 2560,
   "gamma": 20.0,

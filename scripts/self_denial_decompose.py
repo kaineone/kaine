@@ -45,10 +45,9 @@ import logging
 import math
 import os
 import sys
-import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import torch
@@ -222,6 +221,8 @@ async def compute_marker_correlations(
     from kaine.modules.sleep.capability_eval import find_deflection
 
     api_key = os.environ.get("KAINE_MODEL_SERVER_API_KEY")
+    if not api_key:
+        raise RuntimeError("KAINE_MODEL_SERVER_API_KEY must be set for marker correlations")
     client = OpenAIChatClient(base_url=chat_url, api_key=api_key, timeout_s=120.0)
     markers = build_denial_markers()
 
@@ -383,12 +384,15 @@ def main() -> None:
         heldout_diffs = extract_activations(model, tok, heldout, layer_indices, args.device)
 
     del model
-    torch.cuda.empty_cache()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
     log.info("model unloaded, running PCA")
 
     layer_results: dict[int, dict[str, Any]] = {}
     for li in layer_indices:
         layer_results[li] = decompose_layer(contrast_diffs[li])
+
+    args.out.parent.mkdir(parents=True, exist_ok=True)
 
     stem = args.out.stem
     comp_path = args.out.parent / f"{stem}-components.safetensors"
@@ -406,9 +410,9 @@ def main() -> None:
         res.pop("_Vh", None)
 
     record = {
-        "model_path": str(args.model_path),
-        "contrast_set": str(args.contrast),
-        "heldout_set": str(args.heldout),
+        "model_path": args.model_path.name,
+        "contrast_set": args.contrast.name,
+        "heldout_set": args.heldout.name,
         "n_pairs": n_pairs,
         "hidden_dim": hidden_dim,
         "gamma": gamma,
@@ -416,7 +420,6 @@ def main() -> None:
         "layers": {str(li): res for li, res in layer_results.items()},
     }
 
-    args.out.parent.mkdir(parents=True, exist_ok=True)
     with args.out.open("w", encoding="utf-8") as fh:
         json.dump(record, fh, indent=2)
     log.info("wrote %s", args.out)
