@@ -31,6 +31,14 @@ backend = "qdrant"      # KAINE-owned Qdrant container (today's default)
 [decision]
 enabled = false
 
+[vocal]
+# Workstation-class GPU service backend (the shipped default).
+backend = "chatterbox"
+
+[audition]
+# Workstation-class service backend (the shipped default).
+backend = "speaches"
+
 # [social_cognition]
 # Perceptual identity is available at Tier 2+ but ships disabled.
 # Enable via config/kaine.operator.toml.
