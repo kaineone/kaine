@@ -6,6 +6,7 @@
 __all__ = [
     "budget",
     "catalogue",
+    "config",
     "fit",
     "inflight",
 ]
