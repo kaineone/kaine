@@ -15,6 +15,7 @@ fails the build if a frame-writing call sneaks in. Each frame is
 released after the sink call returns. The vision module's own CosineChangeDetector
 + RollingMeanHabituator handle throttling at the process_frame level.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -42,8 +43,10 @@ OnStateChange = Callable[[str, dict], None]
 class _VideoSource(Protocol):
     def open(self) -> bool:
         """Protocol method."""
+
     def read(self) -> tuple[bool, Any]:
         """Protocol method."""
+
     def release(self) -> None:
         """Protocol method."""
 
@@ -96,9 +99,7 @@ class _CV2VideoSource:
     """Wraps cv2.VideoCapture so the LiveCamera doesn't import cv2 at
     module-load time. Constructed only when capture is enabled."""
 
-    def __init__(
-        self, device: int | str, *, width: int | None, height: int | None
-    ) -> None:
+    def __init__(self, device: int | str, *, width: int | None, height: int | None) -> None:
         try:
             import cv2  # type: ignore[import-untyped]
         except ImportError as exc:
@@ -150,9 +151,7 @@ def _bgr_to_pil_rgb(frame: Any) -> Any:
         import cv2  # type: ignore[import-untyped]
         from PIL import Image
     except ImportError as exc:
-        raise PerceptionUnavailableError(
-            "opencv-python-headless or Pillow missing"
-        ) from exc
+        raise PerceptionUnavailableError("opencv-python-headless or Pillow missing") from exc
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     return Image.fromarray(rgb)
 
@@ -183,6 +182,10 @@ class LiveCamera:
         # (operator on/off flag) stays on REAL time (infrastructural). Defaults
         # to a real-time clock → behavior-identical.
         entity_clock: EntityClock | None = None,
+        # Lockstep mode: an async iterator yielding once per tick_start.
+        # When set, the capture loop advances one frame per yield instead
+        # of sleeping at the capture interval.
+        lockstep_trigger: Any | None = None,
     ) -> None:
         self._sink = sink
         self._cfg = config or LiveCameraConfig()
@@ -192,6 +195,7 @@ class LiveCamera:
         self._source_factory = source_factory or _default_source_factory
         self._bgr_to_rgb = bgr_to_rgb or _bgr_to_pil_rgb
         self._clock = entity_clock or EntityClock()
+        self._lockstep_trigger = lockstep_trigger
         self._task: asyncio.Task[None] | None = None
         self._stopped = asyncio.Event()
         self._active = False
@@ -240,9 +244,7 @@ class LiveCamera:
         if self._task is not None:
             return
         self._stopped.clear()
-        self._task = asyncio.create_task(
-            self._supervise(), name="live-camera-supervisor"
-        )
+        self._task = asyncio.create_task(self._supervise(), name="live-camera-supervisor")
 
     async def shutdown(self) -> None:
         self._stopped.set()
@@ -257,6 +259,9 @@ class LiveCamera:
             self._set_active(False)
 
     async def _supervise(self) -> None:
+        if self._lockstep_trigger is not None:
+            await self._supervise_lockstep()
+            return
         try:
             while not self._stopped.is_set():
                 desired = self._read_desired()
@@ -278,6 +283,25 @@ class LiveCamera:
             raise
         except Exception:
             log.exception("live camera supervisor crashed")
+        finally:
+            await self._close_source()
+            if self._active:
+                self._set_active(False)
+
+    async def _supervise_lockstep(self) -> None:
+        """Lockstep capture: one frame per tick_start yield."""
+        try:
+            if not await self._open_source():
+                log.error("live camera lockstep: could not open source")
+                return
+            async for _ in self._lockstep_trigger:  # noqa: F841
+                if self._stopped.is_set():
+                    break
+                await self._capture_one_frame()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception("live camera lockstep supervisor crashed")
         finally:
             await self._close_source()
             if self._active:
