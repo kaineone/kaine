@@ -56,7 +56,7 @@
 ## 8. Pre-boot, wizard and recommender
 
 - [x] 8.1 `Residency fit` pre-boot row: PASS when the set co-resides, PASS with the plan when it is schedulable, FAIL naming the shortfall when it is not, SKIP naming the calibration command when there is no catalogue. (PR #751.)
-- [ ] 8.2 Wizard: show the fit report and the speech recommendation. Apply a recommendation only on consent. When a heavier choice is kept, state its cost.
+- [x] 8.2 Wizard: show the fit report and the speech recommendation. Apply a recommendation only on consent. When a heavier choice is kept, state its cost. (PR #765.)
 - [x] 8.3 `recommend_tier()` residency branch: replace the "not yet implemented" reason with the fit-report pointer. (PR #750.)
 
 ## 9. Tests and no-regression
@@ -77,8 +77,8 @@
 ## 11. Quantization ladder fixed before launch
 
 - [ ] 11.1 Rung and footprint catalogues record each rung's quantization and the SHA-256 of its weights file.
-- [ ] 11.2 Tier profiles name one rung per organ and encoder (`config/profiles/tier*.toml`, sequenced through the integrator); the fit report shows the ladder.
-- [ ] 11.3 `RunContext.model_rungs`: backend, model id, quantization and weights hash per component, as loaded at boot.
+- [x] 11.2 Tier profiles name one rung per organ and encoder (`config/profiles/tier*.toml`, sequenced through the integrator); the fit report shows the ladder. (PR #766.)
+- [x] 11.3 `RunContext.model_rungs`: backend, model id, quantization and weights hash per component, as loaded at boot. (PR #767.)
 - [ ] 11.4 Deterministic and study runs freeze rung selection at boot. A later failure to load is a surfaced residency failure and an incident, the run's admissibility check marks it inadmissible, and no other rung is substituted. Tests cover all three.
 
 ## 12. Dilation that sees modules, and the lockstep barrier (engine semantics, high-risk)
