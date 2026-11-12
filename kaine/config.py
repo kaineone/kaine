@@ -538,6 +538,42 @@ def validate_config_shape(config: dict[str, Any]) -> None:
                             f"services.{name}.process_names[{idx}] expected string"
                         )
 
+    residency = config.get("residency")
+    if residency is not None:
+        if not isinstance(residency, dict):
+            raise ConfigShapeError(
+                f"residency expected table, got {type(residency).__name__}"
+            )
+        res_enabled = residency.get("enabled")
+        if res_enabled is not None and not isinstance(res_enabled, bool):
+            raise ConfigShapeError(
+                f"residency.enabled expected bool, got {type(res_enabled).__name__}"
+            )
+        reserve = residency.get("reserve_bytes")
+        if reserve is not None:
+            if not isinstance(reserve, int) or isinstance(reserve, bool):
+                raise ConfigShapeError(
+                    f"residency.reserve_bytes expected int, got {type(reserve).__name__}"
+                )
+            if reserve <= 0:
+                raise ConfigShapeError("residency.reserve_bytes must be > 0")
+        ttl = residency.get("ttl_seconds")
+        if ttl is not None:
+            if not isinstance(ttl, int) or isinstance(ttl, bool):
+                raise ConfigShapeError(
+                    f"residency.ttl_seconds expected int, got {type(ttl).__name__}"
+                )
+        pin = residency.get("pin")
+        if pin is not None and not isinstance(pin, str):
+            raise ConfigShapeError(
+                f"residency.pin expected string, got {type(pin).__name__}"
+            )
+        llm_proxy = residency.get("llm_proxy")
+        if llm_proxy is not None and not isinstance(llm_proxy, str):
+            raise ConfigShapeError(
+                f"residency.llm_proxy expected string, got {type(llm_proxy).__name__}"
+            )
+
 def require_known_keys(
     section: dict[str, Any], allowed: set[str], table_name: str = ""
 ) -> None:
