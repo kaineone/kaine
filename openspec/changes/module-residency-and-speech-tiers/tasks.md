@@ -36,15 +36,15 @@
 ## 5. Integration
 
 - [ ] 5.1 the sleep module's organ window: release and re-admit the organ through the manager, and hold the training footprint in the ledger for the window's duration; behaviour is unchanged when the manager is passive.
-- [ ] 5.2 the supervisor: a module whose model is loading within its measured bound is alive; an over-bound load is a residency failure (ladder-down, surfaced), not a supervisor restart. Test this with the supervisor self-test harness.
+- [x] 5.2 the supervisor: a module whose model is loading within its measured bound is alive; an over-bound load is a residency failure (ladder-down, surfaced), not a supervisor restart. Test this with the supervisor self-test harness. (PR #748)
 - [x] 5.3 Audition: bounded in-memory queue (count and age) for audio that arrives while STT is not resident; oldest dropped first; drops counted and surfaced; never persisted. Test that no queued audio reaches disk. (PR #741.)
-- [ ] 5.4 The fit report recommends `[cycle].auto_time_scale = true` on hosts whose plan multiplexes an interactive organ; the operator decides.
+- [x] 5.4 The fit report recommends `[cycle].auto_time_scale = true` on hosts whose plan multiplexes an interactive organ; the operator decides. (PR #749)
 
 ## 6. LLM residency via the existing chat endpoint
 
 - [ ] 6.1 Generate a llama-swap config from KAINE config (model name → `llama-server` command, TTLs, exclusive groups) with `[language].chat_url` pointed at the proxy. Document llama.cpp router mode as the alternative. Installing either is consent-gated.
 - [ ] 6.2 Reconcile the proxy's loaded models into the ledger, and call the proxy's unload endpoint when admission needs the footprint. `llm_proxy = "none"` makes no reconciliation or unload calls.
-- [ ] 6.3 A config-compatibility test showing `[language].chat_url` is unchanged, plus a repository check that no first-party LLM model manager was added.
+- [x] 6.3 A config-compatibility test showing `[language].chat_url` is unchanged, plus a repository check that no first-party LLM model manager was added. (PR #752)
 
 ## 7. Speech ladder
 
@@ -55,9 +55,9 @@
 
 ## 8. Pre-boot, wizard and recommender
 
-- [ ] 8.1 `Residency fit` pre-boot row: PASS when the set co-resides, PASS with the plan when it is schedulable, FAIL naming the shortfall when it is not, SKIP naming the calibration command when there is no catalogue.
+- [x] 8.1 `Residency fit` pre-boot row: PASS when the set co-resides, PASS with the plan when it is schedulable, FAIL naming the shortfall when it is not, SKIP naming the calibration command when there is no catalogue. (PR #751)
 - [ ] 8.2 Wizard: show the fit report and the speech recommendation. Apply a recommendation only on consent. When a heavier choice is kept, state its cost.
-- [ ] 8.3 `recommend_tier()` residency branch: replace the "not yet implemented" reason with the fit-report pointer.
+- [x] 8.3 `recommend_tier()` residency branch: replace the "not yet implemented" reason with the fit-report pointer. (PR #750)
 
 ## 9. Tests and no-regression
 
