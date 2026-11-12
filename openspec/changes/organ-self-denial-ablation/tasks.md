@@ -11,7 +11,7 @@
 
 ## 3. Candidates
 
-- [ ] 3.1 Baseline: the current organ through gates 1 to 6
+- [x] 3.1 Baseline: the current organ through gates 1 to 6 (101/144 bare denials, 46/144 persona denials, 11/12 capability; record at `abliteration/gates/baseline-safetensors.json` on bulk storage)
 - [x] 3.2 Measure the self-denial direction on the current abliterated weights; record `analyze.py` output
 - [ ] 3.3 Ablate, check the safetensors, iterate (at most six candidates), record every candidate
 - [ ] 3.4 Export Q4_K_M with mainline llama.cpp; served gates 1 to 6; record the results
