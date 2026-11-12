@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import logging
 import math
 import time
@@ -17,6 +18,10 @@ from kaine.cycle.types import WorkspaceSnapshot
 from kaine.oscillator import NEUTRAL_PHASE, OscillatorProtocol
 
 log = logging.getLogger(__name__)
+
+_current_tick: contextvars.ContextVar[int | None] = contextvars.ContextVar(
+    "_current_tick", default=None
+)
 
 
 class BaseModule(ABC):
@@ -53,6 +58,12 @@ class BaseModule(ABC):
         # infrastructural: real time, not subjective — the liveness watchdog
         # measures real elapsed seconds and must not dilate with time_scale.
         self._last_heartbeat = time.monotonic()
+        # Monotonic sequence counter: increments on every publish(), persists
+        # across serialize/deserialize, resets only at boot.
+        self._seq: int = 0
+        # Tasks registered via track() for the current tick. Keyed by tick
+        # index; _workspace_loop awaits them before emitting tick_done.
+        self._tracked_tasks: dict[int, list[asyncio.Task[Any]]] = {}
 
     def _beat(self) -> None:
         # infrastructural: real time, not subjective (liveness heartbeat).
@@ -142,6 +153,9 @@ class BaseModule(ABC):
         salience: float = 0.5,
         causal_parent: Optional[str] = None,
     ) -> str:
+        tick = _current_tick.get()
+        seq = self._seq
+        self._seq += 1
         event = validate_event(
             source=self.name,
             type=type_,
@@ -149,6 +163,8 @@ class BaseModule(ABC):
             salience=salience,
             timestamp=datetime.now(timezone.utc),
             causal_parent=causal_parent,
+            tick=tick,
+            seq=seq,
         )
         # Drive this module's oscillator (if any) from its own activity. v1
         # uses the published salience as a co-activity proxy for the paper's
@@ -166,6 +182,16 @@ class BaseModule(ABC):
     async def on_workspace(self, snapshot: WorkspaceSnapshot) -> None:
         """Override in subclasses to react to each broadcast."""
         return
+
+    def track(self, task: asyncio.Task[Any]) -> None:
+        """Register a task as follow-on work for the current tick.
+
+        Tracked tasks carry the current tick in their context and
+        their completion is required before tick_done is emitted.
+        """
+        tick = _current_tick.get()
+        if tick is not None:
+            self._tracked_tasks.setdefault(tick, []).append(task)
 
     def attach_oscillator(self, oscillator: Optional[OscillatorProtocol]) -> None:
         """Attach (or clear) this module's oscillatory-binding oscillator.
@@ -238,10 +264,26 @@ class BaseModule(ABC):
                 self._workspace_cursor = entry_id
                 try:
                     snapshot = self._snapshot_from_payload(payload)
-                    await self.on_workspace(snapshot)
-                    self._beat()
                 except Exception:
                     log.exception("on_workspace failed in module %s", self.name)
+                    continue
+                tick = snapshot.tick_index
+                token = _current_tick.set(tick)
+                try:
+                    await self.on_workspace(snapshot)
+                    self._beat()
+                    tracked = self._tracked_tasks.pop(tick, [])
+                    if tracked:
+                        await asyncio.gather(*tracked, return_exceptions=True)
+                    await self.publish(
+                        f"{self.name}.tick_done",
+                        {"tick": tick},
+                        salience=0.0,
+                    )
+                except Exception:
+                    log.exception("on_workspace failed in module %s", self.name)
+                finally:
+                    _current_tick.reset(token)
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -263,6 +305,8 @@ class BaseModule(ABC):
                     salience=float(item["salience"]),
                     timestamp=ts_value,
                     causal_parent=item.get("causal_parent") or None,
+                    tick=item.get("tick"),
+                    seq=item.get("seq"),
                 )
             except Exception:
                 log.warning("dropped malformed broadcast item: %s", item, exc_info=True)
