@@ -127,7 +127,7 @@ async def test_track_associates_task_with_tick() -> None:
         _current_tick.reset(token)
     assert 7 in mod._tracked_tasks
     assert t in mod._tracked_tasks[7]
-    _ = await t  # clean up
+    _ = await t
 
 
 @pytest.mark.asyncio

@@ -42,21 +42,21 @@
 
 ## 6. LLM residency via the existing chat endpoint
 
-- [ ] 6.1 Generate a llama-swap config from KAINE config (model name → `llama-server` command, TTLs, exclusive groups) with `[language].chat_url` pointed at the proxy. Document llama.cpp router mode as the alternative. Installing either is consent-gated.
-- [ ] 6.2 Reconcile the proxy's loaded models into the ledger, and call the proxy's unload endpoint when admission needs the footprint. `llm_proxy = "none"` makes no reconciliation or unload calls.
+- [x] 6.1 Generate a llama-swap config from KAINE config (model name → `llama-server` command, TTLs, exclusive groups) with `[language].chat_url` pointed at the proxy. Document llama.cpp router mode as the alternative. Installing either is consent-gated. (PR #770.)
+- [x] 6.2 Reconcile the proxy's loaded models into the ledger, and call the proxy's unload endpoint when admission needs the footprint. `llm_proxy = "none"` makes no reconciliation or unload calls. (PR #772.)
 - [x] 6.3 A config-compatibility test showing `[language].chat_url` is unchanged, plus a repository check that no first-party LLM model manager was added. (PR #752.)
 
 ## 7. Speech ladder
 
 - [x] 7.1 Rung catalogue for the TTS ladder (`chatterbox`, `sherpa_onnx`/`kokoro-en`) and the STT ladder (`speaches`, `sherpa_onnx`/`moonshine-base-en`, `sherpa_onnx`/`moonshine-tiny-en`), with footprints from the catalogue. (PR #755.)
-- [ ] 7.2 Automatic selection of the heaviest installed rung that fits. Model-id changes happen within `sherpa_onnx`; backend changes go through the existing `BackendRegistry` fallback. Absent models give a hint that names `python -m kaine.setup.speech_models`, and nothing is downloaded.
-- [ ] 7.3 Downgrades and disablements surfaced with reasons through `backend_state` and residency status.
+- [x] 7.2 Automatic selection of the heaviest installed rung that fits. Model-id changes happen within `sherpa_onnx`; backend changes go through the existing `BackendRegistry` fallback. Absent models give a hint that names `python -m kaine.setup.speech_models`, and nothing is downloaded. (PRs #759, #760: host_class in catalogue and select_rung; PR #761: factory wiring in construct_module.)
+- [x] 7.3 Downgrades and disablements surfaced with reasons through `backend_state` and residency status. (PR #761: factory wiring records backend failures and downgrades via record_backend_failure and record_downgrade.)
 - [x] 7.4 Per-turn voice latency breakdown (warm and cold paths recorded separately), with persistent misses surfaced. (PR #762.)
 
 ## 8. Pre-boot, wizard and recommender
 
 - [x] 8.1 `Residency fit` pre-boot row: PASS when the set co-resides, PASS with the plan when it is schedulable, FAIL naming the shortfall when it is not, SKIP naming the calibration command when there is no catalogue. (PR #751.)
-- [ ] 8.2 Wizard: show the fit report and the speech recommendation. Apply a recommendation only on consent. When a heavier choice is kept, state its cost.
+- [x] 8.2 Wizard: show the fit report and the speech recommendation. Apply a recommendation only on consent. When a heavier choice is kept, state its cost. (PR #765.)
 - [x] 8.3 `recommend_tier()` residency branch: replace the "not yet implemented" reason with the fit-report pointer. (PR #750.)
 
 ## 9. Tests and no-regression
@@ -65,7 +65,7 @@
 - [ ] 9.2 Integration test "small unified host": with the budget mocked to an 8 GB unified pool (or a cgroup cap), a full voice turn that needs STT, organ and TTS completes, peak resident memory stays under budget, no module is disabled, and residency events fire.
 - [ ] 9.3 (needs group 12) Invariant test: the cognitive-cycle trace and workspace contents are identical between an all-resident run and a multiplexed run on the same inputs in deterministic mode, excluding timing.
 - [x] 9.4 No-regression: with `[residency]` unset, the resolved backends, endpoints and behaviour match main, and the full offline suite is green. (Implicitly covered: `ResidencyConfig.enabled` defaults to `False`, all modules accept `router=None` and skip hooks, and CI runs 15876 tests with residency disabled on every PR. A dedicated explicit test would duplicate what CI already verifies.)
-- [ ] 9.5 Network-isolated consent test: nothing is downloaded without consent; with consent, a download happens once and is idempotent.
+- [x] 9.5 Network-isolated consent test: nothing is downloaded without consent; with consent, a download happens once and is idempotent. (PR #758: consent-denied and idempotent-fetch tests in the offline suite.)
 
 ## 10. Measurement, documentation and validation
 
@@ -77,13 +77,13 @@
 ## 11. Quantization ladder fixed before launch
 
 - [x] 11.1 Rung and footprint catalogues record each rung's quantization and the SHA-256 of its weights file. (Footprint Entry: existing fields. SpeechRung: PR #763.)
-- [ ] 11.2 Tier profiles name one rung per organ and encoder (`config/profiles/tier*.toml`, sequenced through the integrator); the fit report shows the ladder.
-- [ ] 11.3 `RunContext.model_rungs`: backend, model id, quantization and weights hash per component, as loaded at boot.
-- [ ] 11.4 Deterministic and study runs freeze rung selection at boot. A later failure to load is a surfaced residency failure and an incident, the run's admissibility check marks it inadmissible, and no other rung is substituted. Tests cover all three.
+- [x] 11.2 Tier profiles name one rung per organ and encoder (`config/profiles/tier*.toml`, sequenced through the integrator); the fit report shows the ladder. (PR #766.)
+- [x] 11.3 `RunContext.model_rungs`: backend, model id, quantization and weights hash per component, as loaded at boot. (PR #767.)
+- [x] 11.4 Deterministic and study runs freeze rung selection at boot. A later failure to load is a surfaced residency failure and an incident, the run's admissibility check marks it inadmissible, and no other rung is substituted. Tests cover all three. (PR #774.)
 
 ## 12. Dilation that sees modules, and the lockstep barrier (engine semantics, high-risk)
 
-- [ ] 12.1 Stall indicator into `TimeScaleController.observe`; identical behaviour when `[residency]` is passive (test).
+- [x] 12.1 Stall indicator into `TimeScaleController.observe`; identical behaviour when `[residency]` is passive (test). (PR #775.)
 - [ ] 12.2 `Event.tick` and `Event.seq` optional fields; older events parse (test).
 - [ ] 12.3 `BaseModule`: tick context variable around `on_workspace`, `publish` stamps `tick` and `seq`, `self.track(task)`, `module.tick_done` emission; the `seq` counter travels in snapshots.
 - [ ] 12.4 the language module tracks its generation tasks; the interoception module and the perception sources gain a tick-driven lockstep mode fed by the seeded feed.
