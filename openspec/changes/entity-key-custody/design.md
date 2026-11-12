@@ -2,7 +2,7 @@
 
 ## Status
 This is a design awaiting two steps, and nothing in it is implemented. KAINE still runs the single per-install key described under Context.
-- **Integrator review (task 0.1).** The integrator has not reviewed this design yet. No code is written against it until that review signs it off.
+- **Integrator review (task 0.1).** Reviewed and approved 2026-11-11. No design changes required. Note: measure fork re-encryption cost during swtpm tests.
 - **The operator's key ceremony (task 0.3).** The guardian's identity, the trustee count n and the share-redundancy plan are decided there. This blocks shipping, not development against swtpm.
 
 The entity-ID dependency (task 0.2) is closed: `entity-identity` has merged, and custody consumes `openspec/specs/entity-identity/spec.md`.
