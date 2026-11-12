@@ -2615,11 +2615,16 @@ async def _phase_supervision(ctx: BootContext) -> int | None:
     # The module supervisor (cycle-layer component, not a registry module).
     ctx.supervisor_cfg = SupervisorConfig.from_section(ctx.kaine_config.get("supervisor") or {})
     lifecycle_cfg = ctx.kaine_config.get("lifecycle") or {}
+
+    from kaine.boot.security import build_keyring
+    keyring = build_keyring(ctx.kaine_config)
+
     ctx.fork_manager = ForkManager(
         resolve(lifecycle_cfg.get("snapshots_path", "state/forks")),
         identity_source=lambda: load_identity(
             resolve(Path("state")) / "identity" / "entity.json"
         ),
+        keyring=keyring,
     )
 
     ctx.rebuild_module = _make_rebuild_module(

@@ -12,9 +12,12 @@ import time
 import uuid
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from kaine import legacy_aliases
+
+if TYPE_CHECKING:
+    from kaine.security.custody.encryptor import EntityEncryptor
 
 # A snapshot id is a server-generated 16-hex UUID prefix (a fork/root id) or a
 # `<hex>+<hex>` pair (a merge parent id). This is the ONE source of truth shared
@@ -169,18 +172,57 @@ def copy_artifacts(src: Path, dst: Path) -> None:
             _chmod_quietly(dst_f, 0o600)
 
 
-def save_snapshot(root: Path, snap: ForkSnapshot) -> Path:
+def reencrypt_artifacts(
+    src: Path,
+    dst: Path,
+    *,
+    src_encryptor: EntityEncryptor | None,
+    dst_encryptor: EntityEncryptor,
+    kind: str = "artifact",
+) -> None:
+    if Path(src).is_symlink():
+        raise ValueError(f"refusing to copy a symlinked artifact directory: {src}")
+    if dst.exists():
+        raise FileExistsError(f"artifact destination already exists: {dst}")
+    dst.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    _chmod_quietly(dst.parent, 0o700)
+    dst.mkdir(mode=0o700, parents=False, exist_ok=False)
+    _chmod_quietly(dst, 0o700)
+    for dirpath, _dirnames, filenames in os.walk(src, followlinks=False):
+        rel_dir = Path(dirpath).relative_to(src)
+        dst_dir = dst / rel_dir
+        for d in _dirnames:
+            src_d = Path(dirpath) / d
+            if src_d.is_symlink():
+                continue
+            dst_d = dst_dir / d
+            dst_d.mkdir(mode=0o700, parents=False, exist_ok=False)
+            _chmod_quietly(dst_d, 0o700)
+        for f in filenames:
+            src_f = Path(dirpath) / f
+            if src_f.is_symlink():
+                continue
+            dst_f = dst_dir / f
+            plaintext = src_f.read_bytes()
+            if src_encryptor is not None:
+                plaintext = src_encryptor.maybe_decrypt(plaintext, kind=kind)
+            dst_f.write_bytes(dst_encryptor.encrypt(plaintext, kind=kind))
+            _chmod_quietly(dst_f, 0o600)
+
+
+def save_snapshot(
+    root: Path,
+    snap: ForkSnapshot,
+    *,
+    encryptor: EntityEncryptor | None = None,
+) -> Path:
     """Write a fork/merge snapshot bundle under ``<root>/<id>/snapshot.json``.
 
     When state encryption is enabled the bundle is AES-256-GCM encrypted before
     it is written; the key MUST be transferred out-of-band for cross-host
     fork/merge (see SECURITY.md).
     """
-    from kaine.security.crypto import get_state_encryptor
-
     target_dir = snapshot_dir(root, snap.id)
-    # Snapshot bundles hold the full cognitive state; create the snapshot root
-    # and its parent owner-only (0700) so they are not group/world-readable.
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
     target_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
     _chmod_quietly(root, 0o700)
@@ -188,17 +230,29 @@ def save_snapshot(root: Path, snap: ForkSnapshot) -> Path:
     target = snapshot_path(root, snap.id)
     tmp = target.with_suffix(".json.tmp")
     payload = json.dumps(snap.to_dict(), indent=2, sort_keys=True)
-    tmp.write_text(get_state_encryptor().encrypt_text(payload))
-    _chmod_quietly(tmp, 0o600)  # chmod before replace; the target inherits 0600
+    if encryptor is not None:
+        tmp.write_text(encryptor.encrypt_text(payload, kind="snapshot"))
+    else:
+        from kaine.security.crypto import get_state_encryptor
+        tmp.write_text(get_state_encryptor().encrypt_text(payload))
+    _chmod_quietly(tmp, 0o600)
     os.replace(tmp, target)
     return target
 
 
-def load_snapshot(root: Path, snapshot_id: str) -> ForkSnapshot:
-    from kaine.security.crypto import get_state_encryptor
-
+def load_snapshot(
+    root: Path,
+    snapshot_id: str,
+    *,
+    encryptor: EntityEncryptor | None = None,
+) -> ForkSnapshot:
     target = snapshot_path(root, snapshot_id)
-    text = get_state_encryptor().maybe_decrypt(target.read_bytes()).decode("utf-8")
+    raw = target.read_bytes()
+    if encryptor is not None:
+        text = encryptor.maybe_decrypt(raw, kind="snapshot").decode("utf-8")
+    else:
+        from kaine.security.crypto import get_state_encryptor
+        text = get_state_encryptor().maybe_decrypt(raw).decode("utf-8")
     raw = json.loads(text)
     return ForkSnapshot.from_dict(raw)
 

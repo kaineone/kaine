@@ -148,6 +148,7 @@ def _warn_ignored_snapshot_retention(lifecycle_cfg: dict[str, Any]) -> None:
 def _build_fork_manager(
     lifecycle_cfg_loader: Any,
     encryption_section_loader: Any,
+    kaine_config: dict[str, Any] | None = None,
 ) -> tuple[ForkManager | None, str | None]:
     """Install the configured state-encryption posture and construct a ForkManager.
 
@@ -178,8 +179,12 @@ def _build_fork_manager(
         )
         snapshots_path = str(resolve(lifecycle_cfg.get("snapshots_path", "state/forks")))
         _warn_ignored_snapshot_retention(lifecycle_cfg)
+
+        from kaine.boot.security import build_keyring
+        keyring = build_keyring(kaine_config or {})
+
         return (
-            ForkManager(snapshots_path, adapter_merger=adapter_merger),
+            ForkManager(snapshots_path, adapter_merger=adapter_merger, keyring=keyring),
             None,
         )
     except Exception:
@@ -229,7 +234,7 @@ async def _build():
     # snapshots written/read from this process honour [security.state_encryption].
     # Fails closed: a configuration or key error disables fork/merge I/O.
     fork_manager, fm_reason = _build_fork_manager(
-        _load_lifecycle_config, _load_security_state_encryption_config
+        _load_lifecycle_config, _load_security_state_encryption_config, kaine_config
     )
 
     # Conversation state is built after the state-encryption posture is

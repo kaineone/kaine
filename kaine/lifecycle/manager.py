@@ -23,6 +23,8 @@ from typing import (
 
 if TYPE_CHECKING:
     from kaine.lifecycle.preservation import PreservationResult
+    from kaine.security.custody.encryptor import EntityEncryptor
+    from kaine.security.custody.keyring import KeyRing
 
 from kaine import legacy_aliases
 from kaine.lifecycle._merge_base import AdapterMerger, FakeAdapterMerger
@@ -44,6 +46,7 @@ from kaine.lifecycle.snapshot import (
     find_artifacts_dir,
     list_snapshots,
     load_snapshot,
+    reencrypt_artifacts,
     save_snapshot,
     snapshot_dir,
 )
@@ -289,6 +292,7 @@ class ForkManager:
         default_strategy: MergeStrategy | None = None,
         adapter_merger: AdapterMerger | None = None,
         identity_source: Callable[[], EntityIdentity | None] | None = None,
+        keyring: KeyRing | None = None,
     ) -> None:
         self._root = Path(root)
         self._root.mkdir(parents=True, exist_ok=True)
@@ -296,16 +300,9 @@ class ForkManager:
         if strategies:
             self._strategies.update(strategies)
         self._default_strategy: MergeStrategy = default_strategy or UnionMergeStrategy()
-        # Default: auto-detect the PEFT extra and select the real TIES/DARE
-        # merger when it's importable, falling back to FakeAdapterMerger
-        # otherwise — mirrors the DreamerV3/EMA and CfC real-by-default
-        # fallback pattern. Callers that build their own merger via
-        # `merger_from_name` from `[lifecycle]` config (or pass one directly)
-        # override this.
         self._adapter_merger: AdapterMerger = adapter_merger or merger_from_name("auto")
-        # Reads the running entity's identity (entity-identity D11). None means
-        # snapshots carry no identity, as for tools and tests.
         self._identity_source = identity_source
+        self._keyring = keyring
 
     @property
     def root(self) -> Path:
@@ -326,6 +323,11 @@ class ForkManager:
             log.error("entity identity unreadable; continuing without it: %s", exc)
             return (None, f"{type(exc).__name__}: {exc}")
         return (identity, None)
+
+    def _encryptor_for(self, entity_id: str) -> EntityEncryptor | None:
+        if self._keyring is None:
+            return None
+        return self._keyring.encryptor_for(entity_id)
 
     def _write_sidecar(self, snapshot_id: str, identity: EntityIdentity) -> None:
         """Write the plaintext identity sidecar; a snapshot that cannot carry one
@@ -397,17 +399,23 @@ class ForkManager:
             snap = dataclasses.replace(
                 snap, metadata={**snap.metadata, "artifacts": records}
             )
+        enc = self._encryptor_for(identity.entity_id) if identity is not None else None
+        if identity is not None:
+            self._write_sidecar(snap.id, identity)
         try:
-            save_snapshot(self._root, snap)
+            save_snapshot(self._root, snap, encryptor=enc)
         except Exception:
             shutil.rmtree(snapshot_dir(self._root, snap.id), ignore_errors=True)
             raise
-        if identity is not None:
-            self._write_sidecar(snap.id, identity)
         return snap
 
     def restore(self, snapshot_id: str, registry: _RegistryLike) -> ForkSnapshot:
-        snap = load_snapshot(self._root, snapshot_id)
+        enc = None
+        if self._keyring is not None:
+            sidecar = read_identity_sidecar(snapshot_dir(self._root, snapshot_id))
+            if sidecar is not None:
+                enc = self._encryptor_for(sidecar[0])
+        snap = load_snapshot(self._root, snapshot_id, encryptor=enc)
         for module in registry.all_modules():
             state = snap.modules.get(module.name)
             if state is None:
@@ -430,7 +438,12 @@ class ForkManager:
         shed: Iterable[str] = (),
         metadata: dict[str, Any] | None = None,
     ) -> ForkSnapshot:
-        parent = load_snapshot(self._root, parent_id)
+        parent_enc = None
+        if self._keyring is not None:
+            parent_sidecar = read_identity_sidecar(snapshot_dir(self._root, parent_id))
+            if parent_sidecar is not None:
+                parent_enc = self._encryptor_for(parent_sidecar[0])
+        parent = load_snapshot(self._root, parent_id, encryptor=parent_enc)
         parent_identity = identity_of_snapshot(parent)
         if parent_identity is not None:
             check_sidecar_agrees(
@@ -451,6 +464,11 @@ class ForkManager:
                 avoid_names=avoid,
                 parent_known_name=(avoid[0] if avoid else None),
             )
+
+        child_enc = None
+        if self._keyring is not None:
+            self._keyring.generate_dek(child_identity.entity_id)
+            child_enc = self._encryptor_for(child_identity.entity_id)
 
         shed_set = set(shed)
         modules = {
@@ -488,7 +506,14 @@ class ForkManager:
                     continue
                 dst = artifacts_dir(self._root, child.id, name)
                 try:
-                    copy_artifacts(src, dst)
+                    if child_enc is not None:
+                        reencrypt_artifacts(
+                            src, dst,
+                            src_encryptor=parent_enc,
+                            dst_encryptor=child_enc,
+                        )
+                    else:
+                        copy_artifacts(src, dst)
                     copied_names.append(name)
                 except Exception:
                     shutil.rmtree(snapshot_dir(self._root, child.id), ignore_errors=True)
@@ -498,8 +523,8 @@ class ForkManager:
                 child,
                 metadata={**child.metadata, "artifacts_from_parent": sorted(copied_names)},
             )
-        save_snapshot(self._root, child)
         self._write_sidecar(child.id, child_identity)
+        save_snapshot(self._root, child, encryptor=child_enc)
         return child
 
     def merge(
@@ -528,8 +553,17 @@ class ForkManager:
         if world_model_from is not None and world_model_from not in ("a", "b"):
             raise ValueError("world_model_from must be 'a', 'b', or None")
         weights_choice = _normalise_weights_choice(module_weights_from)
-        snap_a = load_snapshot(self._root, snapshot_a_id)
-        snap_b = load_snapshot(self._root, snapshot_b_id)
+        enc_a = None
+        enc_b = None
+        if self._keyring is not None:
+            sidecar_a = read_identity_sidecar(snapshot_dir(self._root, snapshot_a_id))
+            sidecar_b = read_identity_sidecar(snapshot_dir(self._root, snapshot_b_id))
+            if sidecar_a is not None:
+                enc_a = self._encryptor_for(sidecar_a[0])
+            if sidecar_b is not None:
+                enc_b = self._encryptor_for(sidecar_b[0])
+        snap_a = load_snapshot(self._root, snapshot_a_id, encryptor=enc_a)
+        snap_b = load_snapshot(self._root, snapshot_b_id, encryptor=enc_b)
         a_identity = identity_of_snapshot(snap_a)
         b_identity = identity_of_snapshot(snap_b)
         if a_identity is not None:
@@ -749,7 +783,15 @@ class ForkManager:
             if not src.is_dir():
                 continue
             try:
-                copy_artifacts(src, dst)
+                if enc_a is not None:
+                    src_enc = enc_a if chosen == "a" else enc_b
+                    reencrypt_artifacts(
+                        src, dst,
+                        src_encryptor=src_enc,
+                        dst_encryptor=enc_a,
+                    )
+                else:
+                    copy_artifacts(src, dst)
                 sources[name] = chosen
             except Exception:
                 shutil.rmtree(snapshot_dir(self._root, merged.id), ignore_errors=True)
@@ -759,9 +801,9 @@ class ForkManager:
                 merged,
                 metadata={**merged.metadata, "artifact_sources": sources},
             )
-        save_snapshot(self._root, merged)
         if a_identity is not None:
             self._write_sidecar(merged.id, a_identity)
+        save_snapshot(self._root, merged, encryptor=enc_a)
         return merged
 
     async def preserve_live(
@@ -786,6 +828,7 @@ class ForkManager:
         from kaine.lifecycle.preservation import preserve_live as _preserve_live
 
         identity, identity_unreadable = self._read_identity()
+        enc = self._encryptor_for(identity.entity_id) if identity is not None else None
         return await _preserve_live(
             registry,
             fork_root=self._root,
@@ -796,6 +839,7 @@ class ForkManager:
             require_encryption=require_encryption,
             identity=identity,
             identity_unreadable=identity_unreadable,
+            encryptor=enc,
         )
 
     async def revive(self, bundle: Path | str, registry: _RegistryLike) -> ForkSnapshot:
@@ -807,13 +851,28 @@ class ForkManager:
         """
         from kaine.lifecycle.preservation import revive as _revive
 
-        return await _revive(Path(bundle), registry)
+        enc = None
+        if self._keyring is not None:
+            manifest_path = Path(bundle) / "manifest.json"
+            if manifest_path.is_file():
+                manifest = json.loads(manifest_path.read_text())
+                identity_obj = manifest.get("identity")
+                if identity_obj and isinstance(identity_obj, dict):
+                    eid = identity_obj.get("entity_id")
+                    if eid:
+                        enc = self._encryptor_for(eid)
+        return await _revive(Path(bundle), registry, encryptor=enc)
 
     def list_snapshots(self) -> list[str]:
         return list_snapshots(self._root)
 
     def load(self, snapshot_id: str) -> ForkSnapshot:
-        return load_snapshot(self._root, snapshot_id)
+        enc = None
+        if self._keyring is not None:
+            sidecar = read_identity_sidecar(snapshot_dir(self._root, snapshot_id))
+            if sidecar is not None:
+                enc = self._encryptor_for(sidecar[0])
+        return load_snapshot(self._root, snapshot_id, encryptor=enc)
 
 
 def merger_from_name(
