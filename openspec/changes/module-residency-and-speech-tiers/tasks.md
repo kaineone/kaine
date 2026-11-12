@@ -79,7 +79,7 @@
 - [x] 11.1 Rung and footprint catalogues record each rung's quantization and the SHA-256 of its weights file. (Footprint Entry: existing fields. SpeechRung: PR #763.)
 - [x] 11.2 Tier profiles name one rung per organ and encoder (`config/profiles/tier*.toml`, sequenced through the integrator); the fit report shows the ladder. (PR #766.)
 - [x] 11.3 `RunContext.model_rungs`: backend, model id, quantization and weights hash per component, as loaded at boot. (PR #767.)
-- [ ] 11.4 Deterministic and study runs freeze rung selection at boot. A later failure to load is a surfaced residency failure and an incident, the run's admissibility check marks it inadmissible, and no other rung is substituted. Tests cover all three.
+- [x] 11.4 Deterministic and study runs freeze rung selection at boot. A later failure to load is a surfaced residency failure and an incident, the run's admissibility check marks it inadmissible, and no other rung is substituted. Tests cover all three. (PR #774.)
 
 ## 12. Dilation that sees modules, and the lockstep barrier (engine semantics, high-risk)
 
