@@ -111,6 +111,8 @@ def is_rung_installed(rung: SpeechRung) -> bool:
 
 @dataclass(frozen=True)
 class RungSelection:
+    """Result of selecting the best speech rung for a component."""
+
     rung: SpeechRung
     reason: str
     hints: tuple[str, ...]

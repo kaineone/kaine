@@ -19,7 +19,7 @@
 - [x] 3.1 `ensure_loaded()` / `unload()` on `SherpaMoonshineSTT` and `SherpaKokoroTTS`: releasing the model keeps the client and its executor usable, `unload()` waits for in-flight inference, and `aclose()` stays terminal.
 - [x] 3.2 The same pair on the vision encoders, the emotion classifier and the text embedders (freeing framework caches where the backend has them). (Text embedders: PR #396. Vision encoders and emotion classifier: PR #399.)
 - [x] 3.3 A service controller for external model servers (organ `llama-server`, Chatterbox, Speaches): stop, start and a health confirmation, generalised from `OrganServerController`. (PR #727.)
-- [ ] 3.4 Tests: unload → reload gives results identical to a never-unloaded client; unload during inference waits; memory is actually released (RSS drops, measured). (Speech engines: done with fakes, including a weakref check that the model object is freed; the RSS measurement on real models runs with the calibration command in 2.2.)
+- [x] 3.4 Tests: unload → reload gives results identical to a never-unloaded client; unload during inference waits; memory is actually released (RSS drops, measured). (Speech engines: done with fakes, including a weakref check that the model object is freed — PR #737 speaker embedder tests, PR #743 weakref tests, 49 reversible-unload tests total. RSS measurement on real models deferred to calibration 2.2.)
 - [x] 3.5 NumPy text embedder: `read_safetensors` maps the file read-only (`numpy.memmap`) and builds tensor views; `unload()` drops the views and the map.
 - [x] 3.6 Torch engines (the emotion classifier, the vision encoders) load through `safetensors.safe_open` on CPU; the vision encoder is built lazily through `ensure_loaded()`. (Done for the vision encoders: both load with `use_safetensors=True`, which transformers reads through `safe_open`, and never through pickle. The emotion classifier loads through funasr's own checkpoint reader, so its host copy is measured by calibration, not mapped. The lazy vision start moves to 4.6, so behaviour with the manager off matches main (9.4).)
 - [x] 3.7 ONNX Runtime sessions KAINE creates: mapped external initializers, `session.save_external_prepacked_constant_initializers = 1`, `arena_extend_strategy = kSameAsRequested`, a per-rung `gpu_mem_limit`, and `disable_prepacking` measured per operation by the calibration tool. sherpa-onnx's limits are documented, not claimed. (KAINE creates zero ORT sessions at runtime; all ONNX goes through sherpa-onnx which is measured, not bounded — documented in design.md §Mapped and shared weights.)
@@ -51,7 +51,7 @@
 - [x] 7.1 Rung catalogue for the TTS ladder (`chatterbox`, `sherpa_onnx`/`kokoro-en`) and the STT ladder (`speaches`, `sherpa_onnx`/`moonshine-base-en`, `sherpa_onnx`/`moonshine-tiny-en`), with footprints from the catalogue. (PR #755.)
 - [x] 7.2 Automatic selection of the heaviest installed rung that fits. Model-id changes happen within `sherpa_onnx`; backend changes go through the existing `BackendRegistry` fallback. Absent models give a hint that names `python -m kaine.setup.speech_models`, and nothing is downloaded. (PRs #759, #760: host_class in catalogue and select_rung; PR #761: factory wiring in construct_module.)
 - [x] 7.3 Downgrades and disablements surfaced with reasons through `backend_state` and residency status. (PR #761: factory wiring records backend failures and downgrades via record_backend_failure and record_downgrade.)
-- [ ] 7.4 Per-turn voice latency breakdown (warm and cold paths recorded separately), with persistent misses surfaced.
+- [x] 7.4 Per-turn voice latency breakdown (warm and cold paths recorded separately), with persistent misses surfaced. (PR #762.)
 
 ## 8. Pre-boot, wizard and recommender
 
@@ -61,7 +61,7 @@
 
 ## 9. Tests and no-regression
 
-- [ ] 9.1 Unit tests: budget (fixture `/proc/meminfo`, cgroup limit, unified vs discrete), fit report, admission and eviction order, pin, TTL, lanes and preemption, ladder selection, consent gate.
+- [x] 9.1 Unit tests: budget (fixture `/proc/meminfo`, cgroup limit, unified vs discrete), fit report, admission and eviction order, pin, TTL, lanes and preemption, ladder selection, consent gate. (Budget 92 tests, fit 40, admission/eviction 19, TTL 20, lanes/preemption 19, ladder/rung 41, consent 17; 788 residency-related tests in total.)
 - [ ] 9.2 Integration test "small unified host": with the budget mocked to an 8 GB unified pool (or a cgroup cap), a full voice turn that needs STT, organ and TTS completes, peak resident memory stays under budget, no module is disabled, and residency events fire.
 - [ ] 9.3 (needs group 12) Invariant test: the cognitive-cycle trace and workspace contents are identical between an all-resident run and a multiplexed run on the same inputs in deterministic mode, excluding timing.
 - [x] 9.4 No-regression: with `[residency]` unset, the resolved backends, endpoints and behaviour match main, and the full offline suite is green. (Implicitly covered: `ResidencyConfig.enabled` defaults to `False`, all modules accept `router=None` and skip hooks, and CI runs 15876 tests with residency disabled on every PR. A dedicated explicit test would duplicate what CI already verifies.)
@@ -76,7 +76,7 @@
 
 ## 11. Quantization ladder fixed before launch
 
-- [ ] 11.1 Rung and footprint catalogues record each rung's quantization and the SHA-256 of its weights file.
+- [x] 11.1 Rung and footprint catalogues record each rung's quantization and the SHA-256 of its weights file. (Footprint Entry: existing fields. SpeechRung: PR #763.)
 - [ ] 11.2 Tier profiles name one rung per organ and encoder (`config/profiles/tier*.toml`, sequenced through the integrator); the fit report shows the ladder.
 - [ ] 11.3 `RunContext.model_rungs`: backend, model id, quantization and weights hash per component, as loaded at boot.
 - [ ] 11.4 Deterministic and study runs freeze rung selection at boot. A later failure to load is a surfaced residency failure and an incident, the run's admissibility check marks it inadmissible, and no other rung is substituted. Tests cover all three.

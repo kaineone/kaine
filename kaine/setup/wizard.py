@@ -60,6 +60,7 @@ from kaine.setup.wizard_steps import (
     cl1_substrate_step,
     custom_modules_step,
     encryption_step,
+    fit_report_step,
     language_model_step,
     module_preset_step,
     orientation_step,
@@ -268,6 +269,15 @@ def run_wizard(
     # --- Deployment tier recommendation --------------------------------------
     run_step(
         tier_step(),
+        ctx,
+        input_fn=input_fn,
+        out=out,
+        defaults=defaults,
+    )
+
+    # --- Residency fit report and speech recommendation ----------------------
+    run_step(
+        fit_report_step(),
         ctx,
         input_fn=input_fn,
         out=out,
