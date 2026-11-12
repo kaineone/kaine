@@ -292,7 +292,7 @@ async def _organ_stream(
     }
     first_token_ms = 0.0
     text = ""
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with httpx.AsyncClient(timeout=60.0, trust_env=False) as client:
         start = time.monotonic()
         async with client.stream(
             "POST", _ORGAN_URL, json=payload,
