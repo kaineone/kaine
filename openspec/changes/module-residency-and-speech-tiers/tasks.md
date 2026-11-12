@@ -51,7 +51,7 @@
 - [x] 7.1 Rung catalogue for the TTS ladder (`chatterbox`, `sherpa_onnx`/`kokoro-en`) and the STT ladder (`speaches`, `sherpa_onnx`/`moonshine-base-en`, `sherpa_onnx`/`moonshine-tiny-en`), with footprints from the catalogue. (PR #755.)
 - [ ] 7.2 Automatic selection of the heaviest installed rung that fits. Model-id changes happen within `sherpa_onnx`; backend changes go through the existing `BackendRegistry` fallback. Absent models give a hint that names `python -m kaine.setup.speech_models`, and nothing is downloaded.
 - [ ] 7.3 Downgrades and disablements surfaced with reasons through `backend_state` and residency status.
-- [ ] 7.4 Per-turn voice latency breakdown (warm and cold paths recorded separately), with persistent misses surfaced.
+- [x] 7.4 Per-turn voice latency breakdown (warm and cold paths recorded separately), with persistent misses surfaced. (PR #762.)
 
 ## 8. Pre-boot, wizard and recommender
 
@@ -76,7 +76,7 @@
 
 ## 11. Quantization ladder fixed before launch
 
-- [ ] 11.1 Rung and footprint catalogues record each rung's quantization and the SHA-256 of its weights file.
+- [x] 11.1 Rung and footprint catalogues record each rung's quantization and the SHA-256 of its weights file. (Footprint Entry: existing fields. SpeechRung: PR #763.)
 - [ ] 11.2 Tier profiles name one rung per organ and encoder (`config/profiles/tier*.toml`, sequenced through the integrator); the fit report shows the ladder.
 - [ ] 11.3 `RunContext.model_rungs`: backend, model id, quantization and weights hash per component, as loaded at boot.
 - [ ] 11.4 Deterministic and study runs freeze rung selection at boot. A later failure to load is a surfaced residency failure and an incident, the run's admissibility check marks it inadmissible, and no other rung is substituted. Tests cover all three.
