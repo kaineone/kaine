@@ -686,10 +686,10 @@ def test_section_order_in_prompt():
     assert situation_pos < memory_pos < dialogue_pos < awareness_pos < input_pos
 
 
-def test_dialogue_turns_not_redacted_in_logged_prompt():
-    """Dialogue turns are the entity's own and heard speech; heard speech in
-    them is already redacted by the caller. They appear as-is in the logged
-    prompt (unlike recalled memories, which carry private episodic content)."""
+def test_dialogue_heard_speech_redacted_in_logged_prompt():
+    """Heard speech in dialogue turns is replaced with a placeholder in the
+    logged prompt (V4: heard speech is never persisted). The entity's own
+    speech is kept."""
     turns = [
         {"role": "other", "text": "hello there", "timestamp": 1.0},
         {"role": "self", "text": "hi back", "timestamp": 2.0},
@@ -698,7 +698,8 @@ def test_dialogue_turns_not_redacted_in_logged_prompt():
         about="hi", snapshot=None, self_model={}, mode="external",
         dialogue_turns=turns,
     )
-    assert "hello there" in ctx.logged_prompt
+    assert "hello there" not in ctx.logged_prompt
+    assert "[heard speech]" in ctx.logged_prompt
     assert "hi back" in ctx.logged_prompt
 
 

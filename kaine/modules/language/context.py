@@ -387,6 +387,35 @@ class ContextAssembler:
         body = "\n".join(f"- {line}" for line in kept)
         return f"{DIALOGUE_HEADING}\n{body}"
 
+    def _render_dialogue_section_redacted(
+        self, turns: Optional[list[dict[str, Any]]]
+    ) -> Optional[str]:
+        """Like _render_dialogue_section but replaces heard speech with a
+        placeholder, so persisted logs never contain verbatim heard text (V4)."""
+        if not turns:
+            return None
+        kept: list[str] = []
+        used = 0
+        for turn in reversed(turns):
+            text = _sanitize_line(str(turn.get("text", "")))
+            if not text.strip():
+                continue
+            role = turn.get("role", "other")
+            if role == "self":
+                line = f"I said: {text}"
+            else:
+                line = "They said: [heard speech]"
+            cost = len(line) + (1 if kept else 0)
+            if used + cost > self._dialogue_char_budget and kept:
+                break
+            kept.append(line)
+            used += cost
+        if not kept:
+            return None
+        kept.reverse()
+        body = "\n".join(f"- {line}" for line in kept)
+        return f"{DIALOGUE_HEADING}\n{body}"
+
     def _heard_event_lines(self, ev: Event) -> list[str]:
         """The attributed, quoted lines this event contributes to the heard turn.
 
@@ -552,6 +581,7 @@ class ContextAssembler:
             if memory_section is not None
             else None
         )
+        logged_dialogue_section = self._render_dialogue_section_redacted(dialogue_turns)
         heard = about_is_heard or bool(heard_events) or _holds_outside_material(snapshot)
         system = self._persona(mode, self_model or {}, heard=heard)
         prompt = self._build_prompt(
@@ -570,7 +600,7 @@ class ContextAssembler:
             about_is_heard=about_is_heard,
             situation=situation,
             memory_section=logged_memory_section,
-            dialogue_section=dialogue_section,
+            dialogue_section=logged_dialogue_section,
         )
         if about_is_heard:
             heard_lines.append(heard_utterance_line(about))
