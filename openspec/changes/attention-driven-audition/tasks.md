@@ -179,5 +179,8 @@ still-unbuilt foveation Phase 3–4._
       the record.
 - [ ] 6.10 Paper revision note: the encoder class, and "over raw waveform"
       refined if the winner computes a mel spectrogram inside the model.
-- [ ] 6.11 `docs/09-modules/audition.md` documents encoder selection,
-      persistence, sleep suspension and the energy channel.
+- [x] 6.11 `docs/09-modules/audition.md` documents encoder selection,
+      persistence, sleep suspension and the energy channel. All four items
+      covered in the current doc (encoder config key and plugin seam,
+      acoustic_forward_models keyed by model_id, sleep suspension flag, and
+      energy_dbfs on audition.perception).
