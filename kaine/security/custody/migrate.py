@@ -22,7 +22,7 @@ from pathlib import Path
 
 from kaine.security.crypto import CryptoConfig, StateEncryptor, is_encrypted
 from kaine.security.custody.envelope import VALID_KINDS, is_v2
-from kaine.security.custody.keyring import KeyRing, KekProvider
+from kaine.security.custody.keyring import KekProvider, KeyRing
 
 log = logging.getLogger(__name__)
 

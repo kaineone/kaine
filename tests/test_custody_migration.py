@@ -12,12 +12,11 @@ from unittest import mock
 
 import pytest
 
-from kaine.security.crypto import CryptoConfig, StateEncryptor, is_encrypted
-from kaine.security.custody.envelope import decrypt_v2, is_v2
+from kaine.security.crypto import CryptoConfig, StateEncryptor
+from kaine.security.custody.envelope import is_v2
 from kaine.security.custody.keyring import KeyRing, SoftwareKek
 from kaine.security.custody.migrate import (
     MigrationError,
-    MigrationSummary,
     migrate,
 )
 
@@ -256,16 +255,12 @@ class TestVerifyAfterEncrypt:
         monkeypatch.setenv("KAINE_STATE_KEY", key.hex())
 
         state_root = tmp_path / "state"
-        entity_dir = _setup_snapshot_entity(state_root, _ENTITY_A, plaintext=True)
-
-        original_content = (entity_dir / "snapshot.json").read_bytes()
+        _setup_snapshot_entity(state_root, _ENTITY_A, plaintext=True)
 
         kek = _make_kek()
 
         # Mock the EntityEncryptor.decrypt to return different data (simulating corruption)
         from kaine.security.custody.encryptor import EntityEncryptor
-
-        real_decrypt = EntityEncryptor.decrypt
 
         def bad_decrypt(self: EntityEncryptor, blob: bytes, *, kind: str) -> bytes:
             return b"corrupted data that does not match"
