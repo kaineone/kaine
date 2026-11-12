@@ -183,7 +183,9 @@ class Supervisor:
         control_path: Optional[Path] = None,
         escalation_path: Optional[Path] = None,
         escalate_on_crash: bool = False,
+        barrier_active_provider: Optional[Callable[[], bool]] = None,
     ) -> None:
+        self._barrier_active_provider = barrier_active_provider
         self._registry = registry
         self._fork_manager = fork_manager
         self._kaine_config = kaine_config
@@ -270,6 +272,8 @@ class Supervisor:
                         if over_bound:
                             return AssessResult("residency_failure", None)
                         return AssessResult("alive", None)
+                if self._barrier_active_provider is not None and self._barrier_active_provider():
+                    return AssessResult("alive", None)
                 return AssessResult("hung", None)
         return AssessResult("alive", None)
 
