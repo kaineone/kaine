@@ -58,7 +58,7 @@ async def test_track_registers_task() -> None:
         _current_tick.reset(token)
     assert 7 in mod._tracked_tasks
     assert task in mod._tracked_tasks[7]
-    await task
+    _ = await task
 
 
 @pytest.mark.asyncio
