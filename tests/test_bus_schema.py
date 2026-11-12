@@ -106,3 +106,44 @@ def test_event_is_immutable():
     )
     with pytest.raises(Exception):
         event.salience = 0.9  # type: ignore[misc]
+
+
+def _tick_event(**extra):
+    return Event(
+        source="interoception",
+        type="wellness.update",
+        payload={},
+        salience=0.3,
+        timestamp=_now(),
+        **extra,
+    )
+
+
+def test_event_without_tick_seq_parses():
+    event = _tick_event()
+    assert event.tick is None
+    assert event.seq is None
+
+
+def test_event_with_tick_seq_parses():
+    event = _tick_event(tick=42, seq=7)
+    assert event.tick == 42
+    assert event.seq == 7
+
+
+def test_event_extra_field_still_rejected():
+    with pytest.raises(EventValidationError):
+        validate_event(
+            source="interoception",
+            type="wellness.update",
+            payload={},
+            salience=0.3,
+            timestamp=_now(),
+            bogus=1,
+        )
+
+
+def test_tick_seq_in_model_dump():
+    dumped = _tick_event(tick=1, seq=0).model_dump()
+    assert dumped["tick"] == 1
+    assert dumped["seq"] == 0
