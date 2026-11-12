@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-CAL-0.5
 # Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
+
 import asyncio
 import time
 from datetime import datetime, timezone
