@@ -59,6 +59,9 @@ PERSONA_TEMPLATE_VERSION = "7"
 AWARENESS_HEADING = "## How I feel and what I notice"
 EMPTY_AWARENESS = "Nothing in particular stands out to me right now."
 
+MEMORY_HEADING = "## What I remember"
+DIALOGUE_HEADING = "## What was said recently"
+
 SITUATION_HEADING = "## What I know about my situation"
 
 # The heading that closes the entity's notes; the organ writes under it.
@@ -283,6 +286,8 @@ class ContextAssembler:
         *,
         max_events: int = 8,
         char_budget: int = 2000,
+        memory_char_budget: int = 800,
+        dialogue_char_budget: int = 600,
         persona_external: Optional[str] = None,
         persona_internal: Optional[str] = None,
         awareness_rendering: str = "numeric",
@@ -302,6 +307,8 @@ class ContextAssembler:
             self._renderer = FaithfulRenderer(empty_snapshot_text=EMPTY_AWARENESS)
         self._max_events = max(1, int(max_events))
         self._char_budget = int(char_budget)
+        self._memory_char_budget = int(memory_char_budget)
+        self._dialogue_char_budget = int(dialogue_char_budget)
         self._persona_external = persona_external
         self._persona_internal = persona_internal
         self._redact = (
@@ -320,6 +327,94 @@ class ContextAssembler:
     @property
     def awareness_rendering(self) -> str:
         return self._awareness_rendering
+
+    def _render_memory_section(
+        self, memories: Optional[list[dict[str, Any]]]
+    ) -> tuple[Optional[str], int]:
+        """Render recalled episodic memories within the char budget.
+
+        Returns (section_text, count_of_rendered_memories). Drops the oldest
+        entries first when the budget is exceeded; the caller passes memories
+        in chronological order (oldest first).
+        """
+        if not memories:
+            return None, 0
+        kept: list[str] = []
+        used = 0
+        for mem in reversed(memories):
+            text = _sanitize_line(str(mem.get("text", "")))
+            if not text.strip():
+                continue
+            affect = mem.get("affect")
+            line = f"{text} ({_sanitize_line(str(affect))})" if affect else text
+            cost = len(line) + (1 if kept else 0)
+            if used + cost > self._memory_char_budget and kept:
+                break
+            kept.append(line)
+            used += cost
+        if not kept:
+            return None, 0
+        kept.reverse()
+        body = "\n".join(f"- {line}" for line in kept)
+        return f"{MEMORY_HEADING}\n{body}", len(kept)
+
+    def _render_dialogue_section(
+        self, turns: Optional[list[dict[str, Any]]]
+    ) -> Optional[str]:
+        """Render recent dialogue turns within the char budget.
+
+        Drops the oldest entries first when the budget is exceeded; the caller
+        passes turns in chronological order (oldest first).
+        """
+        if not turns:
+            return None
+        kept: list[str] = []
+        used = 0
+        for turn in reversed(turns):
+            text = _sanitize_line(str(turn.get("text", "")))
+            if not text.strip():
+                continue
+            role = turn.get("role", "other")
+            line = f"I said: {text}" if role == "self" else f"They said: {text}"
+            cost = len(line) + (1 if kept else 0)
+            if used + cost > self._dialogue_char_budget and kept:
+                break
+            kept.append(line)
+            used += cost
+        if not kept:
+            return None
+        kept.reverse()
+        body = "\n".join(f"- {line}" for line in kept)
+        return f"{DIALOGUE_HEADING}\n{body}"
+
+    def _render_dialogue_section_redacted(
+        self, turns: Optional[list[dict[str, Any]]]
+    ) -> Optional[str]:
+        """Like _render_dialogue_section but replaces heard speech with a
+        placeholder, so persisted logs never contain verbatim heard text (V4)."""
+        if not turns:
+            return None
+        kept: list[str] = []
+        used = 0
+        for turn in reversed(turns):
+            text = _sanitize_line(str(turn.get("text", "")))
+            if not text.strip():
+                continue
+            role = turn.get("role", "other")
+            if role == "self":
+                line = f"I said: {text}"
+            else:
+                line = "They said: [heard speech]"
+            cost = len(line) + (1 if kept else 0)
+            if used + cost > self._dialogue_char_budget and kept:
+                break
+            kept.append(line)
+            used += cost
+        if not kept:
+            return None
+        kept.reverse()
+        body = "\n".join(f"- {line}" for line in kept)
+        return f"{DIALOGUE_HEADING}\n{body}"
 
     def _heard_event_lines(self, ev: Event) -> list[str]:
         """The attributed, quoted lines this event contributes to the heard turn.
@@ -355,6 +450,8 @@ class ContextAssembler:
         self_model: Optional[dict[str, Any]] = None,
         mode: str = "external",
         about_is_heard: bool = True,
+        recalled_memories: Optional[list[dict[str, Any]]] = None,
+        dialogue_turns: Optional[list[dict[str, Any]]] = None,
     ) -> AssembledContext:
         events = list(snapshot.selected_events) if snapshot is not None else []
         own_events = [(eid, ev) for eid, ev in events if not is_heard_event(ev)]
@@ -477,6 +574,14 @@ class ContextAssembler:
                 redact=_numeric_log_line,
             )
         situation = _situation_section(self_model or {})
+        memory_section, memory_count = self._render_memory_section(recalled_memories)
+        dialogue_section = self._render_dialogue_section(dialogue_turns)
+        logged_memory_section = (
+            f"{MEMORY_HEADING}\n[{memory_count} recalled memories]"
+            if memory_section is not None
+            else None
+        )
+        logged_dialogue_section = self._render_dialogue_section_redacted(dialogue_turns)
         heard = about_is_heard or bool(heard_events) or _holds_outside_material(snapshot)
         system = self._persona(mode, self_model or {}, heard=heard)
         prompt = self._build_prompt(
@@ -485,6 +590,8 @@ class ContextAssembler:
             mode=mode,
             about_is_heard=about_is_heard,
             situation=situation,
+            memory_section=memory_section,
+            dialogue_section=dialogue_section,
         )
         logged_prompt = self._build_prompt(
             about=HEARD_SPEECH_PLACEHOLDER if about_is_heard else about,
@@ -492,6 +599,8 @@ class ContextAssembler:
             mode=mode,
             about_is_heard=about_is_heard,
             situation=situation,
+            memory_section=logged_memory_section,
+            dialogue_section=logged_dialogue_section,
         )
         if about_is_heard:
             heard_lines.append(heard_utterance_line(about))
@@ -533,6 +642,8 @@ class ContextAssembler:
         mode: str,
         about_is_heard: bool = True,
         situation: Optional[str] = None,
+        memory_section: Optional[str] = None,
+        dialogue_section: Optional[str] = None,
     ) -> str:
         if mode == "external":
             input_heading = (
@@ -551,6 +662,10 @@ class ContextAssembler:
         sections: list[str] = []
         if situation is not None:
             sections.append(situation)
+        if memory_section is not None:
+            sections.append(memory_section)
+        if dialogue_section is not None:
+            sections.append(dialogue_section)
         sections.append(f"{AWARENESS_HEADING}\n{body}")
         input_body = HEARD_POINTER_INPUT if about_is_heard else _sanitize_line(about)
         sections.append(f"{input_heading}\n{input_body}")

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import collections
 import hashlib
 import json
 import logging
@@ -139,6 +140,11 @@ class Language(BaseModule):
         self_model_provider: Optional[Callable[[], dict[str, Any]]] = None,
         context_max_events: int = 8,
         context_char_budget: int = 2000,
+        context_memory_recall: bool = False,
+        context_dialogue: bool = False,
+        context_memory_char_budget: int = 800,
+        context_dialogue_char_budget: int = 600,
+        dialogue_buffer_size: int = 6,
         persona_external: Optional[str] = None,
         persona_internal: Optional[str] = None,
         awareness_rendering: str = "numeric",
@@ -220,11 +226,19 @@ class Language(BaseModule):
             renderer,  # None → assembler builds its own renderer
             max_events=context_max_events,
             char_budget=context_char_budget,
+            memory_char_budget=context_memory_char_budget,
+            dialogue_char_budget=context_dialogue_char_budget,
             persona_external=persona_external,
             persona_internal=persona_internal,
             awareness_rendering=awareness_rendering,
         )
         self._self_model_provider = self_model_provider
+        self._context_memory_recall = bool(context_memory_recall)
+        self._context_dialogue = bool(context_dialogue)
+        self._memory_recall_provider: Optional[Callable[[str], list[dict[str, Any]]]] = None
+        self._dialogue_buffer: collections.deque[dict[str, Any]] = collections.deque(
+            maxlen=max(1, int(dialogue_buffer_size))
+        )
         self._persona_digest = hashlib.sha256(
             json.dumps([None, persona_external, persona_internal]).encode("utf-8")
         ).hexdigest()[:16]
@@ -263,6 +277,16 @@ class Language(BaseModule):
         """Inject a read-only accessor for the self-model (wired in
         build_registry). Returns the persona-seeding dict; absent → minimal."""
         self._self_model_provider = provider
+
+    def set_memory_recall_provider(
+        self, provider: Callable[[str], list[dict[str, Any]]]
+    ) -> None:
+        """Inject a recall provider for episodic memories (wired at boot).
+
+        The provider receives the current ``about`` text and returns a list of
+        memory dicts, each with at least ``text`` and optionally ``affect``.
+        """
+        self._memory_recall_provider = provider
 
     def set_stop_event(self, stop_event: asyncio.Event) -> None:
         """Give the module the cycle's stop event (wired at boot, where the signal handler creates it). A realization that fails once it is set is a shutdown, not a fault. The module's own ``_stopped`` flag is set only when the modules shut down, late in the cycle's shutdown order."""
@@ -956,12 +980,31 @@ class Language(BaseModule):
         self_model = self._self_model()
         situation = tuple(str(f) for f in (self_model.get("situation_facts") or []))
         give_situation = bool(situation)
+
+        recalled_memories: Optional[list[dict[str, Any]]] = None
+        if self._context_memory_recall and self._memory_recall_provider is not None:
+            try:
+                recalled_memories = self._memory_recall_provider(about) or None
+            except Exception:
+                log.debug("memory recall provider failed", exc_info=True)
+
+        if self._context_dialogue and about_is_heard and about.strip():
+            self._dialogue_buffer.append(
+                {"role": "other", "text": about.strip(), "timestamp": time.monotonic()}
+            )
+
+        dialogue_turns: Optional[list[dict[str, Any]]] = None
+        if self._context_dialogue and self._dialogue_buffer:
+            dialogue_turns = list(self._dialogue_buffer)
+
         ctx = self._assembler.assemble(
             about=about,
             snapshot=snap,
             self_model=self_model,
             mode=mode,
             about_is_heard=about_is_heard,
+            recalled_memories=recalled_memories,
+            dialogue_turns=dialogue_turns,
         )
         max_tokens = (
             self._think_max_tokens
@@ -1126,6 +1169,10 @@ class Language(BaseModule):
                 timestamp=datetime.now(timezone.utc),
             )
         )
+        if self._context_dialogue and mode == "external" and text:
+            self._dialogue_buffer.append(
+                {"role": "self", "text": text, "timestamp": time.monotonic()}
+            )
         return text
 
 

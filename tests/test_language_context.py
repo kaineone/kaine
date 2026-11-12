@@ -28,10 +28,12 @@ from kaine.modules.language.context import (
     AWARENESS_HEADING,
     DEFAULT_PERSONA_EXTERNAL,
     DEFAULT_PERSONA_INTERNAL,
+    DIALOGUE_HEADING,
     EMPTY_AWARENESS,
     HEARD_POINTER_INPUT,
     HEARD_POINTER_LINE,
     HEARD_SPEECH_GUARD,
+    MEMORY_HEADING,
     ContextAssembler,
 )
 from tests._fakes import wait_for
@@ -511,3 +513,201 @@ async def test_inhibited_broadcast_is_not_cached(bus, tmp_path):
         assert language._latest_snapshot is None  # inhibited coalition not cached
     finally:
         await language.shutdown()
+
+
+# ---- ContextAssembler: recalled memories -------------------------------------
+
+
+def test_memory_recall_section_appears_with_results():
+    memories = [
+        {"text": "I spoke to someone about the garden.", "affect": "calm"},
+        {"text": "The sunrise was warm."},
+    ]
+    ctx = ContextAssembler().assemble(
+        about="hi", snapshot=None, self_model={}, mode="external",
+        recalled_memories=memories,
+    )
+    assert MEMORY_HEADING in ctx.prompt
+    assert "I spoke to someone about the garden." in ctx.prompt
+    assert "calm" in ctx.prompt
+    assert "The sunrise was warm." in ctx.prompt
+
+
+def test_memory_recall_section_omitted_when_none():
+    ctx = ContextAssembler().assemble(
+        about="hi", snapshot=None, self_model={}, mode="external",
+        recalled_memories=None,
+    )
+    assert MEMORY_HEADING not in ctx.prompt
+
+
+def test_memory_recall_section_omitted_when_empty():
+    ctx = ContextAssembler().assemble(
+        about="hi", snapshot=None, self_model={}, mode="external",
+        recalled_memories=[],
+    )
+    assert MEMORY_HEADING not in ctx.prompt
+
+
+def test_memory_recall_respects_char_budget():
+    memories = [
+        {"text": "a" * 200},
+        {"text": "b" * 200},
+        {"text": "c" * 200},
+        {"text": "d" * 200},
+        {"text": "e" * 200},
+    ]
+    ctx = ContextAssembler(memory_char_budget=450).assemble(
+        about="hi", snapshot=None, self_model={}, mode="external",
+        recalled_memories=memories,
+    )
+    assert MEMORY_HEADING in ctx.prompt
+    # Oldest entries are dropped first: the newest should survive.
+    assert "e" * 200 in ctx.prompt
+    assert "d" * 200 in ctx.prompt
+    # The oldest should be dropped.
+    assert "a" * 200 not in ctx.prompt
+
+
+def test_memory_recall_drops_oldest_first():
+    memories = [
+        {"text": "oldest memory"},
+        {"text": "middle memory"},
+        {"text": "newest memory"},
+    ]
+    ctx = ContextAssembler(memory_char_budget=40).assemble(
+        about="hi", snapshot=None, self_model={}, mode="external",
+        recalled_memories=memories,
+    )
+    assert MEMORY_HEADING in ctx.prompt
+    assert "newest memory" in ctx.prompt
+    assert "oldest memory" not in ctx.prompt
+
+
+def test_memory_recall_redacted_in_logged_prompt():
+    memories = [
+        {"text": "secret episodic content", "affect": "joy"},
+        {"text": "another private memory"},
+    ]
+    ctx = ContextAssembler().assemble(
+        about="hi", snapshot=None, self_model={}, mode="external",
+        recalled_memories=memories,
+    )
+    assert "secret episodic content" in ctx.prompt
+    assert "secret episodic content" not in ctx.logged_prompt
+    assert "another private memory" not in ctx.logged_prompt
+    assert "[2 recalled memories]" in ctx.logged_prompt
+    assert MEMORY_HEADING in ctx.logged_prompt
+
+
+# ---- ContextAssembler: dialogue turns ----------------------------------------
+
+
+def test_dialogue_section_appears_with_turns():
+    turns = [
+        {"role": "other", "text": "How are you?", "timestamp": 1.0},
+        {"role": "self", "text": "I am well.", "timestamp": 2.0},
+    ]
+    ctx = ContextAssembler().assemble(
+        about="hi", snapshot=None, self_model={}, mode="external",
+        dialogue_turns=turns,
+    )
+    assert DIALOGUE_HEADING in ctx.prompt
+    assert "They said: How are you?" in ctx.prompt
+    assert "I said: I am well." in ctx.prompt
+
+
+def test_dialogue_section_omitted_when_none():
+    ctx = ContextAssembler().assemble(
+        about="hi", snapshot=None, self_model={}, mode="external",
+        dialogue_turns=None,
+    )
+    assert DIALOGUE_HEADING not in ctx.prompt
+
+
+def test_dialogue_section_omitted_when_empty():
+    ctx = ContextAssembler().assemble(
+        about="hi", snapshot=None, self_model={}, mode="external",
+        dialogue_turns=[],
+    )
+    assert DIALOGUE_HEADING not in ctx.prompt
+
+
+def test_dialogue_section_respects_char_budget():
+    turns = [
+        {"role": "other", "text": "x" * 150, "timestamp": 1.0},
+        {"role": "self", "text": "y" * 150, "timestamp": 2.0},
+        {"role": "other", "text": "z" * 150, "timestamp": 3.0},
+        {"role": "self", "text": "w" * 150, "timestamp": 4.0},
+    ]
+    ctx = ContextAssembler(dialogue_char_budget=350).assemble(
+        about="hi", snapshot=None, self_model={}, mode="external",
+        dialogue_turns=turns,
+    )
+    assert DIALOGUE_HEADING in ctx.prompt
+    # Newest survive; oldest are dropped.
+    assert "w" * 150 in ctx.prompt
+    assert "z" * 150 in ctx.prompt
+    assert "x" * 150 not in ctx.prompt
+
+
+def test_dialogue_section_drops_oldest_first():
+    turns = [
+        {"role": "other", "text": "oldest turn", "timestamp": 1.0},
+        {"role": "self", "text": "middle turn", "timestamp": 2.0},
+        {"role": "other", "text": "newest turn", "timestamp": 3.0},
+    ]
+    ctx = ContextAssembler(dialogue_char_budget=40).assemble(
+        about="hi", snapshot=None, self_model={}, mode="external",
+        dialogue_turns=turns,
+    )
+    assert DIALOGUE_HEADING in ctx.prompt
+    assert "newest turn" in ctx.prompt
+    assert "oldest turn" not in ctx.prompt
+
+
+def test_section_order_in_prompt():
+    """Memories before dialogue, dialogue before awareness, awareness before input."""
+    memories = [{"text": "a remembered thing"}]
+    turns = [{"role": "self", "text": "a recent thing", "timestamp": 1.0}]
+    ctx = ContextAssembler().assemble(
+        about="hi", snapshot=None,
+        self_model={"situation_facts": ["I exist."]},
+        mode="external",
+        recalled_memories=memories,
+        dialogue_turns=turns,
+    )
+    prompt = ctx.prompt
+    situation_pos = prompt.index("What I know about my situation")
+    memory_pos = prompt.index(MEMORY_HEADING)
+    dialogue_pos = prompt.index(DIALOGUE_HEADING)
+    awareness_pos = prompt.index(AWARENESS_HEADING)
+    input_pos = prompt.index("What was just said to me")
+    assert situation_pos < memory_pos < dialogue_pos < awareness_pos < input_pos
+
+
+def test_dialogue_heard_speech_redacted_in_logged_prompt():
+    """Heard speech in dialogue turns is replaced with a placeholder in the
+    logged prompt (V4: heard speech is never persisted). The entity's own
+    speech is kept."""
+    turns = [
+        {"role": "other", "text": "hello there", "timestamp": 1.0},
+        {"role": "self", "text": "hi back", "timestamp": 2.0},
+    ]
+    ctx = ContextAssembler().assemble(
+        about="hi", snapshot=None, self_model={}, mode="external",
+        dialogue_turns=turns,
+    )
+    assert "hello there" not in ctx.logged_prompt
+    assert "[heard speech]" in ctx.logged_prompt
+    assert "hi back" in ctx.logged_prompt
+
+
+def test_existing_tests_unchanged_without_new_params():
+    """Omitting the new parameters produces the same result as before."""
+    ctx = ContextAssembler().assemble(
+        about="hi", snapshot=None, self_model={}, mode="external",
+    )
+    assert MEMORY_HEADING not in ctx.prompt
+    assert DIALOGUE_HEADING not in ctx.prompt
+    assert AWARENESS_HEADING in ctx.prompt
