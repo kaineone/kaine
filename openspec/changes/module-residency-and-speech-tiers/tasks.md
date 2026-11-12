@@ -43,7 +43,7 @@
 ## 6. LLM residency via the existing chat endpoint
 
 - [x] 6.1 Generate a llama-swap config from KAINE config (model name → `llama-server` command, TTLs, exclusive groups) with `[language].chat_url` pointed at the proxy. Document llama.cpp router mode as the alternative. Installing either is consent-gated. (PR #770.)
-- [ ] 6.2 Reconcile the proxy's loaded models into the ledger, and call the proxy's unload endpoint when admission needs the footprint. `llm_proxy = "none"` makes no reconciliation or unload calls.
+- [x] 6.2 Reconcile the proxy's loaded models into the ledger, and call the proxy's unload endpoint when admission needs the footprint. `llm_proxy = "none"` makes no reconciliation or unload calls. (PR #772.)
 - [x] 6.3 A config-compatibility test showing `[language].chat_url` is unchanged, plus a repository check that no first-party LLM model manager was added. (PR #752.)
 
 ## 7. Speech ladder
