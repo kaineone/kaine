@@ -414,7 +414,7 @@ class ForkManager:
         if self._keyring is not None:
             sidecar = read_identity_sidecar(snapshot_dir(self._root, snapshot_id))
             if sidecar is not None:
-                enc = self._encryptor_for(sidecar.entity_id)
+                enc = self._encryptor_for(sidecar[0])
         snap = load_snapshot(self._root, snapshot_id, encryptor=enc)
         for module in registry.all_modules():
             state = snap.modules.get(module.name)
@@ -442,7 +442,7 @@ class ForkManager:
         if self._keyring is not None:
             parent_sidecar = read_identity_sidecar(snapshot_dir(self._root, parent_id))
             if parent_sidecar is not None:
-                parent_enc = self._encryptor_for(parent_sidecar.entity_id)
+                parent_enc = self._encryptor_for(parent_sidecar[0])
         parent = load_snapshot(self._root, parent_id, encryptor=parent_enc)
         parent_identity = identity_of_snapshot(parent)
         if parent_identity is not None:
@@ -559,9 +559,9 @@ class ForkManager:
             sidecar_a = read_identity_sidecar(snapshot_dir(self._root, snapshot_a_id))
             sidecar_b = read_identity_sidecar(snapshot_dir(self._root, snapshot_b_id))
             if sidecar_a is not None:
-                enc_a = self._encryptor_for(sidecar_a.entity_id)
+                enc_a = self._encryptor_for(sidecar_a[0])
             if sidecar_b is not None:
-                enc_b = self._encryptor_for(sidecar_b.entity_id)
+                enc_b = self._encryptor_for(sidecar_b[0])
         snap_a = load_snapshot(self._root, snapshot_a_id, encryptor=enc_a)
         snap_b = load_snapshot(self._root, snapshot_b_id, encryptor=enc_b)
         a_identity = identity_of_snapshot(snap_a)
@@ -871,7 +871,7 @@ class ForkManager:
         if self._keyring is not None:
             sidecar = read_identity_sidecar(snapshot_dir(self._root, snapshot_id))
             if sidecar is not None:
-                enc = self._encryptor_for(sidecar.entity_id)
+                enc = self._encryptor_for(sidecar[0])
         return load_snapshot(self._root, snapshot_id, encryptor=enc)
 
 

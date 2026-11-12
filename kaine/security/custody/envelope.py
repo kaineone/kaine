@@ -23,6 +23,7 @@ _KEY_BYTES = 32
 
 VALID_KINDS: frozenset[str] = frozenset(
     {
+        "artifact",
         "snapshot",
         "sidecar-jsonl",
         "bundle",
