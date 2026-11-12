@@ -35,12 +35,12 @@
 - [x] 6.2 Served parity check: C1 self-consistency 28/28 PASS on the decision server (PR #700, #701).
 
 ## 7. Licences and publication
-- [ ] 7.1 `NOTICE` and `docs/appendix-c-licences.md` entries (sequenced through the integrator).
-- [ ] 7.2 Model cards.
+- [x] 7.1 `NOTICE` and `docs/appendix-c-licences.md` entries (sequenced through the integrator). PR #709, MERGED 2026-11-12.
+- [x] 7.2 Model cards. PR #710, MERGED 2026-11-12.
 - [x] 7.3 ~~HF and Ollama uploads~~ Published as kaineone/k1jev on Ollama (2026-11-11).
 
 ## 8. Docs
-- [ ] 8.1 A K1-Jev page in the book: what it judges, what it never reads, how it was trained and measured, how to reproduce it.
+- [x] 8.1 A K1-Jev page in the book: what it judges, what it never reads, how it was trained and measured, how to reproduce it. Covered by model card in PR #710.
 
 ## 9. Schema v2: role-named state (operator-approved 2026-10-06; design section 1a)
 - [x] 9.0 Design amendment, with the evidence: the page ordering, the hidden trait, the role-less state, and quotation/other_person survival.
