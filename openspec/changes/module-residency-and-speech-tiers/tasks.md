@@ -26,8 +26,8 @@
 
 ## 4. Residency manager
 
-- [ ] 4.1 `[residency]` config (enabled, reserve, `ttl_seconds` with per-rung overrides, `pin`, `prewarm`, `llm_proxy = "none"`, queue bounds). The defaults leave the manager passive on every existing host.
-- [ ] 4.2 Ledger and state machine (`absent`, `cold`, `loading`, `resident`, `unloading`), with serialised admission and demand-driven eviction (TTL-expired, then background class, then least recently used; never pinned or in-flight).
+- [x] 4.1 `[residency]` config (enabled, reserve, `ttl_seconds` with per-rung overrides, `pin`, `prewarm`, `llm_proxy = "none"`, queue bounds). The defaults leave the manager passive on every existing host. (PR #729.)
+- [x] 4.2 Ledger and state machine (`absent`, `cold`, `loading`, `resident`, `unloading`), with serialised admission and demand-driven eviction (TTL-expired, then background class, then least recently used; never pinned or in-flight). (PR #730.)
 - [ ] 4.3 Two lanes (interactive, background) with deadlines. Preemption uses the yield contract (grace 2 s, hard timeout 10 s, resume from checkpoint).
 - [ ] 4.4 Pinning, keep-resident TTL, prewarm, and the pressure valve (unload warm rungs, least recently used first, as available memory nears the reserve).
 - [ ] 4.5 Content-free residency events (`load_start`, `load_end` with duration, `unload`, `evict`, `downgrade` with reason, `queue_drop`) on the operator status surface and in logs.
