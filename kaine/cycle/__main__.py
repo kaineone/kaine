@@ -1126,6 +1126,32 @@ def _gather_model_ids(config: dict[str, Any], *, eval_chat_model_id: str | None)
     return out
 
 
+def _gather_model_rungs(config: dict[str, Any]) -> dict[str, dict[str, str | None]]:
+    """Collect per-component model rung info from resolved config."""
+    rungs: dict[str, dict[str, str | None]] = {}
+    vocal = config.get("vocal") or {}
+    if vocal.get("backend"):
+        rungs["vocal.tts"] = {
+            "backend": vocal["backend"],
+            "model_id": vocal.get("sherpa_model_id") or vocal["backend"],
+            "quantization": None,
+            "weights_sha256": None,
+        }
+    audition = config.get("audition") or {}
+    if audition.get("backend"):
+        rungs["audition.stt"] = {
+            "backend": audition["backend"],
+            "model_id": (
+                audition.get("sherpa_model_id")
+                or audition.get("stt_model")
+                or audition["backend"]
+            ),
+            "quantization": None,
+            "weights_sha256": None,
+        }
+    return rungs
+
+
 def _resolve_seed(config: dict[str, Any]) -> int:
     """Resolve the run seed: an explicit non-blank ``[experiment].seed`` (int),
     else a fresh 32-bit seed. A fresh seed is always RECORDED in the manifest, so
@@ -1912,6 +1938,7 @@ async def _phase_run_identity(ctx: BootContext) -> int | None:
         settings_record_sha256=settings_record_sha256,
         settings_record_run_data=settings_record_run_data,
         timing=timing,
+        model_rungs=_gather_model_rungs(ctx.kaine_config),
     )
     set_run_context(ctx.run_ctx)
     if bool(ctx.experiment_cfg.get("write_manifest", True)):

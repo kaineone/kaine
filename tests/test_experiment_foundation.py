@@ -370,6 +370,9 @@ def test_manifest_is_content_free(tmp_path):
         # Timing settings (slip-driven-time-dilation): the configured
         # time_scale and the automatic-dilation parameters. Numbers only.
         "timing",
+        # Speech rung selection (module-residency-and-speech-tiers): backend,
+        # model id, quantization and weights hash per component at boot.
+        "model_rungs",
     }
     assert loaded["perception_feed"] == {"mode": "off"}
     assert loaded["plugins"] == {}
