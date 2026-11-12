@@ -35,7 +35,7 @@
 
 ## 5. Integration
 
-- [ ] 5.1 the sleep module's organ window: release and re-admit the organ through the manager, and hold the training footprint in the ledger for the window's duration; behaviour is unchanged when the manager is passive.
+- [x] 5.1 the sleep module's organ window: release and re-admit the organ through the manager, and hold the training footprint in the ledger for the window's duration; behaviour is unchanged when the manager is passive. (PR #742.)
 - [ ] 5.2 the supervisor: a module whose model is loading within its measured bound is alive; an over-bound load is a residency failure (ladder-down, surfaced), not a supervisor restart. Test this with the supervisor self-test harness.
 - [x] 5.3 Audition: bounded in-memory queue (count and age) for audio that arrives while STT is not resident; oldest dropped first; drops counted and surfaced; never persisted. Test that no queued audio reaches disk. (PR #741.)
 - [ ] 5.4 The fit report recommends `[cycle].auto_time_scale = true` on hosts whose plan multiplexes an interactive organ; the operator decides.
