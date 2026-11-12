@@ -18,7 +18,7 @@
 
 ## 3. Migration and docs
 
-- [ ] 3.1 One-way migration from the per-operator key with verified backup; plaintext entities migrated, never retired.
+- [x] 3.1 One-way migration from the per-operator key with verified backup; plaintext entities migrated, never retired. (PR #721.)
 - [x] 3.2 Docs: threat model stated plainly; operator and trustee procedures; Jetson support statement. PR #717 (this PR).
 
 ## 4. Verification

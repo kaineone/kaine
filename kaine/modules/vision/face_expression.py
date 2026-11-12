@@ -94,6 +94,12 @@ class FaceExpressionClassifier:
                 raise RuntimeError("expression classifier is closed")
             await self._ensure_loaded()
 
+    async def unload(self) -> None:
+        """Release loaded model. Next classify() call will reload."""
+        async with self._ensure_state_lock():
+            self._net = None
+        logger.info("Expression classifier unloaded")
+
     async def classify(self, face_crop: np.ndarray) -> ExpressionResult | None:
         """Classify the expression in an aligned face crop.
 

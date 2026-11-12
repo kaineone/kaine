@@ -326,3 +326,66 @@ async def test_landmark_gaze_none_landmarks():
     estimator = LandmarkGazeEstimator()
     result = await estimator.estimate(None, (480, 640))
     assert result is None
+
+
+# ---------------------------------------------------------------------------
+# unload() — reversible model release
+# ---------------------------------------------------------------------------
+
+
+async def test_face_detector_unload(monkeypatch: pytest.MonkeyPatch):
+    det = _patch_detector(monkeypatch, _fake_faces_matrix(1))
+    assert det.loaded
+    await det.unload()
+    assert not det.loaded
+    assert not det._closed
+    assert det._executor is not None
+    await det.aclose()
+
+
+async def test_face_detector_unload_then_reload(monkeypatch: pytest.MonkeyPatch):
+    det = _patch_detector(monkeypatch, _fake_faces_matrix(1))
+    result_before = await det.detect(_fake_frame())
+    assert len(result_before.faces) == 1
+    await det.unload()
+    assert not det.loaded
+    det._detector = _FakeYuNet(_fake_faces_matrix(2))
+    det._recognizer = _FakeSFace()
+    result_after = await det.detect(_fake_frame())
+    assert len(result_after.faces) == 2
+    await det.aclose()
+
+
+async def test_expression_classifier_unload():
+    cls = _patch_expression_classifier()
+    assert cls.loaded
+    await cls.unload()
+    assert not cls.loaded
+    assert not cls._closed
+    assert cls._executor is not None
+    await cls.aclose()
+
+
+async def test_expression_classifier_unload_then_reload():
+    cls = _patch_expression_classifier()
+    crop = np.zeros((112, 112, 3), dtype=np.uint8)
+    result_before = await cls.classify(crop)
+    assert result_before is not None
+    await cls.unload()
+    assert not cls.loaded
+    cls._net = _FakeExpressionNet()
+    result_after = await cls.classify(crop)
+    assert result_after is not None
+    assert result_after.label in EXPRESSION_CATEGORIES
+    await cls.aclose()
+
+
+async def test_landmark_gaze_unload():
+    estimator = LandmarkGazeEstimator()
+    await estimator.unload()
+    landmarks = np.array(
+        [[280.0, 200.0], [360.0, 200.0], [320.0, 250.0],
+         [295.0, 290.0], [345.0, 290.0]], dtype=np.float32,
+    )
+    result = await estimator.estimate(landmarks, (480, 640, 3))
+    assert result is not None
