@@ -27,13 +27,17 @@ class ServiceController(Protocol):
     """Async start/stop/health for one external model server."""
 
     @property
-    def name(self) -> str: ...
+    def name(self) -> str:
+        pass  # protocol stub
 
-    async def stop(self) -> bool: ...
+    async def stop(self) -> bool:
+        pass  # protocol stub
 
-    async def start(self) -> bool: ...
+    async def start(self) -> bool:
+        pass  # protocol stub
 
-    async def health(self) -> tuple[bool, str]: ...
+    async def health(self) -> tuple[bool, str]:
+        pass  # protocol stub
 
 
 _compose_cmd: list[str] | None = None
