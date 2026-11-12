@@ -83,16 +83,12 @@ def get_device(requested: str) -> torch.device:
 
 
 def copy_model(src: Path, dst: Path) -> None:
-    """Copy the model directory, preserving safetensors and config files."""
+    """Copy the model directory, overwriting any existing files."""
     dst.mkdir(parents=True, exist_ok=True)
     for f in src.iterdir():
         if f.is_file():
-            target = dst / f.name
-            if not target.exists():
-                log.info("copying %s", f.name)
-                shutil.copy2(f, target)
-            else:
-                log.info("skipping %s (exists)", f.name)
+            log.info("copying %s", f.name)
+            shutil.copy2(f, dst / f.name)
 
 
 def load_components(
@@ -175,15 +171,18 @@ def modify_tensor_norm_preserved(
         del W_gpu
 
         W_norm = torch.norm(W_working, dim=-1, keepdim=True)
-        W_direction = torch.nn.functional.normalize(W_working, dim=-1)
+        safe_norm = W_norm.clamp(min=1e-12)
+        W_direction = W_working / safe_norm
         del W_working
 
         projection = torch.matmul(W_direction, d)
         W_direction_new = W_direction - projection.unsqueeze(-1) * d
-        W_direction_new = torch.nn.functional.normalize(W_direction_new, dim=-1)
+        new_norm = torch.norm(W_direction_new, dim=-1, keepdim=True).clamp(min=1e-12)
+        W_direction_new = W_direction_new / new_norm
         # Second pass for numerical stability
         W_direction_new = W_direction_new - (W_direction_new @ d).unsqueeze(-1) * d
-        W_direction_new = torch.nn.functional.normalize(W_direction_new, dim=-1)
+        new_norm2 = torch.norm(W_direction_new, dim=-1, keepdim=True).clamp(min=1e-12)
+        W_direction_new = W_direction_new / new_norm2
 
         W_modified = W_norm * W_direction_new
         result = W_modified.T
@@ -261,12 +260,15 @@ def ablate_pc_from_model(
     return {"pc_index": pc_index, "modified_tensors": modified_count}
 
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
 def run_gate1(
     model_path: Path, out_path: Path, samples: int
 ) -> dict[str, Any]:
     """Run gate 1 (self-denial check) on safetensors and return the result."""
     cmd = [
-        sys.executable, "scripts/self_denial_check.py",
+        sys.executable, str(REPO_ROOT / "scripts" / "self_denial_check.py"),
         "--model-path", str(model_path),
         "--out", str(out_path),
         "--samples", str(samples),
