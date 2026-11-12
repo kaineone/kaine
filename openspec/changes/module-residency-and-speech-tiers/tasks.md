@@ -31,7 +31,7 @@
 - [x] 4.3 Two lanes (interactive, background) with deadlines. Preemption uses the yield contract (grace 2 s, hard timeout 10 s, resume from checkpoint). (PR #731.)
 - [x] 4.4 Pinning, keep-resident TTL, prewarm, and the pressure valve (unload warm rungs, least recently used first, as available memory nears the reserve). (PR #732.)
 - [x] 4.5 Content-free residency events (`load_start`, `load_end` with duration, `unload`, `evict`, `downgrade` with reason, `queue_drop`) on the operator status surface and in logs. (PR #733.)
-- [ ] 4.6 Route the speech organs, the vision encoder, the emotion classifier and the embedder through the manager. Record a diff-scope review showing no changes to cognitive-cycle, workspace or module-semantics files.
+- [x] 4.6 Route the speech organs, the vision encoder, the emotion classifier and the embedder through the manager. Record a diff-scope review showing no changes to cognitive-cycle, workspace or module-semantics files. (PR #738.)
 
 ## 5. Integration
 
