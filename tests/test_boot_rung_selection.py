@@ -31,10 +31,6 @@ class FakeRouter:
 
 # ---- helpers ---------------------------------------------------------------
 
-_CHATTERBOX = LADDERS["vocal.tts"][0]
-_KOKORO = LADDERS["vocal.tts"][1]
-_SPEACHES = LADDERS["audition.stt"][0]
-
 
 def _entry(component: str, backend: str, model_id: str, host_class: str, nbytes: int):
     """Build a catalogue-shaped SimpleNamespace for test fixtures."""
