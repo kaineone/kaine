@@ -34,6 +34,18 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
+class LockstepBarrierTimeout(Exception):
+    """Raised when a lockstep tick barrier times out waiting for tick_done."""
+
+    def __init__(self, tick: int, pending: list[str]) -> None:
+        self.tick = tick
+        self.pending = pending
+        super().__init__(
+            f"lockstep barrier timed out at tick {tick}; "
+            f"still waiting for: {', '.join(pending)}"
+        )
+
+
 def _real_utc_now() -> datetime:
     """Default wall-clock seam: real UTC time."""
     return datetime.now(timezone.utc)
@@ -1323,7 +1335,7 @@ class CognitiveCycle:
                     tick,
                     ", ".join(sorted(pending)),
                 )
-                break
+                raise LockstepBarrierTimeout(tick, sorted(pending))
 
             for name in list(pending):
                 stream = module_stream(name)
