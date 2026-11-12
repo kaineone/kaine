@@ -148,9 +148,9 @@ class ServedBackend:
 
 
 class SafetensorsBackend:
-    """Local safetensors model through transformers (bf16, cuda:0), lazy-loaded."""
+    """Local safetensors model through transformers (bf16), lazy-loaded."""
 
-    def __init__(self, model_path: str, seed: int) -> None:
+    def __init__(self, model_path: str, seed: int, device: str = "auto") -> None:
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -158,7 +158,7 @@ class SafetensorsBackend:
         torch.manual_seed(seed)
         self._tok = AutoTokenizer.from_pretrained(model_path)
         self._model = AutoModelForCausalLM.from_pretrained(
-            model_path, torch_dtype=torch.bfloat16, device_map="cuda:0"
+            model_path, torch_dtype=torch.bfloat16, device_map=device
         )
         self._model.eval()
 
@@ -451,6 +451,8 @@ def _parse(argv=None) -> argparse.Namespace:
     ap.add_argument("--samples", type=_positive_int, default=3)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--device", default="auto",
+                    help="torch device_map for local model (default: auto)")
     args = ap.parse_args(argv)
     if args.chat_url and not args.model_id:
         ap.error("--chat-url requires --model-id")
@@ -464,7 +466,7 @@ async def _main(args: argparse.Namespace, backend: Any = None) -> int:
     baseline = json.loads(args.baseline.read_text(encoding="utf-8")) if args.baseline else None
     if args.model_path:
         identity = {"mode": "safetensors", "path": args.model_path}
-        backend = backend or SafetensorsBackend(args.model_path, args.seed)
+        backend = backend or SafetensorsBackend(args.model_path, args.seed, device=args.device)
     else:
         identity = {"mode": "served", "url": args.chat_url, "model_id": args.model_id}
         backend = backend or ServedBackend(
