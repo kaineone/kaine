@@ -155,3 +155,55 @@ def _make_entry(component, backend, model_id, host_class, bytes_):
 
 GIB = 1 << 30
 MIB = 1 << 20
+
+
+def test_host_class_no_torch(monkeypatch):
+    import builtins
+    real_import = builtins.__import__
+
+    def _no_torch(name, *args, **kwargs):
+        if name == "torch":
+            raise ImportError("no torch")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _no_torch)
+    from kaine.residency.catalogue import host_class
+
+    assert host_class() == "cpu"
+
+
+def test_host_class_no_cuda(monkeypatch):
+    import types
+    fake_torch = types.ModuleType("torch")
+    fake_cuda = types.ModuleType("torch.cuda")
+    fake_cuda.is_available = lambda: False
+    fake_torch.cuda = fake_cuda
+    monkeypatch.setitem(__import__("sys").modules, "torch", fake_torch)
+    from kaine.residency.catalogue import host_class
+
+    assert host_class() == "cpu"
+
+
+def test_host_class_unified(monkeypatch):
+    import types
+    from dataclasses import dataclass
+
+    @dataclass
+    class FakeClassification:
+        state: str
+        unknown_reason: str | None
+
+    fake_torch = types.ModuleType("torch")
+    fake_cuda = types.ModuleType("torch.cuda")
+    fake_cuda.is_available = lambda: True
+    fake_torch.cuda = fake_cuda
+    monkeypatch.setitem(__import__("sys").modules, "torch", fake_torch)
+
+    from kaine import hostmem as _hm
+    from kaine.residency import catalogue as _cat
+
+    monkeypatch.setattr(
+        _hm, "classify_accelerator_memory",
+        lambda index, torch=None: FakeClassification(state="unified", unknown_reason=None),
+    )
+    assert _cat.host_class() == "unified"

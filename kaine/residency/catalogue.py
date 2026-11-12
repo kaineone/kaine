@@ -228,3 +228,24 @@ def footprint_bytes(
             best = entry.bytes
     return best
 
+
+def host_class() -> str:
+    """Return the host memory class: 'cpu', 'unified', or 'discrete'.
+
+    Unlike ``kaine.setup.footprint.host_class``, this returns 'cpu' on
+    unknown classifications instead of raising, because the boot path
+    needs graceful degradation (uncalibrated rungs are accepted).
+    """
+    try:
+        import torch
+    except Exception:
+        return "cpu"
+    if not torch.cuda.is_available():
+        return "cpu"
+    from kaine.hostmem import classify_accelerator_memory
+
+    classification = classify_accelerator_memory(0, torch=torch)
+    if classification.state in ("unified", "discrete"):
+        return classification.state
+    return "cpu"
+
