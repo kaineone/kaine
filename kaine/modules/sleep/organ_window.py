@@ -33,7 +33,10 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
+
+if TYPE_CHECKING:
+    from kaine.residency.router import ResidencyRouter
 
 # Boundary-neutral window-state seam (depends on neither core-runtime nor the
 # evaluation sidecar) so the language module + the A/B eval arm read the same signal without
@@ -248,6 +251,35 @@ class OrganServerController:
         return self._organ_answers()
 
 
+async def _notify_router(
+    router: "ResidencyRouter | None",
+    action: str,
+    name: str,
+    footprint_bytes: int = 0,
+) -> bool:
+    """Best-effort residency notification. Never raises."""
+    if router is None:
+        return True
+    try:
+        if action == "before_unload":
+            router.before_unload(name)
+            return True
+        elif action == "after_unload":
+            router.after_unload(name)
+            return True
+        elif action == "register":
+            router.register(name, footprint_bytes)
+            return True
+        elif action == "before_load":
+            return await router.before_load(name, footprint_bytes)
+        elif action == "after_load":
+            router.after_load(name)
+            return True
+    except Exception:
+        log.warning("organ window: residency %s(%s) failed", action, name, exc_info=True)
+    return False
+
+
 async def run_with_organ_window(
     *,
     train: Callable[[], Any],
@@ -258,6 +290,9 @@ async def run_with_organ_window(
     host_describer: Optional[Callable[[], dict[str, Any]]] = None,
     state_path: Path = ORGAN_WINDOW_STATE,
     trainer_backend: str = "in_process",
+    router: "ResidencyRouter | None" = None,
+    training_footprint_bytes: int = 0,
+    organ_footprint_bytes: int = 0,
 ) -> tuple[Any, OrganWindowResult]:
     """Run ``train`` inside the on-device GPU window and return its result.
 
@@ -315,13 +350,19 @@ async def run_with_organ_window(
     train_error: Optional[str] = None
     adapter_path: Optional[Path] = None
 
+    await _notify_router(router, "before_unload", "organ")
     write_window_state(PHASE_RESTING, detail="unloading organ for training", path=state_path)
     unloaded = ctrl.unload()
     if not unloaded:
         log.warning("organ window: organ unload reported failure; proceeding cautiously")
+    await _notify_router(router, "after_unload", "organ")
 
     try:
         write_window_state(PHASE_TRAINING, detail="trainer running", path=state_path)
+        if training_footprint_bytes > 0:
+            await _notify_router(router, "register", "organ_training", training_footprint_bytes)
+            await _notify_router(router, "before_load", "organ_training", training_footprint_bytes)
+            await _notify_router(router, "after_load", "organ_training")
         result = await train()
         adapter_path = getattr(result, "adapter_path", None) if getattr(result, "accepted", False) else None
     except Exception as exc:
@@ -330,11 +371,15 @@ async def run_with_organ_window(
     finally:
         # Welfare-critical: ALWAYS reload a working organ before wake, whether
         # training succeeded, was vetoed, crashed, or timed out.
+        if training_footprint_bytes > 0:
+            await _notify_router(router, "before_unload", "organ_training")
+            await _notify_router(router, "after_unload", "organ_training")
         write_window_state(
             PHASE_RELOADING,
             detail=("reloading with accepted adapter" if adapter_path else "reloading organ"),
             path=state_path,
         )
+        await _notify_router(router, "before_load", "organ", organ_footprint_bytes)
         try:
             restored = ctrl.reload(adapter_path=adapter_path)
         except Exception:
@@ -351,6 +396,8 @@ async def run_with_organ_window(
             except Exception:
                 log.exception("organ window: rollback reload raised")
                 restored = False
+        if restored:
+            await _notify_router(router, "after_load", "organ")
         accepted = bool(getattr(result, "accepted", False)) if result is not None else None
         reason = getattr(result, "reason", None) if result is not None else None
         write_window_state(
