@@ -94,3 +94,13 @@ OpenNARS-for-Applications (archived, not active)
   Location:  external/archive/ (historical reference only; not imported at runtime)
   Upstream:  opennars/OpenNARS-for-Applications
   License:   MIT
+
+PUBLISHED MODELS DERIVED FROM THIRD-PARTY BASE MODELS
+
+K1-Jev decision model (kaineone/k1jev on Ollama)
+  Base model:  Qwen/Qwen3.5-0.8B (Alibaba Cloud)
+  License:     Apache-2.0 (inherited from base model)
+  Note:        QLoRA SFT fine-tune (r=16, alpha=32) for the 14-question welfare
+               decision schema. Q8_0 GGUF, 811 MB. Training data produced by
+               three-judge distillation from entity utterances; no third-party
+               datasets. Served by the decision server (compose/kaine.yml).
