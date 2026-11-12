@@ -74,6 +74,8 @@ class EntityClock:
         self._wall_origin = self._monotonic()
         self._origin = float(origin)
         if self._lockstep:
+            if tick_period <= 0:
+                raise ValueError("tick_period must be positive")
             self._tick_period = float(tick_period)
             self._tick_count = 0
 

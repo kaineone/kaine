@@ -30,6 +30,14 @@ def test_lockstep_rejects_nonunit_scale():
         EntityClock(scale=2.0, lockstep=True, monotonic=mc, real_sleep=mc.sleep)
 
 
+def test_lockstep_rejects_nonpositive_tick_period():
+    mc = ManualClock()
+    with pytest.raises(ValueError):
+        EntityClock(lockstep=True, tick_period=0.0, monotonic=mc, real_sleep=mc.sleep)
+    with pytest.raises(ValueError):
+        EntityClock(lockstep=True, tick_period=-1.0, monotonic=mc, real_sleep=mc.sleep)
+
+
 def test_lockstep_constructor_stores_params():
     mc = ManualClock()
     c = EntityClock(lockstep=True, tick_period=0.1, monotonic=mc, real_sleep=mc.sleep)
