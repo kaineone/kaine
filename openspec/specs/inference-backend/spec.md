@@ -17,6 +17,11 @@ implementation on CUDA hosts is Unsloth Studio (already required there for the
 sleep-cycle trainer), and the configured base URL MAY target any conforming local
 server.
 
+This requirement covers language-organ inference and the A/B baseline only. The
+decision-model server (`decision-model` capability) is a separate local server
+that serves only llama-server's `/v1/systemone` and SHALL NOT serve language-organ
+inference; the organ server SHALL NOT be used for decision-model queries.
+
 #### Scenario: Organ inference uses the OpenAI endpoint
 
 - **WHEN** the language module issues a generation request
@@ -28,6 +33,11 @@ server.
 - **WHEN** the enabled modules are provisioned on a host with no Ollama installed
 - **AND** an OpenAI-compatible local server is serving the organ model
 - **THEN** the organ and the A/B baseline operate normally
+
+#### Scenario: Decision queries never reach the organ
+
+- **WHEN** an instrument asks the decision model a question
+- **THEN** the request goes to the decision server's `/v1/systemone`, and the organ server receives no request for it
 
 ### Requirement: Reasoning suppression is backend-portable
 
