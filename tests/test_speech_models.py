@@ -398,3 +398,47 @@ def test_main_cli_fetch_with_injected_downloader(
 def test_main_cli_unknown_model() -> None:
     result = main(["--stt", "not-a-model"], input_fn=lambda prompt: "")
     assert result == 2
+
+
+def test_consent_denied_downloads_nothing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    archive = tmp_path / "test.tar.bz2"
+    top_dir = "sherpa-onnx-test"
+    _make_archive(archive, top_dir, {"tokens.txt": b"tok"})
+    _patch_manifest(monkeypatch, "test-model", archive, top_dir, ("tokens.txt",))
+    root = tmp_path / "models"
+    calls: list[tuple[str, str]] = []
+
+    def spy(url: str, dest: str) -> None:
+        calls.append((url, dest))
+
+    result = main(
+        ["--stt", "test-model", "--root", str(root)],
+        input_fn=lambda prompt: "n",
+        downloader=spy,
+    )
+    assert result == 0
+    assert calls == []
+    assert not model_dir("test-model", root).exists()
+    assert not root.exists() or not any(root.iterdir())
+
+
+def test_fetch_idempotent_after_install(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    archive = tmp_path / "test.tar.bz2"
+    top_dir = "sherpa-onnx-test"
+    _make_archive(archive, top_dir, {"tokens.txt": b"tok"})
+    _patch_manifest(monkeypatch, "test-model", archive, top_dir, ("tokens.txt",))
+    root = tmp_path / "models"
+
+    first = fetch("test-model", root=root, downloader=_copy_downloader(archive))
+    assert first.ok
+    assert first.detail == "installed"
+
+    calls: list[tuple[str, str]] = []
+
+    def spy(url: str, dest: str) -> None:
+        calls.append((url, dest))
+
+    second = fetch("test-model", root=root, downloader=spy)
+    assert second.ok
+    assert second.detail == "already installed"
+    assert calls == []
