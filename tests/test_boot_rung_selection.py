@@ -63,9 +63,8 @@ def test_no_rung_override_when_residency_disabled(monkeypatch):
     # Simulate the guard: router is None -> the block is skipped entirely
     router = None
     name = "vocal"
-    assert router is not None and name in _SPEECH_COMPONENTS or not called
-    # The real construct_module short-circuits on `router is not None`, so
-    # select_rung is never reached.
+    assert name in _SPEECH_COMPONENTS
+    assert router is None
     assert not called
 
 
