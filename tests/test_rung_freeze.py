@@ -13,14 +13,13 @@ from pathlib import Path
 
 import pytest
 
+from kaine.experiment.admissibility import scan_run
 from kaine.residency.rung_freeze import (
-    FrozenRungs,
     RungLoadFailure,
     clear_frozen_rungs,
     freeze_rungs,
     get_frozen_rungs,
 )
-from kaine.experiment.admissibility import scan_run
 
 RUN = "run-freeze-test"
 
