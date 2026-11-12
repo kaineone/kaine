@@ -666,6 +666,13 @@ def test_no_file_is_written_during_a_transition(tmp_path, monkeypatch):
             clock.t = float(t)
             assert source.read()[0]
         assert transition.released
+        # Advance the fake clock past the transition so the producer thread
+        # has headroom to deliver blocks — it paces against the *fake* clock,
+        # not real time, so a frozen clock at 5.0 lets at most one block
+        # through before the pacing loop parks.  (Matches the pattern in
+        # test_audio_is_silent_during_the_crossfade_then_fades_in which sets
+        # clock.t = 54.1 for the same reason.)
+        clock.t = 6.0
         assert _wait_for(lambda: len(heard) >= 2)
     finally:
         stream.stop()
