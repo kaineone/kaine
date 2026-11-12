@@ -10,8 +10,10 @@ in-flight protection for the vision encoders and Emotion2vecClassifier.
 from __future__ import annotations
 
 import asyncio
+import gc
 import sys
 import threading
+import weakref
 from types import SimpleNamespace
 from typing import Any
 
@@ -112,7 +114,9 @@ async def test_emotion_unload_waits_for_inflight(monkeypatch):
     try:
         await asyncio.wait_for(aio_event.wait(), timeout=_HANG_TIMEOUT_S)
 
-        unload_task = asyncio.create_task(asyncio.wait_for(classifier.unload(), timeout=_HANG_TIMEOUT_S))
+        unload_task = asyncio.create_task(
+            asyncio.wait_for(classifier.unload(), timeout=_HANG_TIMEOUT_S)
+        )
         await asyncio.sleep(0.05)
         assert not unload_task.done()
         # The model is still held while the inference is in flight.
@@ -131,6 +135,7 @@ async def test_emotion_unload_waits_for_inflight(monkeypatch):
 @pytest.mark.asyncio
 async def test_emotion_unload_in_gap(monkeypatch):
     """A concurrent unload between load and use does not crash the classify."""
+
     class HappyAutoModel:
         def __init__(self, **kwargs):
             pass
@@ -225,7 +230,9 @@ async def test_emotion_cancelled_inference_unload_waits_for_worker(monkeypatch):
         with pytest.raises(asyncio.CancelledError):
             _ = await classify_task
 
-        unload_task = asyncio.create_task(asyncio.wait_for(classifier.unload(), timeout=_HANG_TIMEOUT_S))
+        unload_task = asyncio.create_task(
+            asyncio.wait_for(classifier.unload(), timeout=_HANG_TIMEOUT_S)
+        )
         await asyncio.sleep(0.1)
         assert not unload_task.done()
         assert classifier.loaded
@@ -236,6 +243,31 @@ async def test_emotion_cancelled_inference_unload_waits_for_worker(monkeypatch):
     assert unload_task is not None
     await asyncio.wait_for(unload_task, timeout=_HANG_TIMEOUT_S)
     assert not classifier.loaded
+
+
+@pytest.mark.asyncio
+async def test_emotion_unload_collects_model_ref(monkeypatch):
+    """The funasr AutoModel instance is freed after unload()."""
+
+    class HappyAutoModel:
+        def __init__(self, **kwargs):
+            pass
+
+        def generate(self, *, input, granularity, extract_embedding):
+            return [{"labels": ["/happy/"], "scores": [0.9]}]
+
+    monkeypatch.setitem(sys.modules, "funasr", SimpleNamespace(AutoModel=HappyAutoModel))
+
+    classifier = Emotion2vecClassifier()
+    await classifier.classify(b"\x00", sample_rate=16000)
+    assert classifier.loaded
+
+    ref = weakref.ref(classifier._model)
+    assert ref() is not None
+
+    await classifier.unload()
+    gc.collect()
+    assert ref() is None
 
 
 # --------------------------------------------------------------------------
@@ -279,6 +311,94 @@ async def test_internvideo_next_unload_and_reload(monkeypatch):
     result = await encoder.encode_clip(frames)
     assert result == [1.0] * 768
     assert len(loader_calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_dinov2_unload_collects_model_ref(monkeypatch):
+    """The transformers model is freed after DINOv2 unload()."""
+
+    class FakeProcessor:
+        def __call__(self, *, images, return_tensors):
+            return {"pixel_values": torch.zeros(1, 3, 224, 224)}
+
+    class FakeAutoImageProcessor:
+        @classmethod
+        def from_pretrained(cls, model_id, **kwargs):
+            return FakeProcessor()
+
+    class FakeModel:
+        def __init__(self, model_id, **kwargs):
+            pass
+
+        def to(self, device):
+            return self
+
+        def eval(self):
+            return self
+
+        def parameters(self):
+            return iter([torch.nn.Parameter(torch.zeros(1))])
+
+        def __call__(self, **kwargs):
+            return SimpleNamespace(last_hidden_state=torch.randn(1, 197, 384))
+
+    class FakeAutoModel:
+        @classmethod
+        def from_pretrained(cls, model_id, **kwargs):
+            return FakeModel(model_id, **kwargs)
+
+    fake_transformers = SimpleNamespace(
+        AutoImageProcessor=FakeAutoImageProcessor,
+        AutoModel=FakeAutoModel,
+    )
+    monkeypatch.setitem(sys.modules, "transformers", fake_transformers)
+
+    encoder = DINOv2Encoder(device_preference="cpu")
+    await encoder.load()
+    assert encoder.loaded
+
+    ref = weakref.ref(encoder._model)
+    assert ref() is not None
+
+    await encoder.unload()
+    gc.collect()
+    assert ref() is None
+
+
+@pytest.mark.asyncio
+async def test_internvideo_next_unload_collects_model_ref(monkeypatch):
+    """The InternVideo-Next model is freed after unload()."""
+
+    class FakeLoadedModel:
+        pass
+
+    def fake_loader(**kwargs):
+        return FakeLoadedModel()
+
+    def fake_processor(*args, **kwargs):
+        return {"pixel_values": torch.zeros(1, 16, 3, 224, 224)}
+
+    monkeypatch.setattr(
+        "kaine.modules.vision.internvideo_next_loader.load_internvideo_next",
+        fake_loader,
+    )
+    monkeypatch.setattr(
+        "kaine.modules.vision.encoder._load_videomae_processor",
+        fake_processor,
+    )
+
+    encoder = InternVideoNextEncoder(device_preference="cpu", clip_len=16)
+    encoder._forward_clip = lambda frames, **kwargs: [1.0] * 768
+
+    await encoder.load()
+    assert encoder.loaded
+
+    ref = weakref.ref(encoder._model)
+    assert ref() is not None
+
+    await encoder.unload()
+    gc.collect()
+    assert ref() is None
 
 
 @pytest.mark.asyncio
@@ -473,7 +593,9 @@ async def test_dinov2_cancelled_inference_unload_waits_for_worker(monkeypatch):
         with pytest.raises(asyncio.CancelledError):
             _ = await encode_task
 
-        unload_task = asyncio.create_task(asyncio.wait_for(encoder.unload(), timeout=_HANG_TIMEOUT_S))
+        unload_task = asyncio.create_task(
+            asyncio.wait_for(encoder.unload(), timeout=_HANG_TIMEOUT_S)
+        )
         await asyncio.sleep(0.1)
         assert not unload_task.done()
         assert encoder.loaded
