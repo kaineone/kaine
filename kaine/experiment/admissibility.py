@@ -73,6 +73,7 @@ class AdmissibilityReport:
     # a non-empty list here means the scan itself spans more than one run_id.
     restart_seq_resets: dict[str, list[int]] = field(default_factory=dict)
     related_run_ids: list[str] = field(default_factory=list)
+    rung_load_failures: list[str] = field(default_factory=list)
 
     def restart_detected(self) -> bool:
         """True when either a seq reset or a declared multi-run-id span was seen."""
@@ -99,6 +100,8 @@ class AdmissibilityReport:
                 "restart/multi-process detected (multiple run_ids scanned as one "
                 f"logical run): {[self.run_id, *self.related_run_ids]}"
             )
+        if self.rung_load_failures:
+            out.append(f"rung load failures: {self.rung_load_failures}")
         return out
 
     def to_dict(self) -> dict[str, Any]:
@@ -203,6 +206,7 @@ def scan_run(
     root: Path | str = DEFAULT_ROOT,
     expected_streams: Iterable[str] = (),
     related_run_ids: Iterable[str] = (),
+    rung_load_failures: Iterable[str] = (),
 ) -> AdmissibilityReport:
     """Scan a finished run for completeness and return an admissibility report.
 
@@ -231,6 +235,7 @@ def scan_run(
     and no declared ``related_run_ids``.
     """
     related = [str(r) for r in related_run_ids]
+    rung_failures = [str(f) for f in rung_load_failures]
     records: RunRecords = _load_combined(run_id, related, root=root)
     expected = [str(s) for s in expected_streams]
 
@@ -264,6 +269,7 @@ def scan_run(
         and parse_errors == 0
         and not restart_seq_resets
         and not related
+        and not rung_failures
     )
 
     return AdmissibilityReport(
@@ -275,6 +281,7 @@ def scan_run(
         parse_errors=parse_errors,
         restart_seq_resets=restart_seq_resets,
         related_run_ids=related,
+        rung_load_failures=rung_failures,
     )
 
 
