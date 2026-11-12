@@ -16,7 +16,6 @@ log = logging.getLogger(__name__)
 
 
 class ResidencyRouter:
-
     def __init__(self, ledger: Ledger) -> None:
         self._ledger = ledger
         self._load_starts: dict[str, float] = {}
@@ -25,8 +24,16 @@ class ResidencyRouter:
     def ledger(self) -> Ledger:
         return self._ledger
 
-    def register(self, name: str, footprint_bytes: int = 0, ttl_seconds: int = 120) -> None:
-        self._ledger.register(name, footprint_bytes, ttl_seconds)
+    def register(
+        self,
+        name: str,
+        footprint_bytes: int = 0,
+        ttl_seconds: int = 120,
+        measured_load_seconds: float = 0.0,
+    ) -> None:
+        self._ledger.register(
+            name, footprint_bytes, ttl_seconds, measured_load_seconds=measured_load_seconds
+        )
 
     async def before_load(self, name: str, footprint_bytes: int = 0) -> bool:
         from kaine.residency.events import record_load_start

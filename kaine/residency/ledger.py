@@ -32,6 +32,8 @@ class Entry:
     priority: Priority = Priority.BACKGROUND
     inflight: int = 0
     ttl_seconds: int = 120
+    load_started_at: float = 0.0
+    measured_load_seconds: float = 0.0
 
 
 class Ledger:
@@ -41,13 +43,20 @@ class Ledger:
         self._pin = pin
         self._lock = asyncio.Lock()
 
-    def register(self, name: str, footprint_bytes: int = 0, ttl_seconds: int = 120) -> None:
+    def register(
+        self,
+        name: str,
+        footprint_bytes: int = 0,
+        ttl_seconds: int = 120,
+        measured_load_seconds: float = 0.0,
+    ) -> None:
         entry = self._entries.get(name)
         if entry is None:
             entry = Entry(
                 name=name,
                 footprint_bytes=footprint_bytes,
                 ttl_seconds=ttl_seconds,
+                measured_load_seconds=measured_load_seconds,
             )
             self._entries[name] = entry
         elif entry.state in (State.ABSENT, State.COLD):
@@ -99,6 +108,7 @@ class Ledger:
                 entry.footprint_bytes = footprint_bytes
                 entry.priority = priority
                 entry.last_used = time.monotonic()
+                entry.load_started_at = time.monotonic()
                 return True
             return False
 
@@ -107,6 +117,7 @@ class Ledger:
         if entry is not None:
             entry.state = State.RESIDENT
             entry.last_used = time.monotonic()
+            entry.load_started_at = 0.0
 
     def mark_unloading(self, name: str) -> None:
         entry = self._entries.get(name)
@@ -118,11 +129,22 @@ class Ledger:
         if entry is not None:
             entry.state = State.COLD
             entry.footprint_bytes = 0
+            entry.load_started_at = 0.0
 
     def record_use(self, name: str) -> None:
         entry = self._entries.get(name)
         if entry is not None and entry.state == State.RESIDENT:
             entry.last_used = time.monotonic()
+
+    def loading_entries(self) -> list[tuple[str, float, float]]:
+        """Return (name, elapsed_seconds, measured_bound) for entries in LOADING state."""
+        now = time.monotonic()
+        result = []
+        for name, entry in self._entries.items():
+            if entry.state == State.LOADING and entry.load_started_at > 0:
+                elapsed = now - entry.load_started_at
+                result.append((name, elapsed, entry.measured_load_seconds))
+        return result
 
     def increment_inflight(self, name: str) -> None:
         entry = self._entries.get(name)
