@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import re
 import secrets
@@ -24,6 +25,8 @@ from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 from kaine.security.custody.encryptor import EntityEncryptor
+
+log = logging.getLogger(__name__)
 
 _ENTITY_ID_RE = re.compile(r"^(ent|legacy)-[0-9a-f]{32}$")
 
@@ -197,7 +200,7 @@ class KeyRing:
         try:
             os.chmod(tmp, 0o600)
         except (OSError, NotImplementedError):
-            pass
+            log.debug("chmod 0o600 best-effort on %s (non-critical)", tmp)
         os.replace(tmp, path)
 
     def _load_dek_file(self, entity_id: str) -> WrappedDek:
