@@ -361,8 +361,7 @@ def test_save_load_snapshot_direct_with_encryptor(tmp_path: Path) -> None:
     disk = snap_root / snap.id / "snapshot.json"
     raw = disk.read_text()
     with pytest.raises((json.JSONDecodeError, ValueError)):
-        parsed = json.loads(raw)
-        assert "interoception" not in json.dumps(parsed)
+        json.loads(raw)
 
 
 def test_reencrypt_artifacts_transfers_between_keys(tmp_path: Path) -> None:
