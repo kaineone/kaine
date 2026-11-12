@@ -15,3 +15,5 @@
 ^tests/test_playlist_av_sync\.py$
 ^tests/test_stimulus_feed_real\.py$
 ^kaine/modules/effectors/stimulus/
+^tests/test_audition_onnx_parity\.py$
+^kaine/modules/audition/onnx_export\.py$
