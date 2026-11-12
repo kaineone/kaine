@@ -127,7 +127,7 @@ async def test_track_associates_task_with_tick() -> None:
         _current_tick.reset(token)
     assert 7 in mod._tracked_tasks
     assert t in mod._tracked_tasks[7]
-    await t  # clean up
+    _ = await t  # clean up
 
 
 @pytest.mark.asyncio
@@ -141,7 +141,7 @@ async def test_track_noop_outside_tick() -> None:
     t = asyncio.create_task(_noop())
     mod.track(t)  # tick is None, should be a no-op
     assert mod._tracked_tasks == {}
-    await t
+    _ = await t
 
 
 @pytest.mark.asyncio
