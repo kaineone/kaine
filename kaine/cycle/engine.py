@@ -1330,12 +1330,13 @@ class CognitiveCycle:
 
         while pending:
             if self._clock() > deadline:
+                timed_out = sorted(pending)
                 log.error(
                     "lockstep barrier timeout at tick %d; still waiting for: %s",
                     tick,
-                    ", ".join(sorted(pending)),
+                    ", ".join(timed_out),
                 )
-                raise LockstepBarrierTimeout(tick, sorted(pending))
+                raise LockstepBarrierTimeout(tick, timed_out)
 
             for name in list(pending):
                 stream = module_stream(name)
