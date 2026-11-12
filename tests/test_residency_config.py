@@ -18,6 +18,8 @@ def test_defaults_from_empty_config():
     assert cfg.llm_proxy == "none"
     assert cfg.interactive_queue_max == 16
     assert cfg.background_queue_max == 64
+    assert cfg.perception_queue_max == 32
+    assert cfg.perception_queue_max_age_s == 10.0
 
 
 def test_all_fields_set():
@@ -26,6 +28,7 @@ def test_all_fields_set():
         "ttl_seconds": 60, "ttl_overrides": {"stt": 30, "tts": 45},
         "pin": "none", "prewarm": ["stt", "tts"], "llm_proxy": "llama-swap",
         "interactive_queue_max": 8, "background_queue_max": 32,
+        "perception_queue_max": 16, "perception_queue_max_age_s": 5.0,
     }})
     assert cfg.enabled is True
     assert cfg.reserve_bytes == 2147483648
@@ -36,6 +39,8 @@ def test_all_fields_set():
     assert cfg.llm_proxy == "llama-swap"
     assert cfg.interactive_queue_max == 8
     assert cfg.background_queue_max == 32
+    assert cfg.perception_queue_max == 16
+    assert cfg.perception_queue_max_age_s == 5.0
 
 
 def test_enabled_wrong_type():
@@ -92,3 +97,24 @@ def test_ttl_overrides_wrong_value_type():
 def test_ttl_zero_allowed():
     cfg = from_config({"residency": {"ttl_seconds": 0}})
     assert cfg.ttl_seconds == 0
+
+
+def test_perception_queue_max_zero():
+    with pytest.raises(ConfigShapeError):
+        from_config({"residency": {"perception_queue_max": 0}})
+
+
+def test_perception_queue_max_age_negative():
+    with pytest.raises(ConfigShapeError):
+        from_config({"residency": {"perception_queue_max_age_s": -1.0}})
+
+
+def test_perception_queue_max_age_wrong_type():
+    with pytest.raises(ConfigShapeError):
+        from_config({"residency": {"perception_queue_max_age_s": "fast"}})
+
+
+def test_perception_queue_int_age_coerced():
+    cfg = from_config({"residency": {"perception_queue_max_age_s": 5}})
+    assert cfg.perception_queue_max_age_s == 5.0
+    assert isinstance(cfg.perception_queue_max_age_s, float)
