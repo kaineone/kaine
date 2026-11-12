@@ -330,3 +330,53 @@ async def test_barrier_timeout_raises():
 
     assert excinfo.value.tick == 0
     assert excinfo.value.pending == ["fake_module"]
+
+
+@pytest.mark.asyncio
+async def test_barrier_active_flag_lifecycle():
+    bus = FakeBus()
+    cycle = CognitiveCycle(
+        bus,
+        FakeWorkspace(),
+        FakeRegistry(["slow_module.out"]),
+        deterministic=True,
+        lockstep=True,
+        clock=time.monotonic,
+        sleep=asyncio.sleep,
+    )
+    assert cycle.barrier_active is False
+    cycle.set_lockstep_participants(["slow_module"])
+
+    task = asyncio.create_task(cycle._await_barrier(0))
+    await asyncio.sleep(0.02)
+    assert cycle.barrier_active is True
+
+    bus.inject_entry(
+        "slow_module.out",
+        Event(
+            source="slow_module",
+            type="slow_module.tick_done",
+            payload={"tick": 0},
+            salience=0.0,
+            timestamp=datetime.now(timezone.utc),
+            tick=0,
+            seq=0,
+        ),
+    )
+    await asyncio.wait_for(task, timeout=1.0)
+    assert cycle.barrier_active is False
+
+
+@pytest.mark.asyncio
+async def test_barrier_active_false_when_no_participants():
+    cycle = CognitiveCycle(
+        FakeBus(),
+        FakeWorkspace(),
+        FakeRegistry([]),
+        deterministic=True,
+        lockstep=True,
+        clock=time.monotonic,
+        sleep=asyncio.sleep,
+    )
+    await cycle._await_barrier(0)
+    assert cycle.barrier_active is False

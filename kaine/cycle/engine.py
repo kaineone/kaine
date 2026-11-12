@@ -195,6 +195,7 @@ class CognitiveCycle:
         self._lockstep_timeout_s = float(lockstep_timeout_s)
         self._lockstep_speech_offset = int(lockstep_speech_offset_ticks)
         self._lockstep_participants: set[str] = set()
+        self._barrier_active = False
         self._tick_done_cursors: dict[str, str] = {}
         # When the oscillatory-layer is enabled, collect per-module phases each
         # tick and hand them to the workspace via context['phases']. Off by
@@ -301,6 +302,10 @@ class CognitiveCycle:
             stream = module_stream(name)
             if stream not in self._tick_done_cursors:
                 self._tick_done_cursors[stream] = "0"
+
+    @property
+    def barrier_active(self) -> bool:
+        return self._barrier_active
 
     @property
     def tick_index(self) -> int:
@@ -1323,46 +1328,50 @@ class CognitiveCycle:
             log.exception("failed to publish cycle.tick_start for tick %d", tick)
 
     async def _await_barrier(self, tick: int) -> None:
-        if not self._lockstep_participants:
-            return
-        pending = set(self._lockstep_participants)
-        deadline = self._clock() + self._lockstep_timeout_s
+        self._barrier_active = True
+        try:
+            if not self._lockstep_participants:
+                return
+            pending = set(self._lockstep_participants)
+            deadline = self._clock() + self._lockstep_timeout_s
 
-        while pending:
-            if self._clock() > deadline:
-                timed_out = sorted(pending)
-                log.error(
-                    "lockstep barrier timeout at tick %d; still waiting for: %s",
-                    tick,
-                    ", ".join(timed_out),
-                )
-                raise LockstepBarrierTimeout(tick, timed_out)
-
-            for name in list(pending):
-                stream = module_stream(name)
-                cursor = self._tick_done_cursors.get(stream, "0")
-                try:
-                    entries, last_scanned = await self._bus.read_entries(
-                        stream,
-                        last_id=cursor,
-                        count=100,
-                        block_ms=0,
+            while pending:
+                if self._clock() > deadline:
+                    timed_out = sorted(pending)
+                    log.error(
+                        "lockstep barrier timeout at tick %d; still waiting for: %s",
+                        tick,
+                        ", ".join(timed_out),
                     )
-                except Exception:
-                    log.warning("barrier read failed for %s", name, exc_info=True)
-                    continue
-                if last_scanned is not None:
-                    self._tick_done_cursors[stream] = last_scanned
-                for _, ev in (entries or []):
-                    if (
-                        ev.type == f"{name}.tick_done"
-                        and ev.payload.get("tick") == tick
-                    ):
-                        pending.discard(name)
-                        break
+                    raise LockstepBarrierTimeout(tick, timed_out)
 
-            if pending:
-                await asyncio.sleep(0.001)
+                for name in list(pending):
+                    stream = module_stream(name)
+                    cursor = self._tick_done_cursors.get(stream, "0")
+                    try:
+                        entries, last_scanned = await self._bus.read_entries(
+                            stream,
+                            last_id=cursor,
+                            count=100,
+                            block_ms=0,
+                        )
+                    except Exception:
+                        log.warning("barrier read failed for %s", name, exc_info=True)
+                        continue
+                    if last_scanned is not None:
+                        self._tick_done_cursors[stream] = last_scanned
+                    for _, ev in (entries or []):
+                        if (
+                            ev.type == f"{name}.tick_done"
+                            and ev.payload.get("tick") == tick
+                        ):
+                            pending.discard(name)
+                            break
+
+                if pending:
+                    await asyncio.sleep(0.001)
+        finally:
+            self._barrier_active = False
 
     async def _publish_latency(
         self,
