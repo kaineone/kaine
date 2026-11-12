@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_CONFIG_PATH = "state/residency/llama-swap.yaml"
 
 # Upstream llama-server instances managed by the proxy get sequential ports
-# starting here. Kept above the organ's default (11434) and below ephemeral.
+# starting here. Kept above DEFAULT_ORGAN_PORT and below ephemeral.
 UPSTREAM_BASE_PORT = 11440
 
 
