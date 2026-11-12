@@ -828,6 +828,7 @@ class ForkManager:
         from kaine.lifecycle.preservation import preserve_live as _preserve_live
 
         identity, identity_unreadable = self._read_identity()
+        enc = self._encryptor_for(identity.entity_id) if identity is not None else None
         return await _preserve_live(
             registry,
             fork_root=self._root,
@@ -838,6 +839,7 @@ class ForkManager:
             require_encryption=require_encryption,
             identity=identity,
             identity_unreadable=identity_unreadable,
+            encryptor=enc,
         )
 
     async def revive(self, bundle: Path | str, registry: _RegistryLike) -> ForkSnapshot:
@@ -849,7 +851,17 @@ class ForkManager:
         """
         from kaine.lifecycle.preservation import revive as _revive
 
-        return await _revive(Path(bundle), registry)
+        enc = None
+        if self._keyring is not None:
+            manifest_path = Path(bundle) / "manifest.json"
+            if manifest_path.is_file():
+                manifest = json.loads(manifest_path.read_text())
+                identity_obj = manifest.get("identity")
+                if identity_obj and isinstance(identity_obj, dict):
+                    eid = identity_obj.get("entity_id")
+                    if eid:
+                        enc = self._encryptor_for(eid)
+        return await _revive(Path(bundle), registry, encryptor=enc)
 
     def list_snapshots(self) -> list[str]:
         return list_snapshots(self._root)
