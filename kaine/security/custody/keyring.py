@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import secrets
 import time
 from dataclasses import dataclass
@@ -23,6 +24,8 @@ from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 from kaine.security.custody.encryptor import EntityEncryptor
+
+_ENTITY_ID_RE = re.compile(r"^(ent|legacy)-[0-9a-f]{32}$")
 
 
 @runtime_checkable
@@ -139,6 +142,8 @@ class KeyRing:
         return resolve(self._state_root / "identity" / "keys")
 
     def _dek_path(self, entity_id: str) -> Path:
+        if not _ENTITY_ID_RE.fullmatch(entity_id):
+            raise ValueError(f"invalid entity_id format: {entity_id!r}")
         return self._keys_dir() / f"{entity_id}.dek.json"
 
     def generate_dek(self, entity_id: str) -> WrappedDek:

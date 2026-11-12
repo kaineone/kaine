@@ -170,7 +170,7 @@ class TestKeyRing:
         kek = SoftwareKek(_fresh_kek())
         ring = KeyRing(kek)
         with pytest.raises(FileNotFoundError):
-            ring.encryptor_for("ent-does-not-exist")
+            ring.encryptor_for("ent-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1")
 
     def test_encrypt_decrypt_via_keyring(self) -> None:
         kek = SoftwareKek(_fresh_kek())
@@ -185,7 +185,7 @@ class TestKeyRing:
     def test_has_dek_false_when_missing(self) -> None:
         kek = SoftwareKek(_fresh_kek())
         ring = KeyRing(kek)
-        assert ring.has_dek("ent-nonexistent") is False
+        assert ring.has_dek("ent-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb02") is False
 
     def test_entity_id_mismatch_raises(self) -> None:
         kek = SoftwareKek(_fresh_kek())
