@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Callable, Mapping, Optional
 
 if TYPE_CHECKING:
-    pass
+    from kaine.residency.router import ResidencyRouter
 from kaine.boot.errors import ConfigurationError
 from kaine.bus.client import AsyncBus
 from kaine.modules.base import BaseModule
@@ -22,7 +22,9 @@ ModuleFactory = Callable[[AsyncBus, dict[str, Any]], Optional[BaseModule]]
 
 
 def shared_embedder(
-    registry: ModuleRegistry, kaine_config: dict[str, Any]
+    registry: ModuleRegistry,
+    kaine_config: dict[str, Any],
+    router: ResidencyRouter | None = None,
 ) -> SharedEmbedder:
     """Return the registry-wide shared embedder, creating it on first need.
 

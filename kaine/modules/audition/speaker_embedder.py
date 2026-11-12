@@ -14,9 +14,12 @@ import wave
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from kaine.residency.router import ResidencyRouter
 
 from kaine.residency.inflight import InflightGate, InflightTicket
 
@@ -49,6 +52,7 @@ class SpeakerEmbedder:
         num_threads: int = 1,
         sample_rate: int = 16000,
         sherpa_module: Any | None = None,
+        router: ResidencyRouter | None = None,
     ) -> None:
         self._path = Path(model_path)
         self._num_threads = int(num_threads)
@@ -74,6 +78,8 @@ class SpeakerEmbedder:
         self._closed = False
         self._state_lock: asyncio.Lock | None = None
         self._gate = InflightGate()
+        self._router = router
+        self._residency_name = "speaker_embedder"
 
     @property
     def loaded(self) -> bool:
@@ -104,12 +110,18 @@ class SpeakerEmbedder:
             return
         if self._closed or self._executor is None:
             raise RuntimeError("speaker embedder is closed")
+        if self._router:
+            admitted = await self._router.before_load(self._residency_name)
+            if not admitted:
+                return
         loop = asyncio.get_running_loop()
         extractor = await loop.run_in_executor(self._executor, self._build)
         if self._closed:
             raise RuntimeError("speaker embedder is closed")
         self._extractor = extractor
         self._dim = int(extractor.dim)
+        if self._router:
+            self._router.after_load(self._residency_name)
 
     async def warm_up(self) -> None:
         """Load the extractor in the worker thread; idempotent, raises on load error."""
@@ -134,6 +146,8 @@ class SpeakerEmbedder:
                 raise
             extractor = self._extractor
             ticket = self._gate.admit()
+        if self._router:
+            self._router.record_use(self._residency_name)
         return (extractor, ticket)
 
     async def extract(
@@ -205,13 +219,19 @@ class SpeakerEmbedder:
         """Release the model while keeping the client usable."""
         if self._closed or self._executor is None or self._extractor is None:
             return
-        async with self._ensure_state_lock():
-            if self._closed or self._executor is None or self._extractor is None:
-                return
-            await self._gate.wait_idle()
-            self._extractor = None
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(self._executor, gc.collect)
+        if self._router:
+            self._router.before_unload(self._residency_name)
+        try:
+            async with self._ensure_state_lock():
+                if self._closed or self._executor is None or self._extractor is None:
+                    return
+                await self._gate.wait_idle()
+                self._extractor = None
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(self._executor, gc.collect)
+        finally:
+            if self._router:
+                self._router.after_unload(self._residency_name)
 
     async def aclose(self) -> None:
         if self._closed:

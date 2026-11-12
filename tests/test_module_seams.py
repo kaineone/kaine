@@ -336,6 +336,7 @@ def _recording_factory(name: str, capture: list[dict[str, Any]]) -> Any:
         entity_clock: EntityClock | None = None,
         intent_secret: bytes | None = None,
         injections: dict[str, Any] | None = None,
+        router: Any = None,
     ) -> _FakeModule:
         capture.append(
             {

@@ -223,7 +223,7 @@ def test_build_registry_stimulus_source_mode_shares_one_clock_and_selects_virtua
             self.name = name
 
     def _recorder(name: str):
-        def factory(bus_, section, *, entity_clock=None, intent_secret=None, injections=None):  # noqa: ANN001
+        def factory(bus_, section, *, entity_clock=None, intent_secret=None, injections=None, router=None):  # noqa: ANN001
             captured[name] = dict(section)
             return _Fake(name)
 

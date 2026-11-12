@@ -987,7 +987,7 @@ def test_build_registry_wires_one_transition_end_to_end(tmp_path, monkeypatch, v
             self.name = name
 
     def _recorder(name: str):  # noqa: ANN202
-        def factory(bus_, section, *, entity_clock=None, intent_secret=None, injections=None):  # noqa: ANN001
+        def factory(bus_, section, *, entity_clock=None, intent_secret=None, injections=None, router=None):  # noqa: ANN001
             captured[name] = dict(section)
             if name == "vision" and not vision_loads:
                 return None

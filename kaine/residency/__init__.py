@@ -13,6 +13,7 @@ __all__ = [
     "ledger",
     "policy",
     "queue",
+    "router",
 ]
 
 # No eager imports of heavy modules; submodules are imported on demand.

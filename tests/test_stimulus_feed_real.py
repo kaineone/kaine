@@ -304,7 +304,7 @@ def test_boot_factories_wrap_both_surfaces_and_the_registry_wires_the_effector(t
             self.name = name
 
     def _recorder(name: str):  # noqa: ANN202
-        def factory(bus_, section, *, entity_clock=None, intent_secret=None, injections=None):  # noqa: ANN001
+        def factory(bus_, section, *, entity_clock=None, intent_secret=None, injections=None, router=None):  # noqa: ANN001
             captured[name] = dict(section)
             return _Fake(name)
 
@@ -367,7 +367,7 @@ def test_boot_with_stimulus_control_off_builds_the_plain_clock(tmp_path, monkeyp
     captured: dict[str, dict] = {}
 
     def _recorder(name: str):  # noqa: ANN202
-        def factory(bus_, section, *, entity_clock=None, intent_secret=None, injections=None):  # noqa: ANN001
+        def factory(bus_, section, *, entity_clock=None, intent_secret=None, injections=None, router=None):  # noqa: ANN001
             captured[name] = dict(section)
             return type("_Fake", (), {"name": name})()
 

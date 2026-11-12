@@ -19,9 +19,12 @@ import math
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from kaine.residency.router import ResidencyRouter
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +72,7 @@ class FaceDetector:
         score_threshold: float = 0.7,
         nms_threshold: float = 0.3,
         top_k: int = 5000,
+        router: ResidencyRouter | None = None,
     ) -> None:
         self._detector_path = Path(detector_path)
         self._recognizer_path = Path(recognizer_path) if recognizer_path else None
@@ -84,6 +88,8 @@ class FaceDetector:
         )
         self._closed = False
         self._state_lock: asyncio.Lock | None = None
+        self._router = router
+        self._residency_name = "face_detector"
 
     @property
     def loaded(self) -> bool:
@@ -117,6 +123,10 @@ class FaceDetector:
             return
         if self._closed or self._executor is None:
             raise RuntimeError("face detector is closed")
+        if self._router:
+            admitted = await self._router.before_load(self._residency_name)
+            if not admitted:
+                return
         loop = asyncio.get_running_loop()
         detector, recognizer = await loop.run_in_executor(
             self._executor, self._build
@@ -125,6 +135,8 @@ class FaceDetector:
             raise RuntimeError("face detector is closed")
         self._detector = detector
         self._recognizer = recognizer
+        if self._router:
+            self._router.after_load(self._residency_name)
 
     async def warm_up(self) -> None:
         if self._closed or self._executor is None:
@@ -136,9 +148,13 @@ class FaceDetector:
 
     async def unload(self) -> None:
         """Release loaded models. Next detect() call will reload."""
+        if self._router:
+            self._router.before_unload(self._residency_name)
         async with self._ensure_state_lock():
             self._detector = None
             self._recognizer = None
+        if self._router:
+            self._router.after_unload(self._residency_name)
         logger.info("Face detector unloaded")
 
     async def detect(
@@ -158,6 +174,8 @@ class FaceDetector:
             logger.warning("face detector failed to load", exc_info=True)
             return _degraded_result()
 
+        if self._router:
+            self._router.record_use(self._residency_name)
         loop = asyncio.get_running_loop()
         try:
             result = await loop.run_in_executor(
