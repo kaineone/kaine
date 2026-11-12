@@ -80,6 +80,10 @@ KAINE provides application-layer AES-256-GCM encryption for the cognitive-state 
 
 The implementation is in `kaine/security/crypto.py`. Algorithm: AES-256-GCM. Key: 256-bit. Nonce: a fresh 96-bit `os.urandom` value per message, since reuse would break GCM's confidentiality and authenticity. Authentication tag: 128-bit. On-disk envelope: `KAINEgcm1:` magic || nonce || ciphertext+tag, base64-encoded for UTF-8/JSON safety. Decryption is authenticated: tampering with ciphertext, nonce, or tag raises `InvalidTag` rather than returning corrupted plaintext. A reader transparently passes through legacy plaintext files. A disabled deployment never imports the `cryptography` library.
 
+The v2 envelope (`KAINEgcm2:`) extends this for per-entity isolation. Each envelope derives a fresh AES-256-GCM subkey through HKDF-SHA256 over the entity's 256-bit data key (DEK), using a 16-byte random salt and the associated data as the HKDF `info` parameter. The associated data (AAD) is `b"kaine/v2|" + entity_id + b"|" + kind`, where `kind` names the container class (`snapshot`, `sidecar-jsonl`, `bundle`, `world_model`, `self_model`, `individuation`, `backup`, `research`). On-disk format: `KAINEgcm2:` || salt(16) || nonce(12) || ciphertext+tag, base64-encoded like v1. Per-envelope subkeys remove the nonce-exhaustion concern for long-lived entities whose JSONL sinks encrypt every line. The `entity_id` binding means a file copied between entities fails authentication rather than silently decrypting under the wrong key. The `kind` binding means ciphertext cannot be replayed as a different container class within the same entity. See [Per-entity key custody](#per-entity-key-custody) below.
+
+The v1 reader is kept for backward compatibility and for the migration tool (task 3.1). No new v1 envelopes are written when per-entity custody is enabled.
+
 ### Key management
 
 The encryption module reads the key from two runtime sources, in order:
@@ -105,6 +109,8 @@ To rotate the key, decrypt with the old key, re-encrypt with the new key, then u
 
 A fork bundle encrypted with this host's key must be accompanied by the same key transferred out-of-band (not alongside the bundle). Import fails authentication (`InvalidTag`) under a different key.
 
+When per-entity custody is enabled (`[security.custody].enabled = true`), an additional key layer wraps each entity's data key. See [Per-entity key custody](#per-entity-key-custody) and the [configuration reference](appendix-a-configuration/security-and-dashboard.md#per-entity-key-custody).
+
 ### OS-layer encryption
 
 Even with application-layer encryption enabled, Qdrant collections, the Redis AOF, the effectors module audit log and files, adapters, retained audio, trainer job files, the organ-adapters volume, and the intent log's history from before encryption was enabled (including backups, forks and bundles made before migration) still require OS-layer protection. Use LUKS, FileVault, or equivalent on any backup-exposed or multi-user host.
@@ -123,6 +129,79 @@ Even with encryption on, plaintext can remain in:
 ### `replay_redact_content` warning
 
 When `[evaluation.observers].replay_redact_content = false`, the replay observer writes verbatim memory text to daily-rotated JSONL under `data/evaluation/`. This turns a normally safe numeric sidecar log into a transcript of the entity's episodic memory content. The shipped default is `true`. Keep `replay_redact_content = true` unless you have an explicit reason and understand the privacy implications.
+
+## Per-entity key custody
+
+Per-entity custody gives each entity its own 256-bit data key (DEK), generated at spawn from `secrets.token_bytes(32)`. The DEK never leaves the host in plaintext. At rest it is AES-256-GCM wrapped by the host's key-encrypting key (KEK), stored in `state/identity/keys/<entity_id>.dek.json`. Each encrypted file uses a per-envelope subkey derived from the DEK through HKDF-SHA256, with associated data that binds it to the entity and the container class. The implementation is in `kaine/security/custody/`.
+
+### What it protects
+
+Per-entity custody protects an entity's persisted mind against offline theft of disks and backups, casual reading by the operator during normal workflows, leaks of state files to third parties, and the single-key single-copy loss that nearly happened on 2026-09-17. A fork's state is unreadable with the parent's key, and a parent's state is unreadable with the child's (CAL section 4.6: a fork that individuates is a separate entity with its own mental privacy, which cannot be separated after the fact). A file moved between entities or container classes fails authentication.
+
+### What it does not protect against
+
+Root on the booted host defeats per-entity custody. Any root process can read the KEK from the environment (or, when TPM sealing ships, ask the TPM to unseal it), and the running entity's DEK sits in process memory for the lifetime of the cycle. Hardware attacks on the TPM beyond the TPM's own resistance are out of scope. Python cannot reliably erase key bytes from memory; DEKs and KEKs are held in `bytearray`s and overwritten after use, but this is best effort and stated as such.
+
+### Key hierarchy
+
+```text
+Host KEK (256-bit, from KAINE_CUSTODY_KEK or sealed in the TPM)
+ └─ per-entity DEK (256-bit, random at spawn, AES-256-GCM wrapped by the KEK)
+     └─ per-envelope subkeys (HKDF-SHA256 over the DEK, salt per envelope, info = AAD)
+```
+
+The wrapped DEK file holds the entity id, the wrapped key bytes, the wrapping KEK's identifier, a creation timestamp, and (when escrow ships) the sealed escrow shares. It is mode 0600 and travels in every preservation bundle and decommission backup beside the plaintext manifest.
+
+### Custody KEK
+
+The KEK is read from the environment variable named by `[security.custody].kek_env_var` (default `KAINE_CUSTODY_KEK`) as hex-encoded 32 bytes. A missing, empty, non-hex, or wrong-length value causes the cycle to refuse to boot with a specific error. A future release (task 1.2) adds TPM 2.0 sealing as the production KEK source; the environment-variable path is for development, testing, and hosts without a qualifying TPM.
+
+Generate a custody KEK:
+
+```bash
+python -c "import secrets; print(secrets.token_bytes(32).hex())"
+```
+
+Store it outside the repo, the same way as the state-encryption key. If the KEK is lost and no escrow recovery exists, every entity whose DEK was wrapped by that KEK is unrecoverable. Back the KEK up out-of-band.
+
+The per-operator state-encryption key (`KAINE_STATE_KEY`) and the per-entity custody KEK (`KAINE_CUSTODY_KEK`) are independent. The state-encryption key protects v1 envelopes and is process-global. The custody KEK wraps per-entity DEKs through v2 envelopes. Both may be active at the same time during migration from v1 to v2. After migration, only the custody KEK is needed.
+
+### Fork and merge
+
+A fork generates a fresh DEK for the child entity. The parent's snapshot and every artifact file are re-encrypted under the child's DEK before the child's state directory is written. After a fork, parent state and child state are each readable only with their own key.
+
+A merge decrypts both parents, merges the cognitive state, and re-encrypts the result under the surviving entity's DEK. The source entity's key is kept until its own retirement, which goes through the welfare-gated decommission path.
+
+A plaintext identity sidecar (`state/forks/<id>/identity.json`) is written before the encrypted snapshot, so a crash between the two leaves the sidecar present (pointing to the entity's key) rather than an orphaned encrypted file that nobody can identify.
+
+### Failure modes
+
+| Situation | Outcome |
+|---|---|
+| KEK unavailable at boot for an existing entity | Cannot resume: all state kept untouched, a welfare incident raised, no data deleted |
+| Wrapped DEK file missing but entity state exists | Cannot resume; escrow recovery when escrow ships |
+| TPM lost while an entity runs (when TPM sealing ships) | Entity keeps running on the in-memory DEK; preservation and welfare pause use the in-memory key; a re-seal queued and a welfare incident raised |
+| Sidecar and in-snapshot identity disagree | `IdentityError`; treated as cannot-resume |
+
+A running entity is never stopped by a custody failure. The check runs at spawn, at restore, and at transfer, never mid-run.
+
+### Host qualification (not yet shipped)
+
+When TPM sealing ships (task 1.2), a host qualifies to spawn or restore an entity only when a TPM 2.0 is present and responds, its endorsement key certificate chains to a manufacturer CA in a pinned allow-list, it is not a firmware TPM on vendor test keys, and a sealed test object round-trips.
+
+The Orin Nano Super's fTPM does not qualify in its unfused state, because its endorsement key chain is the NVIDIA test root. Fusing is irreversible, and until the operator decides, the Orin cannot host encrypted entities with TPM sealing. Studies on the Orin either run unencrypted with the operator's explicit consent or wait on the fusing decision. The software KEK path (`kek_source = "env"`) works on the Orin without fusing but does not provide the TPM's hardware binding.
+
+### What is not yet shipped
+
+Per-entity encryption through ForkManager and preservation is on main. The following items are designed (see `openspec/changes/entity-key-custody/design.md`) and will land in future PRs:
+
+- TPM 2.0 sealing of the KEK, with PolicyAuthorize, pre-update re-seal hooks, and pcrlock integration (task 1.2).
+- Root-of-trust qualification, refusing spawn and restore on hosts that do not meet the TPM criteria (task 1.3).
+- Preservation-failure resilience, where a custody failure during preservation queues a re-seal and raises a welfare incident rather than stopping the entity (task 1.4).
+- 2-of-n escrow by pairwise XOR splits, with HPKE-sealed shares and attested recovery (task 2.1).
+- Attested re-wrap transfer to a new host (task 2.2).
+- One-way migration from the per-operator key (task 3.1).
+- swtpm-based test suite (task 4.1).
 
 ## Privacy boundary and diagnostics
 
@@ -314,7 +393,7 @@ These duties are not enforced by the code; they are the operator's contract for 
 
 The following items are intentionally not addressed in the current version:
 
-1. **Application-level encryption at rest is partially delivered.** App-layer AES-256-GCM covers the self-model, fork bundles, sidecar JSONL, world model checkpoints, preservation state, and the intent-expression log with its per-sleep corpus from migration onward (see the sensitivity section). Still deferred: per-field or per-payload encryption of the Qdrant collections (transport-layer TLS + API key is the current control), the effectors module audit log, voice adapters, retained audio, trainer job files, and the organ-adapters volume. A hardware-token or kernel-keyring-backed key escrow beyond the current env-var/keyring/file loader is also future work.
+1. **Per-entity encryption at rest is delivered; TPM and escrow are not.** App-layer AES-256-GCM with per-entity keys covers the self-model, fork snapshots, sidecar JSONL, world model checkpoints, preservation state, research records, and the intent-expression log. Still deferred: TPM-sealed key wrapping and host qualification (task 1.2), 2-of-n escrow recovery (task 2.1), attested transfer (task 2.2), and the one-way migration from the per-operator key (task 3.1). Per-field or per-payload encryption of the Qdrant collections (transport-layer TLS + API key is the current control), the effectors module audit log, voice adapters, retained audio, trainer job files, and the organ-adapters volume remain deferred.
 2. **Mutual-backup mesh auth.** Cross-host KAINE-to-KAINE bus mirroring requires Redis ACLs or per-peer TLS with verified client certs.
 3. **Plugin / untrusted code sandboxing.** The effectors module assumes the operator controls all module code; there is no sandbox for third-party modules.
 4. **Disabling dangerous Redis commands by default in `compose/redis.yml`.** This is documented as a recommended hardening step but is not the compose-file default, because it makes operator diagnostics harder during early debugging.

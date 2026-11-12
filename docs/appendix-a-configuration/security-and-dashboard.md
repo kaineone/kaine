@@ -108,3 +108,24 @@ Supply 32 raw bytes, or base64/hex encoding of 32 bytes. Never commit the key. T
 | `algorithm` | string | `"aes-256-gcm"` | Encryption algorithm. Only `"aes-256-gcm"` is supported; any other value raises `CryptoConfigError` at boot ([`kaine/security/crypto.py`](../../kaine/security/crypto.py)). |
 
 On-disk framing is the magic prefix `KAINEgcm1:`, then the 12-byte nonce, then the ciphertext and tag, with the whole blob base64-encoded. The magic prefix lets the reader distinguish encrypted blobs from legacy plaintext, so a disabled reader transparently passes plaintext through.
+
+## Per-entity key custody
+
+The `[security.custody]` section enables per-entity data keys. Each entity gets its own 256-bit AES-256-GCM data key (DEK), wrapped by a host key-encrypting key (KEK). A fork's DEK is fresh and independent of its parent's. When disabled (the default), all entities share the single key from `[security.state_encryption]`.
+
+The KEK source defaults to an environment variable. A future release adds TPM 2.0 sealing.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | boolean | `false` | Per-entity custody master gate. |
+| `kek_source` | string | `"env"` | Where the KEK lives. `"env"` reads from the environment variable below. `"tpm"` (not yet implemented) seals under a TPM 2.0 policy. |
+| `kek_env_var` | string | `"KAINE_CUSTODY_KEK"` | Environment variable holding the hex-encoded 32-byte KEK. |
+| `state_root` | string | `"state"` | Root directory for wrapped DEK files (`<state_root>/identity/keys/`). |
+
+The v2 on-disk envelope is `KAINEgcm2:` || 16-byte salt || 12-byte nonce || ciphertext+tag, base64-encoded like v1. Each envelope derives a fresh subkey through HKDF-SHA256 over the entity's DEK. Associated data binds the entity id and the container class, so a file moved between entities or container types fails authentication. See [Per-entity key custody](../13-security-and-privacy.md#per-entity-key-custody).
+
+Generate a custody KEK:
+
+```bash
+python -c "import secrets; print(secrets.token_bytes(32).hex())"
+```
