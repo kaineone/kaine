@@ -165,8 +165,6 @@ class Emotion2vecClassifier:
             return
         if self._funasr_available is False or self._load_failed:
             return
-        if self._router:
-            await self._router.before_load(self._residency_name)
         if self._funasr_available is None:
             try:
                 import funasr  # type: ignore[import-untyped]
@@ -183,6 +181,11 @@ class Emotion2vecClassifier:
                 return
             self._funasr = funasr
             self._funasr_available = True
+
+        if self._router:
+            admitted = await self._router.before_load(self._residency_name)
+            if not admitted:
+                return
 
         def _load_sync():
             # funasr otherwise writes a tqdm progress bar to stderr on every generate() call
@@ -210,11 +213,6 @@ class Emotion2vecClassifier:
                         self._device,
                     )
                 else:
-                    # Unconditionally cast every floating-point parameter and
-                    # buffer to float32, then verify no half/bfloat16 state remains.
-                    # This closes the default-dtype race with other modules whose
-                    # model construction can briefly change the process-wide
-                    # default dtype.
                     inner.float()
                     non_float32 = [
                         (name, p.dtype)
@@ -234,6 +232,8 @@ class Emotion2vecClassifier:
                         )
                         self._funasr_available = False
                         self._model = None
+                        if self._router:
+                            self._router.after_unload(self._residency_name)
                         return
             log.info("emotion2vec+ loaded: %s on %s", self._model_id, self._device)
             if self._router:
@@ -243,6 +243,8 @@ class Emotion2vecClassifier:
             self._load_failed = True
             self._funasr_available = False
             self._model = None
+            if self._router:
+                self._router.after_unload(self._residency_name)
 
     async def ensure_loaded(self) -> None:
         if self._model is not None:

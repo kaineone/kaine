@@ -124,7 +124,9 @@ class FaceDetector:
         if self._closed or self._executor is None:
             raise RuntimeError("face detector is closed")
         if self._router:
-            await self._router.before_load(self._residency_name)
+            admitted = await self._router.before_load(self._residency_name)
+            if not admitted:
+                return
         loop = asyncio.get_running_loop()
         detector, recognizer = await loop.run_in_executor(
             self._executor, self._build

@@ -111,7 +111,9 @@ class SpeakerEmbedder:
         if self._closed or self._executor is None:
             raise RuntimeError("speaker embedder is closed")
         if self._router:
-            await self._router.before_load(self._residency_name)
+            admitted = await self._router.before_load(self._residency_name)
+            if not admitted:
+                return
         loop = asyncio.get_running_loop()
         extractor = await loop.run_in_executor(self._executor, self._build)
         if self._closed:
@@ -219,15 +221,17 @@ class SpeakerEmbedder:
             return
         if self._router:
             self._router.before_unload(self._residency_name)
-        async with self._ensure_state_lock():
-            if self._closed or self._executor is None or self._extractor is None:
-                return
-            await self._gate.wait_idle()
-            self._extractor = None
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(self._executor, gc.collect)
-        if self._router:
-            self._router.after_unload(self._residency_name)
+        try:
+            async with self._ensure_state_lock():
+                if self._closed or self._executor is None or self._extractor is None:
+                    return
+                await self._gate.wait_idle()
+                self._extractor = None
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(self._executor, gc.collect)
+        finally:
+            if self._router:
+                self._router.after_unload(self._residency_name)
 
     async def aclose(self) -> None:
         if self._closed:

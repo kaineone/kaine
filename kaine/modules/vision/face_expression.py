@@ -87,7 +87,9 @@ class FaceExpressionClassifier:
         if self._closed or self._executor is None:
             raise RuntimeError("expression classifier is closed")
         if self._router:
-            await self._router.before_load(self._residency_name)
+            admitted = await self._router.before_load(self._residency_name)
+            if not admitted:
+                return
         loop = asyncio.get_running_loop()
         net = await loop.run_in_executor(self._executor, self._build)
         if self._closed:
