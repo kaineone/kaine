@@ -97,7 +97,7 @@ async def test_preempt_yields_on_cancel():
 
     task = asyncio.create_task(unregister_later())
     result = await queue.preempt(["background"])
-    await task
+    _ = await task
     assert result == ["background"]
 
 
@@ -118,7 +118,7 @@ async def test_preempt_sets_cancel_event():
     task = asyncio.create_task(queue.preempt(["background"]))
     await asyncio.sleep(0.01)
     assert job.cancel.is_set()
-    await task
+    _ = await task
 
 
 def test_background_deadline_not_recorded(monkeypatch):
