@@ -25,6 +25,8 @@ class Event(BaseModel):
     salience: float = Field(ge=0.0, le=1.0)
     timestamp: datetime
     causal_parent: Optional[str] = None
+    tick: Optional[int] = None
+    seq: Optional[int] = None
 
     @field_validator("timestamp")
     @classmethod
@@ -92,6 +94,4 @@ def entry_id_sort_key(entry_id: str) -> tuple[int, int, int, str]:
 
 def ensure_writable(stream: str, source: str) -> None:
     if stream == WORKSPACE_STREAM and source != WORKSPACE_SOURCE:
-        raise ReservedStreamError(
-            f"only the workspace module may publish to {WORKSPACE_STREAM}"
-        )
+        raise ReservedStreamError(f"only the workspace module may publish to {WORKSPACE_STREAM}")
