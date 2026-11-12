@@ -62,8 +62,8 @@
 ## 9. Tests and no-regression
 
 - [x] 9.1 Unit tests: budget (fixture `/proc/meminfo`, cgroup limit, unified vs discrete), fit report, admission and eviction order, pin, TTL, lanes and preemption, ladder selection, consent gate. (Budget 92 tests, fit 40, admission/eviction 19, TTL 20, lanes/preemption 19, ladder/rung 41, consent 17; 788 residency-related tests in total.)
-- [ ] 9.2 Integration test "small unified host": with the budget mocked to an 8 GB unified pool (or a cgroup cap), a full voice turn that needs STT, organ and TTS completes, peak resident memory stays under budget, no module is disabled, and residency events fire.
-- [ ] 9.3 (needs group 12) Invariant test: the cognitive-cycle trace and workspace contents are identical between an all-resident run and a multiplexed run on the same inputs in deterministic mode, excluding timing.
+- [x] 9.2 Integration test "small unified host": with the budget mocked to an 8 GB unified pool (or a cgroup cap), a full voice turn that needs STT, organ and TTS completes, peak resident memory stays under budget, no module is disabled, and residency events fire. (PR #793.)
+- [x] 9.3 (needs group 12) Invariant test: the cognitive-cycle trace and workspace contents are identical between an all-resident run and a multiplexed run on the same inputs in deterministic mode, excluding timing. (PR #795.)
 - [x] 9.4 No-regression: with `[residency]` unset, the resolved backends, endpoints and behaviour match main, and the full offline suite is green. (Implicitly covered: `ResidencyConfig.enabled` defaults to `False`, all modules accept `router=None` and skip hooks, and CI runs 15876 tests with residency disabled on every PR. A dedicated explicit test would duplicate what CI already verifies.)
 - [x] 9.5 Network-isolated consent test: nothing is downloaded without consent; with consent, a download happens once and is idempotent. (PR #758: consent-denied and idempotent-fetch tests in the offline suite.)
 
@@ -71,7 +71,7 @@
 
 - [ ] 10.1 Latency harness: cold and warm load time per rung; STT segment latency; TTS time-to-first-audio and real-time factor; organ first token including swap-in; end-to-end voice turn; peak resident memory. Output is JSON plus a markdown table.
 - [ ] 10.2 Operator step: run the harness on the Orin Nano Super, the Pixel 6a and this desktop; commit results under `docs/benchmarks/`, with a table of combinations that do not fit, their shortfalls and their feel.
-- [ ] 10.3 Docs: a residency guide (budget, calibration, TTLs, pin, llama-swap, what multiplexing feels like, honest limits), plus updates to `docs/07-deployment/README.md`, `docs/03-hardware/README.md`, `docs/07-deployment/headless-host.md`, `docs/09-modules/audition.md` and `docs/09-modules/vocal.md`.
+- [x] 10.3 Docs: a residency guide (budget, calibration, TTLs, pin, llama-swap, what multiplexing feels like, honest limits), plus updates to `docs/07-deployment/README.md`, `docs/03-hardware/README.md`, `docs/07-deployment/headless-host.md`, `docs/09-modules/audition.md` and `docs/09-modules/vocal.md`. (PR #791.)
 - [ ] 10.4 Final validation: `openspec validate module-residency-and-speech-tiers --strict` passes, and every task is checked or deferred with its reason.
 
 ## 11. Quantization ladder fixed before launch
@@ -87,9 +87,9 @@
 - [x] 12.2 `Event.tick` and `Event.seq` optional fields; older events parse (test). (PR #777.)
 - [x] 12.3 `BaseModule`: tick context variable around `on_workspace`, `publish` stamps `tick` and `seq`, `self.track(task)`, `module.tick_done` emission; the `seq` counter travels in snapshots. (PR #778.)
 - [x] 12.4 the language module tracks its generation tasks; the interoception module and the perception sources gain a tick-driven lockstep mode fed by the seeded feed. (PR #780.)
-- [ ] 12.5 Engine (`kaine/cycle/engine.py`, shared file, integrator told first): `cycle.tick_start`, the barrier, intake by `(tick, source, seq)`, logical `entry_id` and `timestamp` in the broadcast payload.
-- [ ] 12.6 Logical `EntityClock` for the registry in lockstep.
-- [ ] 12.7 Boot refuses lockstep without deterministic mode or with an unsupported module (names them); `lockstep_timeout_s` freezes the cycle, records an incident and marks the run inadmissible.
+- [x] 12.5 Engine (`kaine/cycle/engine.py`, shared file, integrator told first): `cycle.tick_start`, the barrier, intake by `(tick, source, seq)`, logical `entry_id` and `timestamp` in the broadcast payload. (PR #783.)
+- [x] 12.6 Logical `EntityClock` for the registry in lockstep. (Merged via PR #787 squash.)
+- [x] 12.7 Boot refuses lockstep without deterministic mode or with an unsupported module (names them); `lockstep_timeout_s` freezes the cycle, records an incident and marks the run inadmissible. (PR #787.)
 - [ ] 12.8 the supervisor: alive while loading within bound or waiting at the barrier for another module.
 - [ ] 12.9 Tests: two lockstep runs on the same scripted inputs, one with random injected load delays per model call, give identical normalised traces and workspace contents; every existing determinism test stays green with lockstep off; module-aware dilation lowers the scale under sustained stalls and not under one short stall.
 - [ ] 12.10 Docs: the entity-time chapter and the residency guide describe dilation, lockstep, its cost, and that lockstep is a study mode.
