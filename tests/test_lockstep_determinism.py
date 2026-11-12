@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import asyncio
 import random
-from datetime import timedelta
 from typing import Any
 
 import pytest
@@ -33,7 +32,6 @@ from kaine.workspace import (
 )
 from kaine.workspace.action_selection import ActionSelection
 from tests._fakes import FakeClock
-
 
 # --------------------------------------------------------------------------
 # Shared helpers
@@ -317,8 +315,14 @@ async def _run_plain_trajectory(*, n_ticks: int, seed: int) -> dict[str, Any]:
     from tests.test_deterministic_cycle import (
         ScriptedBus,
         StreamRegistry,
+    )
+    from tests.test_deterministic_cycle import (
         _normalize_broadcast as _det_norm_bc,
+    )
+    from tests.test_deterministic_cycle import (
         _normalize_intent as _det_norm_intent,
+    )
+    from tests.test_deterministic_cycle import (
         _scripted_streams as _det_streams,
     )
 
