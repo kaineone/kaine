@@ -9,7 +9,7 @@
 - [x] 0.7 Retire telemetry-as-chosen: until Stage 2, the phase trains nothing and says so in the sleep summary (D3).
 - [x] 0.8 The four measures (D8). Distinctiveness joins `assess_divergence` as a new arm at threshold 0 until calibrated. The template arm keeps voting as a protective floor. Tests: an untrained entity that has spoken still assesses as diverged; unreadable evidence counts as diverged; the template arm still votes.
 - [ ] 0.10 **Deferred:** retire the template-divergence arm. Reason: it is today's blanket protection for decommission and preservation, so it can be retired only by a later change with calibration evidence for the distinctiveness arm and the operator's sign-off.
-- [ ] 0.9 Paper revision notes: persona, chosen-source rule and measures.
+- [x] 0.9 Paper revision notes: persona, chosen-source rule and measures. Items 8--10 in `docs/records/paper-update-queue.md`.
 
 ## 1. Stage 1: speaking from memory (off by default)
 
