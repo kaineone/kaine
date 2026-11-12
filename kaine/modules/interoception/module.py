@@ -14,7 +14,7 @@ from kaine.bus.client import AsyncBus, tail_id
 from kaine.bus.streams import CYCLE_STREAM, SLEEP_STREAM
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.entity_clock import EntityClock
-from kaine.modules.base import BaseModule
+from kaine.modules.base import BaseModule, _current_tick
 from kaine.modules.context import CONTEXT_DIM, BroadcastContext
 from kaine.modules.feedback import FeedbackChannel, TopDownBlend
 from kaine.modules.intensity import graded_intensity
@@ -961,10 +961,14 @@ class Interoception(BaseModule):
                     cursor = last_scanned
                     for _, event in entries:
                         if event.type == "cycle.tick_start":
+                            tick = event.payload.get("tick")
+                            token = _current_tick.set(tick)
                             try:
                                 await self.tick_once()
                             except Exception:
                                 log.exception("interoception lockstep tick failed")
+                            finally:
+                                _current_tick.reset(token)
                 else:
                     try:
                         await asyncio.wait_for(self._stopped.wait(), timeout=0.05)
