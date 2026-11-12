@@ -45,6 +45,7 @@ evidence accumulates across runs for research and post-mortem review. The log is
 governed by ``[supervisor.incident_log]`` (ships ``enabled = true`` but dormant while
 ``[supervisor].enabled = false``) and is encrypted at rest when state encryption is on.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -107,6 +108,7 @@ class SupervisorConfig:
     per_module_timeout_s: dict[str, float] = field(default_factory=dict)
     incident_log: IncidentLogConfig = field(default_factory=IncidentLogConfig)
     selftest_timeout_s: float = 10.0
+    loading_timeout_s: float = 120.0
 
     @classmethod
     def from_section(cls, section: dict[str, Any]) -> "SupervisorConfig":
@@ -119,11 +121,11 @@ class SupervisorConfig:
             "per_module_timeout_s",
             "incident_log",
             "selftest_timeout_s",
+            "loading_timeout_s",
         }
         require_known_keys(section, allowed, "[supervisor]")
         per_module = {
-            str(k): float(v)
-            for k, v in (section.get("per_module_timeout_s") or {}).items()
+            str(k): float(v) for k, v in (section.get("per_module_timeout_s") or {}).items()
         }
         return cls(
             enabled=bool(section.get("enabled", False)),
@@ -132,10 +134,9 @@ class SupervisorConfig:
             max_restart_attempts=int(section.get("max_restart_attempts", 5)),
             restart_backoff_s=float(section.get("restart_backoff_s", 3.0)),
             per_module_timeout_s=per_module,
-            incident_log=IncidentLogConfig.from_section(
-                section.get("incident_log") or {}
-            ),
+            incident_log=IncidentLogConfig.from_section(section.get("incident_log") or {}),
             selftest_timeout_s=float(section.get("selftest_timeout_s", 10.0)),
+            loading_timeout_s=float(section.get("loading_timeout_s", 120.0)),
         )
 
 
@@ -147,6 +148,9 @@ class AssessResult(NamedTuple):
     ``Supervisor.assess`` previously read ``t.exception()`` and discarded it, so it can
     reach the durable ``detect`` incident record. It is NOT yet path-scrubbed —
     scrubbing happens just before write.
+
+    "residency_failure" is a possible state when a model load exceeds its
+    measured bound and the residency ledger is wired.
     """
 
     state: str
@@ -175,6 +179,7 @@ class Supervisor:
         clock: Callable[[], float] = time.monotonic,
         on_halt: Optional[Callable[[], None]] = None,
         tick_index_provider: Optional[Callable[[], Optional[int]]] = None,
+        ledger: Optional[Any] = None,
         control_path: Optional[Path] = None,
         escalation_path: Optional[Path] = None,
         escalate_on_crash: bool = False,
@@ -192,6 +197,7 @@ class Supervisor:
         # poll_index only and never a fabricated tick (honest limitation when
         # the cycle reference is not wired, e.g. in unit tests).
         self._tick_index_provider = tick_index_provider
+        self._ledger = ledger
         self._incidents: dict[str, _Incident] = {}
         self.escalated: bool = False
         self.poll_index: int = 0
@@ -220,9 +226,7 @@ class Supervisor:
             return False
 
     def _timeout_for(self, module: BaseModule) -> float:
-        return self._config.per_module_timeout_s.get(
-            module.name, self._config.heartbeat_timeout_s
-        )
+        return self._config.per_module_timeout_s.get(module.name, self._config.heartbeat_timeout_s)
 
     def assess(self, module: BaseModule) -> AssessResult:
         """Return an ``AssessResult(state, exception_repr)`` for ``module``.
@@ -250,13 +254,22 @@ class Supervisor:
             except Exception:
                 continue
             if exc is not None or not is_stopping:
-                return AssessResult(
-                    "dead", repr(exc) if exc is not None else None
-                )
+                return AssessResult("dead", repr(exc) if exc is not None else None)
         if not self._sleeping():
             stale = module.heartbeat_age() > self._timeout_for(module)
             any_running = any(not t.done() for t in tasks)
             if stale and any_running:
+                if self._ledger is not None:
+                    loading = self._ledger.loading_entries()
+                    if loading:
+                        timeout = self._config.loading_timeout_s
+                        over_bound = any(
+                            elapsed > (bound if bound > 0 else timeout)
+                            for _, elapsed, bound in loading
+                        )
+                        if over_bound:
+                            return AssessResult("residency_failure", None)
+                        return AssessResult("alive", None)
                 return AssessResult("hung", None)
         return AssessResult("alive", None)
 
@@ -410,9 +423,7 @@ class Supervisor:
         except Exception:
             return 0
 
-    async def _write_incident_record(
-        self, record: dict[str, Any], *, publish: bool = True
-    ) -> None:
+    async def _write_incident_record(self, record: dict[str, Any], *, publish: bool = True) -> None:
         """Durably append one incident transition record AND publish the
         structured ``supervisor.incident`` bus event for it (both no-op-safe).
 
@@ -549,9 +560,7 @@ class Supervisor:
             try:
                 await module.shutdown()
             except Exception:
-                log.warning(
-                    "supervisor shutdown of %s failed", module.name, exc_info=True
-                )
+                log.warning("supervisor shutdown of %s failed", module.name, exc_info=True)
 
     async def escalate_supervision_lost(self, reason: str) -> None:
         """Escalate because the supervisor itself stopped supervising (unattended runs).
@@ -660,6 +669,15 @@ class Supervisor:
             if state == "alive":
                 self._incidents.pop(name, None)
                 continue
+            if state == "residency_failure":
+                await self._publish(
+                    "supervisor.log",
+                    {
+                        "module": name,
+                        "message": f"model load for '{name}' exceeded measured bound; surfacing as residency failure",
+                    },
+                )
+                continue
             if under_development and state == "hung":
                 # Heartbeats are unreliable while the cycle is paused for
                 # developmental phase; only crashes are actionable.
@@ -685,9 +703,7 @@ class Supervisor:
                 }
             )
             freeze_reason = f"supervisor: {name} {state}"
-            control_state.freeze(
-                reason=freeze_reason, path=self._control_path, source="supervisor"
-            )
+            control_state.freeze(reason=freeze_reason, path=self._control_path, source="supervisor")
             await self._write_incident_record(
                 {
                     "incident_id": incident_id,
@@ -738,10 +754,7 @@ class Supervisor:
                     "supervisor.log",
                     {
                         "module": name,
-                        "message": (
-                            f"recovered '{name}' after "
-                            f"{incident.attempts} attempt(s)"
-                        ),
+                        "message": (f"recovered '{name}' after {incident.attempts} attempt(s)"),
                     },
                 )
                 self._incidents.pop(name, None)
@@ -758,9 +771,7 @@ class Supervisor:
                 )
                 snapshot_id = final_snap or incident.last_good
                 await self._shutdown_all()
-                await self._escalate(
-                    name, incident.attempts, snapshot_id, incident_id
-                )
+                await self._escalate(name, incident.attempts, snapshot_id, incident_id)
                 self.escalated = True
                 stop_event.set()
                 return
@@ -800,15 +811,11 @@ class Supervisor:
                         try:
                             self._on_halt()
                         except Exception:
-                            log.warning(
-                                "supervisor on_halt callback failed", exc_info=True
-                            )
+                            log.warning("supervisor on_halt callback failed", exc_info=True)
                     stop_event.set()
                     return
                 try:
-                    await asyncio.wait_for(
-                        stop_event.wait(), timeout=self._config.poll_interval_s
-                    )
+                    await asyncio.wait_for(stop_event.wait(), timeout=self._config.poll_interval_s)
                 except asyncio.TimeoutError:
                     continue
         finally:
