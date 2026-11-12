@@ -8,10 +8,11 @@ import logging
 import time
 from collections import deque
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Iterable, Optional
 
 from kaine.bus.client import AsyncBus, tail_id
 from kaine.bus.schema import Event, entry_id_sort_key, stream_entry_key
+from kaine.bus.streams import module_stream
 from kaine.cycle.protocols import (
     CycleHook,
     ModuleRegistryProtocol,
@@ -107,6 +108,9 @@ class CognitiveCycle:
         access_rate: Optional["AccessRateController"] = None,
         arousal_provider: Optional[Callable[[], Optional[float]]] = None,
         tick_observer: Optional[Callable[[dict[str, Any], float], None]] = None,
+        lockstep: bool = False,
+        lockstep_timeout_s: float = 300.0,
+        lockstep_speech_offset_ticks: int = 20,
     ) -> None:
         if processing_rate_hz <= 0:
             raise ValueError("processing_rate_hz must be positive")
@@ -173,6 +177,13 @@ class CognitiveCycle:
         # instead of calling `_wall_clock`, so a run is reproducible.
         self._wall_clock = wall_clock
         self._deterministic = bool(deterministic)
+        if lockstep and not deterministic:
+            raise ValueError("lockstep=True requires deterministic=True")
+        self._lockstep = bool(lockstep)
+        self._lockstep_timeout_s = float(lockstep_timeout_s)
+        self._lockstep_speech_offset = int(lockstep_speech_offset_ticks)
+        self._lockstep_participants: set[str] = set()
+        self._tick_done_cursors: dict[str, str] = {}
         # When the oscillatory-layer is enabled, collect per-module phases each
         # tick and hand them to the workspace via context['phases']. Off by
         # default ⇒ zero per-tick cost and selection is unchanged.
@@ -267,6 +278,17 @@ class CognitiveCycle:
         A failure is logged and never affects the tick.
         """
         self._broadcast_observer = observer
+
+    @property
+    def lockstep(self) -> bool:
+        return self._lockstep
+
+    def set_lockstep_participants(self, names: Iterable[str]) -> None:
+        self._lockstep_participants = set(names)
+        for name in self._lockstep_participants:
+            stream = module_stream(name)
+            if stream not in self._tick_done_cursors:
+                self._tick_done_cursors[stream] = "0"
 
     @property
     def tick_index(self) -> int:
@@ -611,14 +633,23 @@ class CognitiveCycle:
         # already-ordered common case it is a no-op. A 0- or 1-event tick is already
         # ordered, so skip the sort call entirely.
         if len(gathered) > 1:
-            gathered.sort(
-                key=lambda item: (
-                    item[2].source,
-                    item[2].type,
-                    entry_id_sort_key(item[1]),
-                    item[0],
+            if self._lockstep:
+                gathered.sort(
+                    key=lambda item: (
+                        item[2].tick if item[2].tick is not None else 0,
+                        item[2].source,
+                        item[2].seq if item[2].seq is not None else 0,
+                    )
                 )
-            )
+            else:
+                gathered.sort(
+                    key=lambda item: (
+                        item[2].source,
+                        item[2].type,
+                        entry_id_sort_key(item[1]),
+                        item[0],
+                    )
+                )
 
         events = [
             (stream_entry_key(stream, entry_id), event)
@@ -1082,6 +1113,10 @@ class CognitiveCycle:
                     except Exception:
                         log.exception("failed to publish cycle.time_scale event")
 
+            if self._lockstep:
+                await self._publish_tick_start(result.tick_index)
+                await self._await_barrier(result.tick_index)
+
             if max_ticks is not None and self._tick_index >= max_ticks:
                 break
             # `target_duration_ms` is the REAL per-tick budget (the EntityClock
@@ -1228,6 +1263,23 @@ class CognitiveCycle:
     def _snapshot_to_payload(
         self, snapshot: WorkspaceSnapshot, is_experiential: bool
     ) -> dict[str, Any]:
+        selected = []
+        for entry_id, ev in snapshot.selected_events:
+            if self._lockstep and ev.tick is not None:
+                logical_id = f"{ev.tick}-{ev.source}-{ev.seq or 0}"
+                logical_ts = self._logical_time_for_tick(ev.tick)
+            else:
+                logical_id = entry_id
+                logical_ts = ev.timestamp.isoformat()
+            selected.append({
+                "entry_id": logical_id,
+                "source": ev.source,
+                "type": ev.type,
+                "salience": ev.salience,
+                "payload": ev.payload,
+                "timestamp": logical_ts,
+                "causal_parent": ev.causal_parent,
+            })
         return {
             "tick_index": snapshot.tick_index,
             "inhibited": snapshot.inhibited,
@@ -1236,19 +1288,66 @@ class CognitiveCycle:
             "published_at": self._entity_clock.now(),
             "salience_scores": dict(snapshot.salience_scores),
             "metadata": dict(snapshot.metadata),
-            "selected": [
-                {
-                    "entry_id": entry_id,
-                    "source": ev.source,
-                    "type": ev.type,
-                    "salience": ev.salience,
-                    "payload": ev.payload,
-                    "timestamp": ev.timestamp.isoformat(),
-                    "causal_parent": ev.causal_parent,
-                }
-                for entry_id, ev in snapshot.selected_events
-            ],
+            "selected": selected,
         }
+
+    def _logical_time_for_tick(self, tick: int) -> str:
+        dt = BASE_EPOCH + timedelta(seconds=tick * self._target_tick_period)
+        return dt.isoformat()
+
+    async def _publish_tick_start(self, tick: int) -> None:
+        event = Event(
+            source="cycle",
+            type="cycle.tick_start",
+            payload={"tick": tick},
+            salience=0.0,
+            timestamp=self._now(),
+        )
+        try:
+            await self._bus.publish(event)
+        except Exception:
+            log.exception("failed to publish cycle.tick_start for tick %d", tick)
+
+    async def _await_barrier(self, tick: int) -> None:
+        if not self._lockstep_participants:
+            return
+        pending = set(self._lockstep_participants)
+        deadline = self._clock() + self._lockstep_timeout_s
+
+        while pending:
+            if self._clock() > deadline:
+                log.error(
+                    "lockstep barrier timeout at tick %d; still waiting for: %s",
+                    tick,
+                    ", ".join(sorted(pending)),
+                )
+                break
+
+            for name in list(pending):
+                stream = module_stream(name)
+                cursor = self._tick_done_cursors.get(stream, "0")
+                try:
+                    entries, last_scanned = await self._bus.read_entries(
+                        stream,
+                        last_id=cursor,
+                        count=100,
+                        block_ms=0,
+                    )
+                except Exception:
+                    log.warning("barrier read failed for %s", name, exc_info=True)
+                    continue
+                if last_scanned is not None:
+                    self._tick_done_cursors[stream] = last_scanned
+                for _, ev in (entries or []):
+                    if (
+                        ev.type == f"{name}.tick_done"
+                        and ev.payload.get("tick") == tick
+                    ):
+                        pending.discard(name)
+                        break
+
+            if pending:
+                await asyncio.sleep(0.001)
 
     async def _publish_latency(
         self,
