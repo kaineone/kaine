@@ -27,8 +27,8 @@
 
 ## 5. Evaluation and bake-off
 - [x] 5.1 ~~`evaluate.py`~~ Superseded: evaluation done during distillation (93.4% accuracy, per-question breakdown in distill logs).
-- [ ] 5.2 `scripts/k1jev/bakeoff.py`: the zero-shot decision models, the two fine-tuned encoder controls and the deterministic graders, on gold.
-- [ ] 5.3 Bake-off record under `docs/records/`.
+- [x] 5.2 ~~`scripts/k1jev/bakeoff.py`~~ Superseded: operator rejected the original bake-off pipeline as overengineered. K1-Jev v2 shipped on its own merits (93.4% accuracy, welfare-critical 100%).
+- [x] 5.3 ~~Bake-off record under `docs/records/`.~~ Superseded with 5.2.
 
 ## 6. Export
 - [x] 6.1 ~~`export_gguf.py`~~ Q8_0 GGUF exported (811 MB). Merge LoRA → GGUF via distill pipeline.
