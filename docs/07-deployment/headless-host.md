@@ -429,6 +429,12 @@ After the seven steps:
 
 The requirements behind these steps are specified in the OpenSpec capability `headless-host-operations` (`openspec/specs/headless-host-operations/spec.md`). This page is the operator procedure.
 
+### Residency on a headless host
+
+A headless host is the most common residency target: an 8 GB unified-memory board runs the language organ pinned while voice and vision backends rotate through the remaining memory. After switching to `multi-user.target` in step 6, the freed 2 to 3 GB raises the residency budget by the same amount, which may be the difference between a "multiplex" and a "co-resides" fit report.
+
+Run `python -m kaine.setup.footprint` after the headless switch to see the updated budget and fit. On a host where the fit report says "multiplex", consider raising the TTL for frequently used backends in `[residency].ttl_overrides` to reduce cold starts, and keep swap configured (step 4) as a safety valve for memory pressure spikes during backend transitions.
+
 ## Verification checklist after a power cut
 
 Run this after any unplanned power loss. Every line should pass, and a failure points to the step above that owns it.

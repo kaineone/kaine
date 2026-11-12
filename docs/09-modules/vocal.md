@@ -33,6 +33,12 @@ The Qwen3-TTS backend:
 - `vocal.synthesized` carries `"backend": "qwen3_tts"` and `"prosody_applied"` includes `"instruct"` and `"language"`.
 - Requires the `speech-qwen3` extra: `pip install "kaine[speech-qwen3]"`. Needs a CUDA GPU with enough VRAM for the 0.6B model (about 2 GB in bfloat16).
 
+### Residency and backend swapping
+
+When `[residency].enabled = true`, the vocal module's TTS backend is a residency-managed component. On a host where TTS does not co-reside with the pinned language organ, the Chatterbox service or sherpa-onnx Kokoro engine loads on demand when the language module realizes a `speak` intent. The first synthesis after an idle eviction waits for the backend to load.
+
+The rung selector picks the heaviest installed TTS rung that fits within the remaining budget: Chatterbox (GPU) first, then Kokoro int8 (CPU). If Chatterbox does not fit, Kokoro is selected automatically. Moving from Chatterbox to Kokoro means the entity loses expressive prosody controls (temperature, exaggeration, cfg_weight) and keeps only speed_factor; the `prosody_applied` field in `vocal.synthesized` reflects which parameters were active. In study mode with frozen rungs, a load failure at the selected rung is an incident with no fallback. The per-component TTL for the TTS service is configurable through `[residency].ttl_overrides` with key `kaine-chatterbox`. See [Module residency](../11-residency/README.md) for the full system.
+
 ### Choosing a voice
 
 No voice files are distributed with the project, and the shipped config leaves all voice keys unset. When nothing is configured, the vocal module picks a voice the engine itself provides, so it can speak without any operator-local files. The selection rule lives in `kaine/modules/vocal/voices.py` and is deterministic: the same speaker list and settings produce the same voice on every start.

@@ -204,6 +204,12 @@ python -m kaine.setup.speech_models --stt moonshine-base-en
 
 The command shows name, size, and licence and asks for consent. Archives are pinned by URL and sha256, verified, and extracted into `state/models/sherpa-onnx/`; running it twice is harmless, and nothing downloads at runtime. On a desktop CPU, Moonshine base transcribes a 3 s sentence in about 40 ms.
 
+### Residency and backend swapping
+
+When `[residency].enabled = true`, the audition module's STT backend is a residency-managed component. On a host where STT does not co-reside with the pinned language organ, the Speaches service or sherpa-onnx engine loads on demand when `transcription_enabled = true` and a speech window arrives. The load adds a cold-start delay to the first transcription after idle eviction. Once loaded, the backend stays resident until its TTL expires or memory pressure forces an eviction.
+
+The rung selector (`select_rung()` in `kaine/residency/speech_rungs.py`) picks the heaviest installed STT rung that fits within the remaining budget: Speaches faster-whisper medium.en first, then Moonshine base, then Moonshine tiny. If the heaviest rung does not fit, the selector steps down to a lighter one. In study mode with frozen rungs, no fallback is attempted and a load failure is an incident. The per-component TTL for the STT service is configurable through `[residency].ttl_overrides` with key `kaine-speaches`. See [Module residency](../11-residency/README.md) for the full system.
+
 Limits:
 
 - sherpa-onnx publishes `audition.transcription` with `"backend": "sherpa_onnx"`.

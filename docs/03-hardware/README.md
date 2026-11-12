@@ -74,6 +74,14 @@ The gate classifies each host's accelerator memory as known-discrete, known-unif
 
 The model server can unload the organ after it has been idle for `[language].model_server_sleep_idle_seconds` seconds. The default is `600`; set it to `-1` to keep the organ loaded. Unloading frees the organ's VRAM until the next request. The setting is passed to the model server as `--sleep-idle-seconds`. Natively KAINE passes it from the config; compose and Quadlet read `KAINE_MODEL_SERVER_SLEEP_IDLE_SECONDS`. For the exact wiring see [`kaine/organ_server/lifecycle.py`](../../kaine/organ_server/lifecycle.py) and [`compose/kaine.yml`](../../compose/kaine.yml).
 
+### Residency budget
+
+When `[residency].enabled = true`, the residency system computes a memory budget from the same host state the probe reads. On discrete-GPU hosts each GPU gets a device-domain budget from its VRAM; on unified-memory hosts (Jetson, Apple Silicon) the budget comes from system RAM. A cgroup limit is respected when present. A configurable reserve (default: the larger of 1 GiB and 10% of physical RAM, or `[residency].reserve_bytes` when set) is subtracted before the budget is set.
+
+The footprint catalogue (`state/residency/footprints.json`) records the measured peak memory of each component after calibration. Run `python -m kaine.setup.footprint` to measure the active backends and write the catalogue. The fit report printed by the same command says whether the enabled components co-reside within the budget or must multiplex. Recalibrate after changing a backend, switching models, or moving the install to a different host class (cpu, unified, discrete).
+
+For the full residency system description, see [Module residency](../11-residency/README.md).
+
 ## Supporting services and their footprint (Path B)
 
 A live boot expects these local services. Voice services are only needed when the audition module or the vocal module is enabled; the baseline thinking entity needs Redis, the model server, and Qdrant. None call the cloud at runtime.

@@ -21,7 +21,15 @@ The rules are checked in this order:
 | An accelerator with an unknown budget, or a budget below the 6 GB floor | Tier 1 |
 | No accelerator | Tier 1 |
 
-Module residency is not implemented yet. On a host that needs it, the probe advises keeping the first-configuration module set, serving a language organ that fits (for example the 4B GGUF) and leaving the vision and voice extras off. An 8 GB Orin Nano Super is reported as Tier 2 with residency required.
+Module residency lets a host whose budget falls between the 6 GB and 16 GB floors run the full Tier 2 backend set by loading and unloading components on demand. The language organ stays pinned (resident at all times) and the voice and vision backends rotate through the remaining memory. An 8 GB Orin Nano Super is reported as Tier 2 with residency required.
+
+### Residency overview
+
+The residency system enforces one memory budget per host. A ledger tracks which components are loaded, and a TTL sweep unloads idle components when their time-to-live expires. The pinned component (the language organ by default) is never evicted, so the entity can always think without a cold start. When a non-resident backend is needed, the residency manager loads it, possibly evicting an idle component to free memory. Interactive requests are prioritized over background loads.
+
+On a host where every component fits at once, residency is transparent: nothing swaps. On a smaller host, the trade-off is latency spikes during backend swaps. The fit report (`python -m kaine.setup.footprint`) shows whether the enabled components co-reside or must multiplex, and names the components that will rotate.
+
+For the full guide, see [Module residency](../11-residency/README.md). For configuration keys, see the `[residency]` section in [Configuration reference](../appendix-a-configuration/README.md).
 
 ## What a tier is
 
