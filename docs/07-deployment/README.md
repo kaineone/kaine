@@ -23,6 +23,8 @@ The rules are checked in this order:
 
 Module residency is not implemented yet. On a host that needs it, the probe advises keeping the first-configuration module set, serving a language organ that fits (for example the 4B GGUF) and leaving the vision and voice extras off. An 8 GB Orin Nano Super is reported as Tier 2 with residency required.
 
+For reproducible study runs and ablation experiments, the cycle supports lockstep mode (`[cycle].lockstep = true`, requires `[cycle].deterministic = true`). In lockstep, every tick waits for all modules to report completion before advancing, so two runs over the same scripted input produce identical traces regardless of per-module processing time. The cost is throughput: every tick runs at the speed of the slowest module. See [The cognitive cycle](../08-cognitive-cycle/README.md) for configuration and details. Lockstep is a study mode; leave it off for production operation, where automatic time dilation adapts the entity clock to sustained load.
+
 ## What a tier is
 
 A tier is a TOML overlay (`config/profiles/tierN.toml`) layered after the shipped defaults and the module profile, and before your local `config/kaine.operator.toml`. The cycle and the pre-boot check load configuration in this order:
