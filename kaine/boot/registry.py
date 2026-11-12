@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Mapping, Optional
+from typing import TYPE_CHECKING, Any, Iterable, Mapping, Optional
 
 if TYPE_CHECKING:
     from kaine.residency.router import ResidencyRouter
@@ -99,6 +99,18 @@ def plugin_injections(plugins: Any, name: str) -> Optional[dict[str, Any]]:
     if name not in INJECTABLE_SEAMS:
         return None
     return plugins.injections_for(name) or None
+
+
+def validate_lockstep_modules(modules: Iterable[BaseModule], lockstep: bool) -> None:
+    """Refuse boot when lockstep is on and any module cannot take part in it."""
+    if not lockstep:
+        return
+    incapable = [m.name for m in modules if not getattr(m, "lockstep_capable", False)]
+    if incapable:
+        raise ConfigurationError(
+            "lockstep mode is enabled but these modules do not support it: "
+            f"{', '.join(sorted(incapable))}"
+        )
 
 
 def known_module_names() -> list[str]:
@@ -349,6 +361,11 @@ def build_registry(
         )
         registry.register(sleep)
         log.info("registered module sleep")
+    validate_lockstep_modules(
+        registry.all_modules(),
+        bool((kaine_config.get("cycle") or {}).get("lockstep", False))
+        or bool(getattr(entity_clock, "lockstep", False)),
+    )
     _wire_self_hearing_gate(registry)
     _wire_language_self_model(registry)
     _wire_language_organ_adapter(registry, kaine_config)
