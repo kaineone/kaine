@@ -4,9 +4,12 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
+
+_log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -37,7 +40,7 @@ async def run_ttl_sweep(
             try:
                 await unload_fn(name)
             except Exception:
-                pass
+                _log.debug("TTL sweep: unload %s failed", name, exc_info=True)
 
 async def run_prewarm(
     names: tuple[str, ...],
@@ -56,7 +59,7 @@ async def run_prewarm(
             if ok:
                 submitted.append(name)
         except Exception:
-            pass
+            _log.debug("Prewarm: submit %s failed", name, exc_info=True)
     return submitted
 
 def read_available_memory() -> int:
@@ -71,7 +74,7 @@ def read_available_memory() -> int:
                 parts = line.split()
                 return int(parts[1]) * 1024
     except (OSError, ValueError, IndexError):
-        pass
+        _log.debug("Cannot read /proc/meminfo", exc_info=True)
     return 0
 
 def read_cgroup_limit() -> int | None:
@@ -136,7 +139,7 @@ class PressureValve:
                 events.append(event)
                 self._events.append(event)
             except Exception:
-                pass
+                _log.debug("Eviction of %s failed", name, exc_info=True)
         return events
 
     @property
