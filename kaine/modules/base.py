@@ -272,17 +272,20 @@ class BaseModule(ABC):
                 try:
                     await self.on_workspace(snapshot)
                     self._beat()
-                    tracked = self._tracked_tasks.pop(tick, [])
-                    if tracked:
-                        await asyncio.gather(*tracked, return_exceptions=True)
-                    await self.publish(
-                        f"{self.name}.tick_done",
-                        {"tick": tick},
-                        salience=0.0,
-                    )
                 except Exception:
                     log.exception("on_workspace failed in module %s", self.name)
                 finally:
+                    tracked = self._tracked_tasks.pop(tick, [])
+                    if tracked:
+                        await asyncio.gather(*tracked, return_exceptions=True)
+                    try:
+                        await self.publish(
+                            f"{self.name}.tick_done",
+                            {"tick": tick},
+                            salience=0.0,
+                        )
+                    except Exception:
+                        log.exception("tick_done publish failed in module %s", self.name)
                     _current_tick.reset(token)
         except asyncio.CancelledError:
             raise
