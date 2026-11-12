@@ -6,9 +6,11 @@
 __all__ = [
     "budget",
     "catalogue",
+    "config",
     "events",
     "fit",
     "inflight",
+    "ledger",
 ]
 
 # No eager imports of heavy modules; submodules are imported on demand.
