@@ -161,8 +161,8 @@ still-unbuilt foveation Phase 3–4._
 - [x] 6.3 `DashengAcousticEncoder` and `WavJEPAAcousticEncoder` behind the
       registry, each with a RAM-only rolling window buffer, covered by the
       zero-persistence test.
-- [ ] 6.4 ONNX and dynamic-int8 exports of a thin segment module per encoder,
-      with a parity test against torch on the real weights.
+- [x] 6.4 ONNX and dynamic-int8 exports of a thin segment module per encoder,
+      with a parity test against torch on the real weights. (PR #723.)
 - [x] 6.5 An energy channel: `energy_dbfs` on `audition.perception`, available to
       salience independently of the encoder.
 - [ ] 6.6 Offline bake-off (`scripts/bench_audition_encoders.py`) on the seeded,
