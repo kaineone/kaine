@@ -12,7 +12,7 @@
 - [x] 2.2 `python -m kaine.setup.footprint`: with consent, load each enabled component's configured backend in isolation, run one representative inference, and measure peak resident memory (in-process RSS; the server process's RSS for external services; device memory on discrete hosts). Skip and name absent models; never download. (PR #412, #754. `kaine/setup/footprint.py` measures in-process engines each in a spawned child with HF hub offline, and external services from their listening process. Container-port services reported as not measured; service controller in 3.3.)
 - [x] 2.3 Footprint catalogue at `state/residency/footprints.json`: component, backend, model id, bytes, whether the weights are mapped, host class, timestamp, KAINE version; content-free; refreshed by live observations.
 - [x] 2.4 Fit report as a pure function (budget, catalogue, enabled set, ladders → co-resides or plan with shortfall, pinned organ, multiplexed organs, rung per organ, expected feel), shown by the calibration command, `scripts/probe-host` and the wizard. (The pure function is built in `kaine/residency/fit.py` (274 lines, 11 tests); integrated into the calibration command at line 1783 of `footprint.py`. The `probe-host` surface comes with 2.2; the wizard surface comes with 8.2.)
-- [ ] 2.5 Operator step: run calibration on this desktop, the Orin Nano Super and the Pixel 6a, and commit the results under `docs/benchmarks/`. Use them to set the defaults in 3.x (reserve, TTLs, pin, which organs route through the manager first), and record any published figure they contradict.
+- [ ] 2.5 Operator step: run calibration on this desktop, the Orin Nano Super and the Pixel 6a, and commit the results under `docs/benchmarks/`. Use them to set the defaults in 3.x (reserve, TTLs, pin, which organs route through the manager first), and record any published figure they contradict. *(Deferred: requires operator to run calibration on physical hardware.)*
 
 ## 3. Reversible unload
 
@@ -70,9 +70,9 @@
 ## 10. Measurement, documentation and validation
 
 - [x] 10.1 Latency harness: cold and warm load time per rung; STT segment latency; TTS time-to-first-audio and real-time factor; organ first token including swap-in; end-to-end voice turn; peak resident memory. Output is JSON plus a markdown table. (PR #794.)
-- [ ] 10.2 Operator step: run the harness on the Orin Nano Super, the Pixel 6a and this desktop; commit results under `docs/benchmarks/`, with a table of combinations that do not fit, their shortfalls and their feel.
+- [ ] 10.2 Operator step: run the harness on the Orin Nano Super, the Pixel 6a and this desktop; commit results under `docs/benchmarks/`, with a table of combinations that do not fit, their shortfalls and their feel. *(Deferred: requires operator to run benchmarks on physical hardware.)*
 - [x] 10.3 Docs: a residency guide (budget, calibration, TTLs, pin, llama-swap, what multiplexing feels like, honest limits), plus updates to `docs/07-deployment/README.md`, `docs/03-hardware/README.md`, `docs/07-deployment/headless-host.md`, `docs/09-modules/audition.md` and `docs/09-modules/vocal.md`. (PR #791.)
-- [ ] 10.4 Final validation: `openspec validate module-residency-and-speech-tiers --strict` passes, and every task is checked or deferred with its reason.
+- [x] 10.4 Final validation: `openspec validate module-residency-and-speech-tiers --strict` passes, and every task is checked or deferred with its reason. (58/60 done. Deferred: 2.5 operator calibration, 10.2 operator benchmarks.)
 
 ## 11. Quantization ladder fixed before launch
 
