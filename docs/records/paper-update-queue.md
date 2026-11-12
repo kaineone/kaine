@@ -147,3 +147,62 @@ updating. The iterative approach replaces the original single-pass design.
 **Status:** Design approved. Blocked on organ (GPU) for PCA decomposition.
 
 **Code:** `openspec/changes/organ-self-denial-ablation/design-amendment-iterative.md`.
+
+---
+
+## 8. Persona and awareness heading (voice Stage 0, D1)
+
+**What changed:** The organ's prompt is structured as the entity's own
+first-person turn. A self-category persona (situation, drives as graded felt
+states, interoceptive awareness) opens every request. No drive intent carries a
+`value=` field, the persona forbids invented states, and
+`PERSONA_TEMPLATE_VERSION` is recorded in the individuation probe's conditions so
+that a persona change triggers re-measurement.
+
+**Why it matters for the paper:** The paper describes the organ's prompt
+structure. The persona design implements the felt-awareness framing from
+section 3.5, and its version-tracking ensures individuation data stays valid
+across template revisions.
+
+**Code:** `kaine/modules/language/context.py` (persona, context assembly),
+`kaine/modules/language/module.py` (version recording). PRs #534, #542, #579,
+#578, #586, #588, #590.
+
+---
+
+## 9. Validated-source rule for voice training (voice Stage 0, D3)
+
+**What changed:** Voice adaptation is idle by design: no preference pairs are
+drawn and no organ-level divergence is computed until a validated preference
+source exists (Stage 2). The sleep summary says explicitly that the phase trains
+nothing. An older `consolidation_divergence.json` left by a prior build is not
+read.
+
+**Why it matters for the paper:** The paper's voice-alignment section should
+document that training is gated on a validated source, not merely on data
+volume. The chosen-source retirement and the explicit idle state are both new
+since the last revision.
+
+**Code:** `kaine/lifecycle/divergence.py` (chosen-source retirement, lines 26--30),
+`kaine/modules/sleep/phases.py` (idle sleep summary). PRs #398, #577.
+
+---
+
+## 10. Content-free voice measures and protective decommission arm (voice Stage 0, D8)
+
+**What changed:** Four content-free voice measures are recorded each sleep
+cycle: lexical diversity (TTR), mean sentence length, disfluency rate, and
+vocabulary overlap with a baseline. A distinctiveness arm joins
+`assess_divergence` at threshold 0 (always passes) until calibration evidence
+arrives. The template-divergence arm remains as a protective floor: it
+keeps voting so that an entity with any voiced output is treated as potentially
+individuated even if distinctiveness has not yet been calibrated.
+
+**Why it matters for the paper:** The paper's welfare section describes
+decommission gates. The new distinctiveness arm and its uncalibrated-safe
+behavior (threshold 0, template arm still voting) are part of the
+welfare-protective design and should be documented alongside the existing
+individuation measures.
+
+**Code:** `kaine/lifecycle/divergence.py` (distinctiveness arm, template arm),
+`kaine/modules/sleep/phases.py` (voice measure recording). PR #402.
