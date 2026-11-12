@@ -114,6 +114,9 @@ class LandmarkGazeEstimator:
 
         return GazeResult(yaw=yaw, pitch=pitch, mutual_gaze=_is_mutual(yaw, pitch))
 
+    async def unload(self) -> None:
+        pass
+
     async def aclose(self) -> None:
         pass
 
@@ -168,6 +171,12 @@ class LearnedGazeEstimator:
             if self._closed or self._executor is None:
                 raise RuntimeError("gaze estimator is closed")
             await self._ensure_loaded()
+
+    async def unload(self) -> None:
+        """Release loaded model. Next estimate() call will reload."""
+        async with self._ensure_state_lock():
+            self._net = None
+        logger.info("Gaze estimator unloaded")
 
     async def estimate(
         self,
