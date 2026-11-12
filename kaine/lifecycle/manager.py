@@ -400,13 +400,13 @@ class ForkManager:
                 snap, metadata={**snap.metadata, "artifacts": records}
             )
         enc = self._encryptor_for(identity.entity_id) if identity is not None else None
+        if identity is not None:
+            self._write_sidecar(snap.id, identity)
         try:
             save_snapshot(self._root, snap, encryptor=enc)
         except Exception:
             shutil.rmtree(snapshot_dir(self._root, snap.id), ignore_errors=True)
             raise
-        if identity is not None:
-            self._write_sidecar(snap.id, identity)
         return snap
 
     def restore(self, snapshot_id: str, registry: _RegistryLike) -> ForkSnapshot:
@@ -523,8 +523,8 @@ class ForkManager:
                 child,
                 metadata={**child.metadata, "artifacts_from_parent": sorted(copied_names)},
             )
-        save_snapshot(self._root, child, encryptor=child_enc)
         self._write_sidecar(child.id, child_identity)
+        save_snapshot(self._root, child, encryptor=child_enc)
         return child
 
     def merge(
@@ -801,9 +801,9 @@ class ForkManager:
                 merged,
                 metadata={**merged.metadata, "artifact_sources": sources},
             )
-        save_snapshot(self._root, merged, encryptor=enc_a)
         if a_identity is not None:
             self._write_sidecar(merged.id, a_identity)
+        save_snapshot(self._root, merged, encryptor=enc_a)
         return merged
 
     async def preserve_live(

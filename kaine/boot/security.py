@@ -86,5 +86,10 @@ def build_keyring(kaine_config: dict[str, Any]) -> KeyRing | None:
     from kaine.security.custody.keyring import KeyRing as _KeyRing
     from kaine.security.custody.keyring import SoftwareKek
 
-    kek = SoftwareKek(kek_bytes)
+    try:
+        kek = SoftwareKek(kek_bytes)
+    except (ValueError, TypeError) as exc:
+        raise CryptoConfigError(
+            f"custody KEK is invalid (expected 32 bytes, got {len(kek_bytes)}): {exc}"
+        ) from exc
     return _KeyRing(kek, state_root=state_root)
