@@ -2864,6 +2864,7 @@ async def _phase_supervisor(ctx: BootContext) -> int | None:
         # Best-effort tick<->poll bridge: lets a supervisor.incident annotation be
         # located within the run by cycle tick, not just the supervisor's poll index.
         tick_index_provider=lambda: ctx.cycle.tick_index,
+        barrier_active_provider=lambda: ctx.cycle.barrier_active,
         # A crashed poll loop preserves the entity and writes escalation.json
         # before the halt in every mode whose gate requires the supervisor.
         escalate_on_crash=_supervision_loss_escalates(ctx.supervision_mode),
