@@ -23,6 +23,8 @@ class ResidencyConfig:
     llm_proxy: str = "none"
     interactive_queue_max: int = 16
     background_queue_max: int = 64
+    perception_queue_max: int = 32
+    perception_queue_max_age_s: float = 10.0
 
 
 def from_config(config: dict[str, Any]) -> ResidencyConfig:
@@ -87,6 +89,18 @@ def from_config(config: dict[str, Any]) -> ResidencyConfig:
     if background_queue_max <= 0:
         raise ConfigShapeError("background_queue_max must be > 0")
 
+    perception_queue_max = section.get("perception_queue_max", 32)
+    if not isinstance(perception_queue_max, int):
+        raise ConfigShapeError("perception_queue_max must be int")
+    if perception_queue_max <= 0:
+        raise ConfigShapeError("perception_queue_max must be > 0")
+
+    perception_queue_max_age_s = section.get("perception_queue_max_age_s", 10.0)
+    if not isinstance(perception_queue_max_age_s, (int, float)):
+        raise ConfigShapeError("perception_queue_max_age_s must be a number")
+    if perception_queue_max_age_s <= 0:
+        raise ConfigShapeError("perception_queue_max_age_s must be > 0")
+
     return ResidencyConfig(
         enabled=enabled,
         reserve_bytes=reserve_bytes,
@@ -97,4 +111,6 @@ def from_config(config: dict[str, Any]) -> ResidencyConfig:
         llm_proxy=llm_proxy,
         interactive_queue_max=interactive_queue_max,
         background_queue_max=background_queue_max,
+        perception_queue_max=perception_queue_max,
+        perception_queue_max_age_s=float(perception_queue_max_age_s),
     )
