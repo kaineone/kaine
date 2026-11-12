@@ -1,7 +1,7 @@
 # Design: entity key custody
 
 ## Status
-This is a design awaiting two steps, and nothing in it is implemented. KAINE still runs the single per-install key described under Context.
+Foundation code is on main. The v2 encryption envelope, per-entity encryptor, KeyRing, SoftwareKek and WrappedDek are implemented and tested (PRs #705, #706). KAINE still runs the single per-install key at boot; per-entity keys are wired through ForkManager and preservation next (task 1.1).
 - **Integrator review (task 0.1).** Reviewed and approved 2026-11-11. No design changes required. Note: measure fork re-encryption cost during swtpm tests.
 - **The operator's key ceremony (task 0.3).** The guardian's identity, the trustee count n and the share-redundancy plan are decided there. This blocks shipping, not development against swtpm.
 
