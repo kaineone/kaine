@@ -77,6 +77,9 @@ class RunContext:
     # Whether the pilot run data behind the record was verified at boot:
     # "verified", "absent" or "partial"; None when no record gated the run.
     settings_record_run_data: Optional[str] = None
+    # Per-component model rung selection at boot: component -> {backend, model_id,
+    # quantization, weights_sha256}. Non-content: records the rung, not the weights.
+    model_rungs: dict[str, dict[str, str | None]] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         """Plain-dict view suitable for JSON serialization (manifest, stamping)."""
@@ -140,6 +143,7 @@ def mint_run_context(
     study: str | None = None,
     settings_record_sha256: str | None = None,
     settings_record_run_data: str | None = None,
+    model_rungs: Mapping[str, Mapping[str, str | None]] | None = None,
 ) -> RunContext:
     """Assemble a fresh ``RunContext``.
 
@@ -184,6 +188,7 @@ def mint_run_context(
         study=study,
         settings_record_sha256=settings_record_sha256,
         settings_record_run_data=settings_record_run_data,
+        model_rungs={k: dict(v) for k, v in (model_rungs or {}).items()},
     )
 
 

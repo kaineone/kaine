@@ -28,6 +28,15 @@ backend = "qdrant"      # KAINE-owned Qdrant container
 [decision]
 enabled = false
 
+[vocal]
+# Same service backends as Tier 2; scale-up (larger models, per-module GPU
+# placement) is left to the operator's config/kaine.operator.toml.
+backend = "chatterbox"
+
+[audition]
+# Same service backends as Tier 2; scale-up is operator-configured.
+backend = "speaches"
+
 # [social_cognition]
 # Perceptual identity is available at Tier 2+ but ships disabled.
 # Enable via config/kaine.operator.toml.

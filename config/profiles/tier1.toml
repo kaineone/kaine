@@ -41,6 +41,7 @@ emotion_model_id = ""
 emotion_device = "cpu"
 # Local speech recognition via sherpa-onnx (Tier 1 default; replaces Speaches).
 backend = "sherpa_onnx"
+sherpa_model_id = "moonshine-base-en"
 
 [planning]
 # NumPy-only active inference backend (no JAX/pymdp dependency).
@@ -53,6 +54,7 @@ engine = "numpy"
 [vocal]
 # Local speech synthesis via sherpa-onnx (Tier 1 default; replaces Chatterbox).
 backend = "sherpa_onnx"
+sherpa_model_id = "kokoro-en"
 
 [decision]
 enabled = false
