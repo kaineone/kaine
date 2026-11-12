@@ -17,6 +17,8 @@ class SpeechRung:
     licence: str
     mapped: bool
     fetch_command: str
+    quantization: str | None = None
+    weights_sha256: str | None = None
 
 
 TTS_LADDER: tuple[SpeechRung, ...] = (
@@ -35,6 +37,7 @@ TTS_LADDER: tuple[SpeechRung, ...] = (
         licence="Apache-2.0 (model); GPL-3.0-or-later (espeak-ng-data)",
         mapped=False,
         fetch_command="python -m kaine.setup.speech_models --tts kokoro-en",
+        quantization="int8",
     ),
 )
 
@@ -108,6 +111,8 @@ def is_rung_installed(rung: SpeechRung) -> bool:
 
 @dataclass(frozen=True)
 class RungSelection:
+    """Result of selecting the best speech rung for a component."""
+
     rung: SpeechRung
     reason: str
     hints: tuple[str, ...]

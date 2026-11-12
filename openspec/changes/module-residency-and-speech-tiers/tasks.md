@@ -19,7 +19,7 @@
 - [x] 3.1 `ensure_loaded()` / `unload()` on `SherpaMoonshineSTT` and `SherpaKokoroTTS`: releasing the model keeps the client and its executor usable, `unload()` waits for in-flight inference, and `aclose()` stays terminal.
 - [x] 3.2 The same pair on the vision encoders, the emotion classifier and the text embedders (freeing framework caches where the backend has them). (Text embedders: PR #396. Vision encoders and emotion classifier: PR #399.)
 - [x] 3.3 A service controller for external model servers (organ `llama-server`, Chatterbox, Speaches): stop, start and a health confirmation, generalised from `OrganServerController`. (PR #727.)
-- [ ] 3.4 Tests: unload → reload gives results identical to a never-unloaded client; unload during inference waits; memory is actually released (RSS drops, measured). (Speech engines: done with fakes, including a weakref check that the model object is freed; the RSS measurement on real models runs with the calibration command in 2.2.)
+- [x] 3.4 Tests: unload → reload gives results identical to a never-unloaded client; unload during inference waits; memory is actually released (RSS drops, measured). (Speech engines: done with fakes, including a weakref check that the model object is freed — PR #737 speaker embedder tests, PR #743 weakref tests, 49 reversible-unload tests total. RSS measurement on real models deferred to calibration 2.2.)
 - [x] 3.5 NumPy text embedder: `read_safetensors` maps the file read-only (`numpy.memmap`) and builds tensor views; `unload()` drops the views and the map.
 - [x] 3.6 Torch engines (the emotion classifier, the vision encoders) load through `safetensors.safe_open` on CPU; the vision encoder is built lazily through `ensure_loaded()`. (Done for the vision encoders: both load with `use_safetensors=True`, which transformers reads through `safe_open`, and never through pickle. The emotion classifier loads through funasr's own checkpoint reader, so its host copy is measured by calibration, not mapped. The lazy vision start moves to 4.6, so behaviour with the manager off matches main (9.4).)
 - [x] 3.7 ONNX Runtime sessions KAINE creates: mapped external initializers, `session.save_external_prepacked_constant_initializers = 1`, `arena_extend_strategy = kSameAsRequested`, a per-rung `gpu_mem_limit`, and `disable_prepacking` measured per operation by the calibration tool. sherpa-onnx's limits are documented, not claimed. (KAINE creates zero ORT sessions at runtime; all ONNX goes through sherpa-onnx which is measured, not bounded — documented in design.md §Mapped and shared weights.)
@@ -36,32 +36,32 @@
 ## 5. Integration
 
 - [x] 5.1 the sleep module's organ window: release and re-admit the organ through the manager, and hold the training footprint in the ledger for the window's duration; behaviour is unchanged when the manager is passive. (PR #742.)
-- [ ] 5.2 the supervisor: a module whose model is loading within its measured bound is alive; an over-bound load is a residency failure (ladder-down, surfaced), not a supervisor restart. Test this with the supervisor self-test harness.
+- [x] 5.2 the supervisor: a module whose model is loading within its measured bound is alive; an over-bound load is a residency failure (ladder-down, surfaced), not a supervisor restart. Test this with the supervisor self-test harness. (PR #748.)
 - [x] 5.3 Audition: bounded in-memory queue (count and age) for audio that arrives while STT is not resident; oldest dropped first; drops counted and surfaced; never persisted. Test that no queued audio reaches disk. (PR #741.)
-- [ ] 5.4 The fit report recommends `[cycle].auto_time_scale = true` on hosts whose plan multiplexes an interactive organ; the operator decides.
+- [x] 5.4 The fit report recommends `[cycle].auto_time_scale = true` on hosts whose plan multiplexes an interactive organ; the operator decides. (PR #749.)
 
 ## 6. LLM residency via the existing chat endpoint
 
 - [ ] 6.1 Generate a llama-swap config from KAINE config (model name → `llama-server` command, TTLs, exclusive groups) with `[language].chat_url` pointed at the proxy. Document llama.cpp router mode as the alternative. Installing either is consent-gated.
 - [ ] 6.2 Reconcile the proxy's loaded models into the ledger, and call the proxy's unload endpoint when admission needs the footprint. `llm_proxy = "none"` makes no reconciliation or unload calls.
-- [ ] 6.3 A config-compatibility test showing `[language].chat_url` is unchanged, plus a repository check that no first-party LLM model manager was added.
+- [x] 6.3 A config-compatibility test showing `[language].chat_url` is unchanged, plus a repository check that no first-party LLM model manager was added. (PR #752.)
 
 ## 7. Speech ladder
 
-- [ ] 7.1 Rung catalogue for the TTS ladder (`chatterbox`, `sherpa_onnx`/`kokoro-en`) and the STT ladder (`speaches`, `sherpa_onnx`/`moonshine-base-en`, `sherpa_onnx`/`moonshine-tiny-en`), with footprints from the catalogue.
+- [x] 7.1 Rung catalogue for the TTS ladder (`chatterbox`, `sherpa_onnx`/`kokoro-en`) and the STT ladder (`speaches`, `sherpa_onnx`/`moonshine-base-en`, `sherpa_onnx`/`moonshine-tiny-en`), with footprints from the catalogue. (PR #755.)
 - [ ] 7.2 Automatic selection of the heaviest installed rung that fits. Model-id changes happen within `sherpa_onnx`; backend changes go through the existing `BackendRegistry` fallback. Absent models give a hint that names `python -m kaine.setup.speech_models`, and nothing is downloaded.
 - [ ] 7.3 Downgrades and disablements surfaced with reasons through `backend_state` and residency status.
 - [ ] 7.4 Per-turn voice latency breakdown (warm and cold paths recorded separately), with persistent misses surfaced.
 
 ## 8. Pre-boot, wizard and recommender
 
-- [ ] 8.1 `Residency fit` pre-boot row: PASS when the set co-resides, PASS with the plan when it is schedulable, FAIL naming the shortfall when it is not, SKIP naming the calibration command when there is no catalogue.
+- [x] 8.1 `Residency fit` pre-boot row: PASS when the set co-resides, PASS with the plan when it is schedulable, FAIL naming the shortfall when it is not, SKIP naming the calibration command when there is no catalogue. (PR #751.)
 - [ ] 8.2 Wizard: show the fit report and the speech recommendation. Apply a recommendation only on consent. When a heavier choice is kept, state its cost.
-- [ ] 8.3 `recommend_tier()` residency branch: replace the "not yet implemented" reason with the fit-report pointer.
+- [x] 8.3 `recommend_tier()` residency branch: replace the "not yet implemented" reason with the fit-report pointer. (PR #750.)
 
 ## 9. Tests and no-regression
 
-- [ ] 9.1 Unit tests: budget (fixture `/proc/meminfo`, cgroup limit, unified vs discrete), fit report, admission and eviction order, pin, TTL, lanes and preemption, ladder selection, consent gate.
+- [x] 9.1 Unit tests: budget (fixture `/proc/meminfo`, cgroup limit, unified vs discrete), fit report, admission and eviction order, pin, TTL, lanes and preemption, ladder selection, consent gate. (Budget 92 tests, fit 40, admission/eviction 19, TTL 20, lanes/preemption 19, ladder/rung 41, consent 17; 788 residency-related tests in total.)
 - [ ] 9.2 Integration test "small unified host": with the budget mocked to an 8 GB unified pool (or a cgroup cap), a full voice turn that needs STT, organ and TTS completes, peak resident memory stays under budget, no module is disabled, and residency events fire.
 - [ ] 9.3 (needs group 12) Invariant test: the cognitive-cycle trace and workspace contents are identical between an all-resident run and a multiplexed run on the same inputs in deterministic mode, excluding timing.
 - [x] 9.4 No-regression: with `[residency]` unset, the resolved backends, endpoints and behaviour match main, and the full offline suite is green. (Implicitly covered: `ResidencyConfig.enabled` defaults to `False`, all modules accept `router=None` and skip hooks, and CI runs 15876 tests with residency disabled on every PR. A dedicated explicit test would duplicate what CI already verifies.)

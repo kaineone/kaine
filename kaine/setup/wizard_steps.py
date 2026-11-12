@@ -195,6 +195,172 @@ def tier_step() -> Step:
 
 
 # -----------------------------------------------------------------------------
+# Fit report and speech recommendations
+# -----------------------------------------------------------------------------
+
+
+def _speech_cost_note(label: str, current_backend: str, rung: Any, footprint: int | None) -> str:
+    """Build a cost note for keeping a heavier speech backend."""
+    note = f"{label}: keeping {current_backend}; recommended {rung.label}"
+    if footprint is not None:
+        mib = footprint / (1 << 20)
+        note += f" would use {mib:.1f} MiB"
+    return note
+
+
+def fit_report_step() -> Step:
+    """Fit report and speech-backend recommendations from the calibration catalogue."""
+
+    def applies(ctx: StepContext) -> bool:
+        if ctx.extra.get("defaults"):
+            return False
+        return bool(ctx.extra.get("catalogue"))
+
+    def explanation(ctx: StepContext) -> list[str]:
+        from kaine.residency.catalogue import load_catalogue
+        from kaine.residency.speech_rungs import LADDERS, lookup_footprint, select_rung
+        from kaine.setup.footprint import host_class as get_host_class
+        from kaine.setup.footprint import quick_fit
+
+        lines: list[str] = []
+
+        # Fit report from the existing catalogue.
+        report = quick_fit()
+        if report is not None:
+            lines.extend(report.lines())
+            ctx.extra["fit_report"] = report
+        else:
+            lines.append("Fit report unavailable (no calibrated components).")
+
+        # Speech rung recommendations.
+        try:
+            hclass = get_host_class()
+        except Exception:
+            hclass = "cpu"
+
+        entries = load_catalogue()
+        selections: dict[str, Any] = {}
+
+        for component in ("vocal.tts", "audition.stt"):
+            ladder = LADDERS.get(component)
+            if ladder is None:
+                continue
+            sel = select_rung(ladder, component, list(entries), hclass, budget_bytes=None)
+            if sel is not None:
+                footprint = lookup_footprint(sel.rung, component, list(entries), hclass)
+                selections[component] = {"selection": sel, "footprint_bytes": footprint}
+                lines.append(f"  Recommended {component}: {sel.rung.label}")
+                lines.append(f"    reason: {sel.reason}")
+                if footprint is not None:
+                    lines.append(
+                        f"    calibrated footprint: {footprint / (1 << 20):.1f} MiB"
+                    )
+                for hint in sel.hints:
+                    lines.append(f"    hint: {hint}")
+
+        ctx.extra["speech_selections"] = selections
+        ctx.extra["_host_class"] = hclass
+        ctx.extra["_catalogue_entries"] = entries
+
+        return lines
+
+    def fields(ctx: StepContext) -> tuple[Field, ...]:
+        selections = ctx.extra.get("speech_selections") or {}
+        shipped = ctx.extra.get("shipped_config") or {}
+        result: list[Field] = []
+
+        tts_info = selections.get("vocal.tts")
+        if tts_info is not None:
+            rung = tts_info["selection"].rung
+            current_backend = (shipped.get("vocal") or {}).get("backend", "chatterbox")
+            current_model = (shipped.get("vocal") or {}).get("sherpa_model_id", "")
+            if rung.backend != current_backend or (
+                rung.backend == "sherpa_onnx" and rung.model_id != current_model
+            ):
+                result.append(
+                    Field(
+                        "apply_tts_rung",
+                        f"Apply recommended TTS rung ({rung.label})?",
+                        "bool",
+                        default=True,
+                    )
+                )
+
+        stt_info = selections.get("audition.stt")
+        if stt_info is not None:
+            rung = stt_info["selection"].rung
+            current_backend = (shipped.get("audition") or {}).get("backend", "speaches")
+            current_model = (shipped.get("audition") or {}).get("sherpa_model_id", "")
+            if rung.backend != current_backend or (
+                rung.backend == "sherpa_onnx" and rung.model_id != current_model
+            ):
+                result.append(
+                    Field(
+                        "apply_stt_rung",
+                        f"Apply recommended STT rung ({rung.label})?",
+                        "bool",
+                        default=True,
+                    )
+                )
+
+        return tuple(result)
+
+    def apply(ctx: StepContext, answers: dict[str, Any]) -> None:
+        selections = ctx.extra.get("speech_selections") or {}
+        cost_notes: list[str] = []
+        line_fn = _make_line(ctx)
+
+        # TTS
+        tts_info = selections.get("vocal.tts")
+        if tts_info is not None and "apply_tts_rung" in answers:
+            rung = tts_info["selection"].rung
+            footprint = tts_info.get("footprint_bytes")
+            if answers["apply_tts_rung"]:
+                vocal = ctx.config.setdefault("vocal", {})
+                vocal["backend"] = rung.backend
+                if rung.backend == "sherpa_onnx":
+                    vocal["sherpa_model_id"] = rung.model_id
+            else:
+                shipped = ctx.extra.get("shipped_config") or {}
+                current_backend = (shipped.get("vocal") or {}).get(
+                    "backend", "chatterbox"
+                )
+                note = _speech_cost_note("TTS", current_backend, rung, footprint)
+                cost_notes.append(note)
+                line_fn(f"  {note}")
+
+        # STT
+        stt_info = selections.get("audition.stt")
+        if stt_info is not None and "apply_stt_rung" in answers:
+            rung = stt_info["selection"].rung
+            footprint = stt_info.get("footprint_bytes")
+            if answers["apply_stt_rung"]:
+                audition = ctx.config.setdefault("audition", {})
+                audition["backend"] = rung.backend
+                if rung.backend == "sherpa_onnx":
+                    audition["sherpa_model_id"] = rung.model_id
+            else:
+                shipped = ctx.extra.get("shipped_config") or {}
+                current_backend = (shipped.get("audition") or {}).get(
+                    "backend", "speaches"
+                )
+                note = _speech_cost_note("STT", current_backend, rung, footprint)
+                cost_notes.append(note)
+                line_fn(f"  {note}")
+
+        ctx.extra["speech_cost_notes"] = cost_notes
+
+    return Step(
+        id="fit-report",
+        title="Residency fit report and speech recommendations",
+        explanation=explanation,
+        fields=fields,
+        applies=applies,
+        apply=apply,
+    )
+
+
+# -----------------------------------------------------------------------------
 # Accelerator/runtime mismatch
 # -----------------------------------------------------------------------------
 
@@ -586,6 +752,7 @@ def setup_steps(include_storage: bool) -> list[Step]:
     steps.extend(
         [
             tier_step(),
+            fit_report_step(),
             accel_mismatch_step(),
             module_preset_step(),
             custom_modules_step(),
