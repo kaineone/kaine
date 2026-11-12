@@ -4,16 +4,11 @@
 """Off equals absent: with stimulus control off the build behaves as one without it.
 
 ``GOLDEN`` is the digest of ``tests/stimulus_identity_harness.py`` run on the
-build without stimulus control: commit 86e5d519, the welfare gates on
-origin/main d7fabdc0 (after the playlist A/V sync). Extract that commit's
-``kaine`` package to a directory, then from that directory run
-``python -c "import sys, runpy; sys.path.insert(0, '.');
-runpy.run_path('<worktree>/tests/stimulus_identity_harness.py', run_name='__main__')"``.
-On d7fabdc0 itself the digest is
-8806003e8f337aae5d18cfb0cec1f53363fe75f368a7e27d304c889ad1a7fd49; the welfare
-gates change only the welfare observer's ``affect_welfare`` rows, which gain the
-A.4 indicator fields (``indicator_span_awake_seconds`` and each indicator's
-value, bar and over flag).
+build without stimulus control, using an in-spec torch version (``<2.15`` per
+``pyproject.toml``). The harness output is sensitive to torch and snntorch
+versions; compute the golden with the CI-equivalent environment (CPU torch,
+current pip constraints). To regenerate, run
+``python tests/stimulus_identity_harness.py`` from the repo root.
 
 The harness drives the affect module, the action layer, the effectors module,
 the welfare observer's records, the playlist video source and the real playlist
