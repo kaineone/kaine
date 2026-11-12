@@ -83,7 +83,7 @@ def _patch_dashboard_main(monkeypatch, tmp_path, recent_entries):
         ),
     )
     monkeypatch.setattr(
-        dashboard_main, "_build_fork_manager", lambda _a, _b: (None, "test")
+        dashboard_main, "_build_fork_manager", lambda *_args: (None, "test")
     )
     monkeypatch.setattr(dashboard_main, "load_health_prober", _broken_health_prober)
     monkeypatch.setattr(dashboard_main, "resolve", Path)
