@@ -49,8 +49,8 @@
 ## 7. Speech ladder
 
 - [x] 7.1 Rung catalogue for the TTS ladder (`chatterbox`, `sherpa_onnx`/`kokoro-en`) and the STT ladder (`speaches`, `sherpa_onnx`/`moonshine-base-en`, `sherpa_onnx`/`moonshine-tiny-en`), with footprints from the catalogue. (PR #755.)
-- [ ] 7.2 Automatic selection of the heaviest installed rung that fits. Model-id changes happen within `sherpa_onnx`; backend changes go through the existing `BackendRegistry` fallback. Absent models give a hint that names `python -m kaine.setup.speech_models`, and nothing is downloaded.
-- [ ] 7.3 Downgrades and disablements surfaced with reasons through `backend_state` and residency status.
+- [x] 7.2 Automatic selection of the heaviest installed rung that fits. Model-id changes happen within `sherpa_onnx`; backend changes go through the existing `BackendRegistry` fallback. Absent models give a hint that names `python -m kaine.setup.speech_models`, and nothing is downloaded. (PRs #759, #760: host_class in catalogue and select_rung; PR #761: factory wiring in construct_module.)
+- [x] 7.3 Downgrades and disablements surfaced with reasons through `backend_state` and residency status. (PR #761: factory wiring records backend failures and downgrades via record_backend_failure and record_downgrade.)
 - [x] 7.4 Per-turn voice latency breakdown (warm and cold paths recorded separately), with persistent misses surfaced. (PR #762.)
 
 ## 8. Pre-boot, wizard and recommender
@@ -65,7 +65,7 @@
 - [ ] 9.2 Integration test "small unified host": with the budget mocked to an 8 GB unified pool (or a cgroup cap), a full voice turn that needs STT, organ and TTS completes, peak resident memory stays under budget, no module is disabled, and residency events fire.
 - [ ] 9.3 (needs group 12) Invariant test: the cognitive-cycle trace and workspace contents are identical between an all-resident run and a multiplexed run on the same inputs in deterministic mode, excluding timing.
 - [x] 9.4 No-regression: with `[residency]` unset, the resolved backends, endpoints and behaviour match main, and the full offline suite is green. (Implicitly covered: `ResidencyConfig.enabled` defaults to `False`, all modules accept `router=None` and skip hooks, and CI runs 15876 tests with residency disabled on every PR. A dedicated explicit test would duplicate what CI already verifies.)
-- [ ] 9.5 Network-isolated consent test: nothing is downloaded without consent; with consent, a download happens once and is idempotent.
+- [x] 9.5 Network-isolated consent test: nothing is downloaded without consent; with consent, a download happens once and is idempotent. (PR #758: consent-denied and idempotent-fetch tests in the offline suite.)
 
 ## 10. Measurement, documentation and validation
 
