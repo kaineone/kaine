@@ -172,9 +172,7 @@ def _tap_audio_level(frame: bytes, sample_rate: int) -> None:
         pass
 
 
-def encode_wav(
-    pcm: bytes, *, sample_rate: int, channels: int, sampwidth: int = 2
-) -> bytes:
+def encode_wav(pcm: bytes, *, sample_rate: int, channels: int, sampwidth: int = 2) -> bytes:
     """Wrap raw PCM as a WAV blob entirely in memory. NO file path,
     EVER. The output bytes are handed to the parent's process_audio."""
     buf = io.BytesIO()
@@ -205,6 +203,7 @@ class LiveMicrophone:
         stream_factory: Callable[..., _AudioStream] | None = None,
         vad_factory: Callable[..., _VAD] | None = None,
         clock: Callable[[], float] | None = None,
+        lockstep_trigger: Any | None = None,
     ) -> None:
         self._sink = sink
         self._cfg = config or LiveMicConfig()
@@ -214,6 +213,7 @@ class LiveMicrophone:
         self._stream_factory = stream_factory or _default_stream_factory
         self._vad_factory = vad_factory
         self._clock = clock or time.monotonic
+        self._lockstep_trigger = lockstep_trigger
         self._summary_chunks = 0
         self._summary_bytes = 0
         self._summary_below_min = 0
@@ -259,6 +259,9 @@ class LiveMicrophone:
             self._set_active(False)
 
     async def _supervise(self) -> None:
+        if self._lockstep_trigger is not None:
+            await self._supervise_lockstep()
+            return
         try:
             while not self._stopped.is_set():
                 desired = self._read_desired()
@@ -288,6 +291,30 @@ class LiveMicrophone:
             if self._active:
                 self._set_active(False)
 
+    async def _supervise_lockstep(self) -> None:
+        """Lockstep capture: process one audio window per tick_start yield."""
+        try:
+            await self._start_stream()
+            if not self._active:
+                log.error("live mic lockstep: could not start audio stream")
+                return
+            async for _tick in self._lockstep_trigger:
+                if self._stopped.is_set():
+                    break
+                if self._active:
+                    if self._cfg.continuous_capture:
+                        await self._consume_one_window()
+                    else:
+                        await self._consume_one_utterance()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception("live mic lockstep supervisor crashed")
+        finally:
+            self._close_stream()
+            if self._active:
+                self._set_active(False)
+
     def _read_desired(self) -> bool:
         if self._desired_reader is None:
             return True  # supervised but no toggle — boot-time enabled means active
@@ -298,9 +325,7 @@ class LiveMicrophone:
             return self._active
 
     async def _start_stream(self) -> None:
-        frames_per_block = max(
-            1, self._cfg.sample_rate * self._cfg.vad_frame_ms // 1000
-        )
+        frames_per_block = max(1, self._cfg.sample_rate * self._cfg.vad_frame_ms // 1000)
         try:
             self._stream = self._stream_factory(
                 device=self._cfg.device,
@@ -510,9 +535,7 @@ class LiveMicrophone:
                     )
                 except TypeError:
                     try:
-                        await self._sink(
-                            wav_bytes, self._cfg.sample_rate, self._cfg.source_label
-                        )
+                        await self._sink(wav_bytes, self._cfg.sample_rate, self._cfg.source_label)
                     except Exception:
                         log.exception("live mic sink raised (positional fallback)")
                 except Exception:
