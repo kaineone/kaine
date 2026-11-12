@@ -25,6 +25,7 @@ config land there when present; `resolve_device` falls back to `cuda:0`
 (or `cpu`) with a warning when the requested index isn't available, so
 a stale config doesn't crash the boot.
 """
+
 from __future__ import annotations
 
 import logging
@@ -81,6 +82,7 @@ def allowed_devices() -> tuple[str, ...] | None:
 def _try_torch():
     try:
         import torch  # type: ignore[import-untyped]
+
         return torch
     except Exception:
         return None
@@ -221,18 +223,14 @@ def select_device(preferred: str | None = None) -> str:
         idx = int(m.group(1))
         count = _cuda_device_count()
         if idx >= count:
-            raise ValueError(
-                f"cuda:{idx} requested but only {count} CUDA device(s) available"
-            )
+            raise ValueError(f"cuda:{idx} requested but only {count} CUDA device(s) available")
         return preferred
     mx = _XPU_INDEXED_RE.match(preferred)
     if mx:
         idx = int(mx.group(1))
         count = _xpu_device_count()
         if idx >= count:
-            raise ValueError(
-                f"xpu:{idx} requested but only {count} XPU device(s) available"
-            )
+            raise ValueError(f"xpu:{idx} requested but only {count} XPU device(s) available")
         return preferred
     if preferred == "cuda":
         if torch is not None and torch.cuda.is_available():
@@ -544,9 +542,7 @@ def device_consumers(timeout_s: float = 5.0) -> list[dict[str, Any]]:
                 visible = os.path.exists(f"/proc/{pid}")
                 if not visible:
                     any_invisible = True
-                processes.append(
-                    {"pid": pid, "name": name, "used_mib": mem, "visible": visible}
-                )
+                processes.append({"pid": pid, "name": name, "used_mib": mem, "visible": visible})
             unattributed = max(0, used - sum(p["used_mib"] for p in processes))
             if container:
                 processes_visible = False
@@ -678,9 +674,7 @@ def describe_host() -> HostSnapshot:
         if cuda_available:
             try:
                 gpu_count = int(torch.cuda.device_count())
-                gpu_names = [
-                    str(torch.cuda.get_device_name(i)) for i in range(gpu_count)
-                ]
+                gpu_names = [str(torch.cuda.get_device_name(i)) for i in range(gpu_count)]
                 for i in range(gpu_count):
                     try:
                         props = torch.cuda.get_device_properties(i)
@@ -694,8 +688,8 @@ def describe_host() -> HostSnapshot:
                             "index": i,
                             "device": f"cuda:{i}",
                             "name": gpu_names[i] if i < len(gpu_names) else "",
-                            "total_vram_gb": round(total / (1024 ** 3), 2),
-                            "free_vram_gb": round(int(free) / (1024 ** 3), 2),
+                            "total_vram_gb": round(total / (1024**3), 2),
+                            "free_vram_gb": round(int(free) / (1024**3), 2),
                         }
                     )
             except Exception:
@@ -724,9 +718,7 @@ def describe_host() -> HostSnapshot:
             _accel_index = 0  # an accelerator is present: classify device 0
         else:
             _accel_index = None  # no accelerator: classify the host itself
-        memory = hostmem.to_dict(
-            hostmem.classify_accelerator_memory(_accel_index, torch=torch)
-        )
+        memory = hostmem.to_dict(hostmem.classify_accelerator_memory(_accel_index, torch=torch))
     except Exception:
         # Degrade to the documented to_dict() shape instead of raising.
         memory = {
@@ -823,10 +815,16 @@ TIER_CAPABILITIES: dict[int, dict[str, Any]] = {
         "name": "edge / sensor node",
         "host": "~512 MB-class SBC or retired low-RAM phone",
         "summary": (
-            "symbolic reasoning + episodic memory + perception satellite; "
-            "no torch runtime"
+            "symbolic reasoning + episodic memory + perception satellite; no torch runtime"
         ),
-        "present": ["interoception", "sequence", "planning", "episodic memory (sqlite-vec)", "self_model", "affect"],
+        "present": [
+            "interoception",
+            "sequence",
+            "planning",
+            "episodic memory (sqlite-vec)",
+            "self_model",
+            "affect",
+        ],
         "degraded": ["language (sub-1B GGUF, slow)"],
         "absent": ["vision", "speech in/out", "vocal emotion", "expressive TTS", "≥2B LLM"],
     },
@@ -927,7 +925,7 @@ def total_ram_gb() -> float | None:
         pool = hostmem.system_memory_pool()
         if pool.total_bytes is None or pool.total_bytes <= 0:
             return None
-        return round(pool.total_bytes / (1024 ** 3), 2)
+        return round(pool.total_bytes / (1024**3), 2)
     except Exception:
         return None
 
@@ -979,11 +977,7 @@ def _classify_memory(gpu_count: int | None = None) -> tuple[str, float | None]:
             candidate = raw_state
         return str(candidate).lower() == label
 
-    count = (
-        gpu_count
-        if gpu_count is not None
-        else (_cuda_device_count() + _xpu_device_count())
-    )
+    count = gpu_count if gpu_count is not None else (_cuda_device_count() + _xpu_device_count())
 
     total_vram_bytes = 0
     seen_discrete = False
@@ -1032,7 +1026,7 @@ def _classify_memory(gpu_count: int | None = None) -> tuple[str, float | None]:
     if seen_unified:
         return "unified", None
     if seen_discrete:
-        return "discrete", total_vram_bytes / (1024 ** 3)
+        return "discrete", total_vram_bytes / (1024**3)
     if any_success:
         return "unknown", None
     return "unknown", None
@@ -1143,9 +1137,7 @@ def recommend_tier(
     if not torch_v:
         return _rec(0, "torch does not import on this host")
     if ram_v is not None and ram_v < TIER1_MIN_RAM_GB * NOMINAL_USABLE_FRACTION:
-        return _rec(
-            0, f"RAM {ram_v} GB below Tier-1 floor of {TIER1_MIN_RAM_GB} GB (nominal)"
-        )
+        return _rec(0, f"RAM {ram_v} GB below Tier-1 floor of {TIER1_MIN_RAM_GB} GB (nominal)")
 
     if has_accelerator:
         if budget is None:
@@ -1168,10 +1160,9 @@ def recommend_tier(
             return _rec(
                 2,
                 f"accelerator present ({accel_v}), {budget} GB memory budget; "
-                "module residency is required on this host and is not yet implemented, "
-                "so until it lands the operator should keep the default first-configuration "
-                "module set, serve the language organ with a model that fits "
-                "(e.g. the 4B GGUF) and keep vision/voice extras off.",
+                "module residency is active — organs that do not co-reside swap on demand. "
+                "Run 'python -m kaine.setup.footprint' for the fit report "
+                "(what co-resides, what multiplexes, and the swap-latency impact).",
                 residency=True,
             )
         return _rec(
@@ -1180,6 +1171,4 @@ def recommend_tier(
             f"{RESIDENCY_MIN_BUDGET_GB} GB; CPU agent",
         )
 
-    return _rec(
-        1, "torch importable, adequate RAM, no accelerator (CPU agent)"
-    )
+    return _rec(1, "torch importable, adequate RAM, no accelerator (CPU agent)")
