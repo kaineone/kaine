@@ -122,7 +122,7 @@ The KEK source defaults to an environment variable. A future release adds TPM 2.
 | `kek_env_var` | string | `"KAINE_CUSTODY_KEK"` | Environment variable holding the hex-encoded 32-byte KEK. |
 | `state_root` | string | `"state"` | Root directory for wrapped DEK files (`<state_root>/identity/keys/`). |
 
-The v2 on-disk envelope is `KAINEgcm2:` || 16-byte salt || 12-byte nonce || ciphertext+tag, written as raw bytes. Each envelope derives a fresh subkey through HKDF-SHA256 over the entity's DEK. Associated data binds the entity id and the container class, so a file moved between entities or container types fails authentication. See [Per-entity key custody](../13-security-and-privacy.md#per-entity-key-custody).
+The v2 on-disk envelope is `KAINEgcm2:` || 16-byte salt || 12-byte nonce || ciphertext+tag, base64-encoded like v1. Each envelope derives a fresh subkey through HKDF-SHA256 over the entity's DEK. Associated data binds the entity id and the container class, so a file moved between entities or container types fails authentication. See [Per-entity key custody](../13-security-and-privacy.md#per-entity-key-custody).
 
 Generate a custody KEK:
 
