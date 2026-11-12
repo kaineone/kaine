@@ -4,25 +4,25 @@
 """Apply @@@EDIT blocks in order to the evolving file text (docs only).
 Each SEARCH must match exactly once at the time it is applied; failures are
 reported and skipped. Usage: apply_seq.py RESPONSE REPO --allow PATH..."""
-import re, sys, pathlib
+import re, sys
+from pathlib import Path
 def inside(repo, rel: str):
     """``repo/rel`` if ``rel`` is a plain relative path that stays inside ``repo``."""
-    from pathlib import Path as _P
-    p = _P(rel)
+    p = Path(rel)
     if p.is_absolute() or ".." in p.parts:
         raise SystemExit(f"refusing path outside the checkout: {rel}")
-    root = _P(repo).resolve()
+    root = Path(repo).resolve()
     dest = (root / p).resolve()
     if root != dest and root not in dest.parents:
         raise SystemExit(f"refusing path outside the checkout: {rel}")
     return dest
 
 
-resp, repo = sys.argv[1], pathlib.Path(sys.argv[2])
+resp, repo = sys.argv[1], Path(sys.argv[2])
 if '--allow' not in sys.argv:
     sys.exit("usage: apply_seq.py RESPONSE REPO --allow PATH...")
 allow = set(sys.argv[sys.argv.index('--allow')+1:])
-text = pathlib.Path(resp).read_text()
+text = Path(resp).read_text()
 blocks = re.findall(r'^@@@EDIT[ \t]+(\S+)[ \t]*\n(.*?)^@@@END[ \t]*$', text, re.S | re.M)
 ok = fail = 0
 for i, (path, body) in enumerate(blocks, 1):

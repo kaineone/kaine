@@ -8,7 +8,6 @@ therefore counts as LIVED, never as absent.
 """
 
 import json
-import pathlib
 from pathlib import Path
 
 import pytest
@@ -19,7 +18,7 @@ from kaine.lifecycle.stage import EMBODIED, StageState, StageValueError, read_st
 
 def _deny_exists_under(tmp_path: Path):
     """Return a Path.exists replacement that raises PermissionError under tmp_path."""
-    original_exists = pathlib.Path.exists
+    original_exists = Path.exists
     base = str(tmp_path.resolve())
 
     def guarded(self: Path) -> bool:
@@ -35,7 +34,7 @@ def _deny_exists_under(tmp_path: Path):
 
 
 def test_own_lived_artifacts_counts_unreadable_as_present(tmp_path, monkeypatch):
-    monkeypatch.setattr(pathlib.Path, "exists", _deny_exists_under(tmp_path))
+    monkeypatch.setattr(Path, "exists", _deny_exists_under(tmp_path))
     found = own_lived_artifacts(tmp_path)
     expected = [tmp_path / rel for rel in OWN_LIVED_ARTIFACTS]
     assert sorted(found) == sorted(expected)
@@ -70,14 +69,14 @@ def test_read_stage_int_list_value_is_refused(tmp_path):
 def test_read_stage_exists_permission_error_returns_embodied(tmp_path, monkeypatch):
     stage_file = tmp_path / "stage.json"
     stage_file.write_text(json.dumps({"stage": "development"}))
-    original_exists = pathlib.Path.exists
+    original_exists = Path.exists
 
     def deny(self: Path) -> bool:
         if self == stage_file:
             raise PermissionError("exists check denied for test")
         return original_exists(self)
 
-    monkeypatch.setattr(pathlib.Path, "exists", deny)
+    monkeypatch.setattr(Path, "exists", deny)
     state = read_stage(stage_file)
     assert state is not None
     assert state.stage == EMBODIED

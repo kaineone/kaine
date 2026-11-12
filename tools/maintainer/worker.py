@@ -17,13 +17,13 @@ strips control characters and a wrapping markdown fence, and (with --apply) writ
 ONLY the allow-listed paths into REPO. Fails loudly on empty responses, unknown
 paths or zero blocks.
 """
-import pathlib
 import argparse
 import json
 import os
 import re
 import sys
 import urllib.request
+from pathlib import Path
 
 MODEL = os.environ.get("WORKER_MODEL", "kimi-k2.7-code:cloud")
 CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]|\x1b\[[0-9;?]*[A-Za-z]")
@@ -42,11 +42,10 @@ def _unfence(content: str) -> str:
 
 def inside(repo, rel: str):
     """``repo/rel`` if ``rel`` is a plain relative path that stays inside ``repo``."""
-    from pathlib import Path as _P
-    p = _P(rel)
+    p = Path(rel)
     if p.is_absolute() or ".." in p.parts:
         raise SystemExit(f"refusing path outside the checkout: {rel}")
-    root = _P(repo).resolve()
+    root = Path(repo).resolve()
     dest = (root / p).resolve()
     if root != dest and root not in dest.parents:
         raise SystemExit(f"refusing path outside the checkout: {rel}")
@@ -91,8 +90,8 @@ def main() -> int:
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     if a.reapply:
-        return _finish(pathlib.Path(os.path.join(a.out, "response.txt")).read_text(), a)
-    prompt = pathlib.Path(a.brief).read_text()
+        return _finish(Path(os.path.join(a.out, "response.txt")).read_text(), a)
+    prompt = Path(a.brief).read_text()
     body = {"model": a.model, "prompt": prompt, "stream": False, "think": a.think,
             "options": {"num_predict": a.num_predict, "num_ctx": a.ctx}}
     req = urllib.request.Request("http://localhost:11434/api/generate",
