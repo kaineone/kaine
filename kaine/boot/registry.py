@@ -84,6 +84,10 @@ _CLOCKED_FACTORIES: frozenset[str] = frozenset({"audition", "sequence", "episodi
 # each such factory pops it.
 _FEEDBACK_MODULES: frozenset[str] = frozenset({"vision", "audition", "interoception", "sequence"})
 
+# Speech modules whose rung is selected automatically when residency is enabled
+# (module-residency-and-speech-tiers task 7.2).
+_SPEECH_COMPONENTS: dict[str, str] = {"vocal": "vocal.tts", "audition": "audition.stt"}
+
 
 def plugin_injections(plugins: Any, name: str) -> Optional[dict[str, Any]]:
     """The constructor injections the loaded plugins supply for module ``name``
@@ -390,6 +394,47 @@ def construct_module(
 
     if name in ("episodic_memory", "social_cognition"):
         section["_embedder"] = shared_embedder(registry, kaine_config, router=router)
+
+    if router is not None and name in _SPEECH_COMPONENTS:
+        from kaine.residency.catalogue import host_class as _host_class
+        from kaine.residency.catalogue import load_catalogue
+        from kaine.residency.speech_rungs import LADDERS, select_rung
+
+        _component = _SPEECH_COMPONENTS[name]
+        _ladder = LADDERS.get(_component)
+        if _ladder is not None:
+            _configured_backend = section.get("backend")
+            _entries = list(load_catalogue())
+            _hc = _host_class()
+            _budget = router.ledger.headroom
+            _selection = select_rung(_ladder, _component, _entries, _hc, _budget)
+            if _selection is not None:
+                section["backend"] = _selection.rung.backend
+                if _selection.rung.backend == "sherpa_onnx":
+                    section["sherpa_model_id"] = _selection.rung.model_id
+                log.info(
+                    "residency rung for %s: %s (%s)",
+                    name, _selection.rung.label, _selection.reason,
+                )
+                for _hint in _selection.hints:
+                    log.info("residency hint: %s", _hint)
+                if _configured_backend and _selection.rung.backend != _configured_backend:
+                    from kaine.backend_state import record_backend_failure
+                    from kaine.residency.events import record_downgrade
+                    from kaine.residency.speech_rungs import rung_key
+
+                    record_backend_failure(
+                        module=name,
+                        backend=_configured_backend,
+                        reason=_selection.reason,
+                        fallback=_selection.rung.backend,
+                    )
+                    record_downgrade(
+                        name=name,
+                        reason=_selection.reason,
+                        from_rung=_configured_backend,
+                        to_rung=rung_key(_selection.rung),
+                    )
 
     if name == "sleep":
         episodic_memory = registry.get("episodic_memory") if "episodic_memory" in registry else None
