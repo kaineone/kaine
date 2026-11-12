@@ -22,7 +22,7 @@
 - [x] 3.3 The `kaine-decision-model` compose and quadlet service, started only with an entity when enabled.
 
 ## 4. Acceptance on the real path
-- [ ] 4.1 With the exported K1-Jev GGUF on the pinned build: start the service, have the client ask all 14 questions about 20 dev items, and compare with `/completion`-based letter probabilities (the C1 parity check). Then stop the service.
+- [x] 4.1 With the exported K1-Jev GGUF on the pinned build: start the service, have the client ask all 14 questions about 20 dev items, and compare with `/completion`-based letter probabilities (the C1 parity check). Then stop the service.
 
 ## 5. Docs
 - [x] 5.1 Deployment chapter: the decision server, its lifecycle and its key.
