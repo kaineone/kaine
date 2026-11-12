@@ -13,7 +13,7 @@
 
 ## 2. Escrow and transfer
 
-- [ ] 2.1 2-of-n escrow by pairwise XOR splits (n from `trustees.toml`), each share HPKE-sealed with entity, pair and role bound; recombination only inside an attested receiving host.
+- [x] 2.1 2-of-n escrow by pairwise XOR splits (n from `trustees.toml`), each share HPKE-sealed with entity, pair and role bound; recombination only inside an attested receiving host. (PR #724.)
 - [ ] 2.2 Attested re-wrap transfer.
 
 ## 3. Migration and docs
