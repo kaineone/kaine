@@ -69,7 +69,7 @@
 
 ## 10. Measurement, documentation and validation
 
-- [ ] 10.1 Latency harness: cold and warm load time per rung; STT segment latency; TTS time-to-first-audio and real-time factor; organ first token including swap-in; end-to-end voice turn; peak resident memory. Output is JSON plus a markdown table.
+- [x] 10.1 Latency harness: cold and warm load time per rung; STT segment latency; TTS time-to-first-audio and real-time factor; organ first token including swap-in; end-to-end voice turn; peak resident memory. Output is JSON plus a markdown table. (PR #794.)
 - [ ] 10.2 Operator step: run the harness on the Orin Nano Super, the Pixel 6a and this desktop; commit results under `docs/benchmarks/`, with a table of combinations that do not fit, their shortfalls and their feel.
 - [x] 10.3 Docs: a residency guide (budget, calibration, TTLs, pin, llama-swap, what multiplexing feels like, honest limits), plus updates to `docs/07-deployment/README.md`, `docs/03-hardware/README.md`, `docs/07-deployment/headless-host.md`, `docs/09-modules/audition.md` and `docs/09-modules/vocal.md`. (PR #791.)
 - [ ] 10.4 Final validation: `openspec validate module-residency-and-speech-tiers --strict` passes, and every task is checked or deferred with its reason.
