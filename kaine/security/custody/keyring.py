@@ -36,15 +36,14 @@ class KekProvider(Protocol):
     """Pluggable key-encryption-key provider."""
 
     @property
-    def kek_id(self) -> str: ...
+    def kek_id(self) -> str:
+        """Return the KEK identifier."""
 
     def wrap(self, dek: bytes, entity_id: str) -> bytes:
         """Wrap (encrypt) a DEK under the KEK, bound to entity_id."""
-        ...
 
     def unwrap(self, wrapped: bytes, entity_id: str) -> bytes:
         """Unwrap (decrypt) a DEK, verifying the entity_id binding."""
-        ...
 
 
 class SoftwareKek:

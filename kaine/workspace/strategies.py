@@ -20,19 +20,19 @@ def _clamp01(x: float) -> float:
 @runtime_checkable
 class SalienceStrategy(Protocol):
     async def score(self, event: Event, context: dict[str, Any]) -> float:
-        ...
+        """Score the salience of an event given workspace context."""
 
 
 @runtime_checkable
 class GoalScorer(Protocol):
     async def relevance(self, event: Event) -> float:
-        pass
+        """Return the goal-relevance score for an event."""
 
 
 @runtime_checkable
 class AffectModulator(Protocol):
     async def modulate(self, event: Event) -> float:
-        ...
+        """Return the affect-modulated weight for an event."""
 
 
 class StaticGoalScorer:
