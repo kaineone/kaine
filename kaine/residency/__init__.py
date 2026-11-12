@@ -8,6 +8,7 @@ __all__ = [
     "catalogue",
     "fit",
     "inflight",
+    "ledger",
 ]
 
 # No eager imports of heavy modules; submodules are imported on demand.
