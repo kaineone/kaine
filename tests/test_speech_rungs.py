@@ -5,6 +5,7 @@ from kaine.residency.speech_rungs import (
     LADDERS,
     STT_LADDER,
     TTS_LADDER,
+    SpeechRung,
     is_rung_installed,
     lookup_footprint,
     rung_key,
@@ -86,3 +87,31 @@ def test_speech_rung_frozen():
 
     with pytest.raises(dataclasses.FrozenInstanceError):
         TTS_LADDER[0].backend = "other"  # type: ignore[misc]
+
+
+def test_quantization_field():
+    assert TTS_LADDER[0].quantization is None
+    assert TTS_LADDER[1].quantization == "int8"
+    for rung in STT_LADDER:
+        assert rung.quantization is None or isinstance(rung.quantization, str)
+
+
+def test_weights_sha256_field():
+    for ladder in LADDERS.values():
+        for rung in ladder:
+            assert rung.weights_sha256 is None or isinstance(rung.weights_sha256, str)
+
+
+def test_quantization_roundtrip():
+    rung = SpeechRung(
+        backend="sherpa_onnx",
+        model_id="test",
+        label="test",
+        licence="MIT",
+        mapped=False,
+        fetch_command="",
+        quantization="Q4_K_M",
+        weights_sha256="abc123",
+    )
+    assert rung.quantization == "Q4_K_M"
+    assert rung.weights_sha256 == "abc123"
