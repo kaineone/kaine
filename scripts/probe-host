@@ -16,6 +16,7 @@ applies the tier deliberately, for one run or for every boot::
 Run: .venv/bin/python scripts/probe-host          # human-readable
      .venv/bin/python scripts/probe-host --json    # machine-readable
 """
+
 from __future__ import annotations
 
 import argparse
@@ -46,6 +47,23 @@ def _render_text(rec) -> str:  # noqa: ANN001
     lines.append(f"  present : {', '.join(caps['present']) or '—'}")
     lines.append(f"  degraded: {', '.join(caps['degraded']) or '—'}")
     lines.append(f"  absent  : {', '.join(caps['absent']) or '—'}")
+    if rec.residency_required:
+        lines.append("  residency       : required (modules swap on demand)")
+        try:
+            from kaine.setup.footprint import quick_fit
+
+            report = quick_fit()
+            if report is not None:
+                lines.append("")
+                lines.append("  --- fit report ---")
+                for line in report.lines():
+                    lines.append(f"  {line}")
+            else:
+                lines.append(
+                    "  fit report      : no catalogue; run 'python -m kaine.setup.footprint'"
+                )
+        except Exception:
+            lines.append("  fit report      : unavailable")
     lines.append("")
     lines.append("This is a recommendation only. To use it, apply the tier")
     lines.append(f"deliberately: KAINE_TIER={rec.profile} python -m kaine.cycle")
@@ -55,9 +73,7 @@ def _render_text(rec) -> str:  # noqa: ANN001
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--json", action="store_true", help="emit the recommendation as JSON"
-    )
+    parser.add_argument("--json", action="store_true", help="emit the recommendation as JSON")
     args = parser.parse_args(argv)
 
     rec = recommend_tier()

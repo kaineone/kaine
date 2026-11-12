@@ -49,7 +49,7 @@ from kaine.residency.catalogue import (
     upsert,
     write_catalogue,
 )
-from kaine.residency.fit import Need, fit_report
+from kaine.residency.fit import FitReport, Need, fit_report
 from kaine.speech_manifest import is_installed
 from kaine.storage import install_data_root
 from kaine.text_embedding import resolve_embedding_config
@@ -653,9 +653,7 @@ def _silence_wav(duration: float = 1.0, sample_rate: int = 16000) -> bytes:
     return buf.getvalue()
 
 
-def _sine_wav(
-    frequency: float = 440.0, duration: float = 1.0, sample_rate: int = 16000
-) -> bytes:
+def _sine_wav(frequency: float = 440.0, duration: float = 1.0, sample_rate: int = 16000) -> bytes:
     import array
 
     samples = array.array(
@@ -688,9 +686,7 @@ def _target_audition_stt(task: _ChildTask) -> dict[str, Any]:
 
     async def _stt() -> None:
         await client.warm_up()
-        await client.transcribe(
-            _silence_wav(), sample_rate=16000, model=task.model_id
-        )
+        await client.transcribe(_silence_wav(), sample_rate=16000, model=task.model_id)
         if hasattr(client, "aclose"):
             await client.aclose()
         elif hasattr(client, "close"):
@@ -833,9 +829,7 @@ def _run_component_target(task: _ChildTask) -> dict[str, Any]:
     raise ValueError(f"unknown in-process component {task.component}")
 
 
-def _task_for_component(
-    info: ComponentInfo, config: dict[str, Any]
-) -> _ChildTask | None:
+def _task_for_component(info: ComponentInfo, config: dict[str, Any]) -> _ChildTask | None:
     if info.name == "audition.stt":
         section = info.config_section or {}
         model_id = info.model_id
@@ -942,9 +936,7 @@ def _child_wrapper(conn: Any, target_fn: Callable[[], dict[str, Any]]) -> None:
 
         device: str | None = None
         device_bytes: int | None = None
-        mapped = (
-            bool(result.get("mapped", False)) if isinstance(result, dict) else False
-        )
+        mapped = bool(result.get("mapped", False)) if isinstance(result, dict) else False
 
         if torch is not None and torch.cuda.is_available():
             # Per device, the larger of torch's peak reservation (survives
@@ -1010,11 +1002,7 @@ def _validate_child_record(data: Any) -> tuple[bool, str]:
             return False, f"invalid child record: device={device!r}"
     device_bytes = data.get("device_bytes")
     if device_bytes is not None:
-        if (
-            isinstance(device_bytes, bool)
-            or not isinstance(device_bytes, int)
-            or device_bytes <= 0
-        ):
+        if isinstance(device_bytes, bool) or not isinstance(device_bytes, int) or device_bytes <= 0:
             return False, f"invalid child record: device_bytes={device_bytes!r}"
     mapped = data.get("mapped")
     if not isinstance(mapped, bool):
@@ -1208,9 +1196,7 @@ def _listener_root_pid(url: str) -> int | None:
         {
             c.pid
             for c in connections
-            if c.status == psutil.CONN_LISTEN
-            and c.laddr.port == port
-            and c.pid is not None
+            if c.status == psutil.CONN_LISTEN and c.laddr.port == port and c.pid is not None
         }
     )
     if not pids:
@@ -1228,9 +1214,7 @@ def _bare_gpu_uuid(value: str) -> str:
     return value[4:] if value.startswith("gpu-") else value
 
 
-def _nvidia_smi_usage(
-    pids: set[int], torch_module: Any
-) -> dict[str, int] | None:
+def _nvidia_smi_usage(pids: set[int], torch_module: Any) -> dict[str, int] | None:
     """Return GPU memory usage per ``cuda:i`` for ``pids``, or ``None`` if unknown.
 
     Maps nvidia-smi GPU UUIDs to torch CUDA device indices, so identical GPU
@@ -1318,9 +1302,7 @@ def _service_gpu_memory(
     is not recorded and stays uncalibrated. ``(None, None)`` means it uses no
     GPU, or the host has no device budget.
     """
-    has_cuda_domain = any(
-        hasattr(b, "name") and b.name.startswith("cuda:") for b in budgets
-    )
+    has_cuda_domain = any(hasattr(b, "name") and b.name.startswith("cuda:") for b in budgets)
     if not has_cuda_domain:
         # CPU-only or unified-memory host: there is no device budget to fill.
         return None, None
@@ -1379,9 +1361,7 @@ def _measure_service(url: str) -> int | None:
         {
             c.pid
             for c in connections
-            if c.status == psutil.CONN_LISTEN
-            and c.laddr.port == port
-            and c.pid is not None
+            if c.status == psutil.CONN_LISTEN and c.laddr.port == port and c.pid is not None
         }
     )
     if not pids:
@@ -1506,15 +1486,11 @@ def _needs_for(
             else:
                 # Unified-memory hosts have no cuda:N budget domain; fold the
                 # device footprint into the system need.
-                if (
-                    system_need.footprint_bytes is not None
-                    and max_device.device_bytes is not None
-                ):
+                if system_need.footprint_bytes is not None and max_device.device_bytes is not None:
                     folded = Need(
                         component=info.name,
                         domain="system",
-                        footprint_bytes=system_need.footprint_bytes
-                        + max_device.device_bytes,
+                        footprint_bytes=system_need.footprint_bytes + max_device.device_bytes,
                         interactive=system_need.interactive,
                         rung=system_need.rung,
                     )
@@ -1634,9 +1610,7 @@ def main(
             if not is_tty:
                 err("refusing to load models without consent; re-run with --yes")
                 return 2
-            answer = input_fn(
-                f"Load and measure {len(to_measure)} component(s)? [y/N] "
-            )
+            answer = input_fn(f"Load and measure {len(to_measure)} component(s)? [y/N] ")
             if answer.lower() not in ("y", "yes"):
                 out("nothing was loaded")
                 return 0
@@ -1739,9 +1713,7 @@ def main(
             continue
 
         # in_process
-        ok, peak_bytes, device_bytes, device, mapped, error = measure_fn(
-            info, config, args.timeout
-        )
+        ok, peak_bytes, device_bytes, device, mapped, error = measure_fn(info, config, args.timeout)
         if not ok:
             out(f"{info.name}: FAILED: {error}")
             had_failure = True
@@ -1792,12 +1764,39 @@ def main(
 
     if report.uncalibrated:
         uncalibrated_list = ", ".join(report.uncalibrated)
-        err(
-            f"error: result is partial; uncalibrated components: {uncalibrated_list}"
-        )
+        err(f"error: result is partial; uncalibrated components: {uncalibrated_list}")
         return 3
 
     return 0
+
+
+def quick_fit(
+    config: dict[str, Any] | None = None,
+    *,
+    budgets_fn: Callable[[], tuple[Any, ...]] | None = None,
+    catalogue_path: str | Path | None = None,
+    torch_module: Any | None = None,
+) -> FitReport | None:
+    """Run the fit report from the existing catalogue without measuring.
+
+    Returns ``None`` when the catalogue is empty or absent (nothing to plan
+    from), or when budgets cannot be derived.  Never raises.
+    """
+    try:
+        if config is None:
+            config = load_runtime_config()
+        budgets = (budgets_fn or current_budgets)()
+        entries = load_catalogue(catalogue_path)
+        if not entries:
+            return None
+        hclass = host_class(torch_module=torch_module)
+        components = _select_components(config)
+        needs = _needs_for(list(entries), components, hclass, budgets)
+        if not needs:
+            return None
+        return fit_report(budgets, needs, pin="language")
+    except Exception:
+        return None
 
 
 if __name__ == "__main__":
