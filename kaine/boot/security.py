@@ -79,7 +79,7 @@ def build_keyring(kaine_config: dict[str, Any]) -> KeyRing | None:
     try:
         kek_bytes = bytes.fromhex(raw)
     except ValueError as exc:
-        raise CryptoConfigError(
+        raise _crypto.CryptoConfigError(
             f"custody {env_var} is not valid hex: {exc}"
         ) from exc
 
