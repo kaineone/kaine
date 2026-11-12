@@ -63,12 +63,13 @@ async def test_router_notified_on_bracket(tmp_path: Path) -> None:
         host_describer=_single_gpu_describer,
         state_path=tmp_path / "organ_window.json",
         router=router,
+        organ_footprint_bytes=3_000_000_000,
     )
     assert result.bracketed is True
     assert result.organ_restored is True
     router.before_unload.assert_called_with("organ")
     router.after_unload.assert_called_with("organ")
-    router.before_load.assert_called_with("organ", 0)
+    router.before_load.assert_called_with("organ", 3_000_000_000)
     router.after_load.assert_called_with("organ")
 
 

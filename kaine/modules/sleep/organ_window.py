@@ -292,6 +292,7 @@ async def run_with_organ_window(
     trainer_backend: str = "in_process",
     router: "ResidencyRouter | None" = None,
     training_footprint_bytes: int = 0,
+    organ_footprint_bytes: int = 0,
 ) -> tuple[Any, OrganWindowResult]:
     """Run ``train`` inside the on-device GPU window and return its result.
 
@@ -378,7 +379,7 @@ async def run_with_organ_window(
             detail=("reloading with accepted adapter" if adapter_path else "reloading organ"),
             path=state_path,
         )
-        await _notify_router(router, "before_load", "organ")
+        await _notify_router(router, "before_load", "organ", organ_footprint_bytes)
         try:
             restored = ctrl.reload(adapter_path=adapter_path)
         except Exception:
