@@ -164,9 +164,9 @@ def _entity_id_from_snapshot(snap_file: Path) -> str | None:
                         if isinstance(eid, str) and eid:
                             return eid
         except (json.JSONDecodeError, ValueError):
-            pass
+            pass  # not JSON; fall through to sidecar
     except OSError:
-        pass
+        pass  # snapshot file unreadable; fall through to sidecar
 
     # Fall back to identity sidecar
     sidecar = snap_file.parent / "identity.json"
@@ -177,7 +177,7 @@ def _entity_id_from_snapshot(snap_file: Path) -> str | None:
             if isinstance(eid, str) and eid:
                 return eid
         except (OSError, json.JSONDecodeError, ValueError):
-            pass
+            pass  # sidecar unreadable; give up
 
     return None
 
@@ -199,7 +199,7 @@ def _entity_id_from_preservation(pres_dir: Path) -> str | None:
                     if isinstance(eid, str) and eid:
                         return eid
         except (OSError, json.JSONDecodeError, ValueError):
-            pass
+            pass  # manifest unreadable or malformed; try directory name
 
     # The directory name may be the entity_id
     import re
@@ -247,13 +247,13 @@ def _atomic_write(path: Path, data: bytes) -> None:
         try:
             os.chmod(tmp, 0o600)
         except (OSError, NotImplementedError):
-            pass
+            pass  # best-effort; fd already opened 0o600
         os.replace(tmp, path)
     except BaseException:
         try:
             tmp.unlink(missing_ok=True)
         except OSError:
-            pass
+            pass  # cleanup must not mask the original error
         raise
 
 
@@ -356,14 +356,13 @@ def _migrate_entity(
         _backup_entity(entity_dir, backup_root)
 
     # Generate DEK (or load existing if --force)
+    encryptor = None
     if not dry_run:
         if keyring.has_dek(entity_id):
             encryptor = keyring.encryptor_for(entity_id)
         else:
             keyring.generate_dek(entity_id)
             encryptor = keyring.encryptor_for(entity_id)
-    else:
-        encryptor = None
 
     for filepath in files:
         try:
