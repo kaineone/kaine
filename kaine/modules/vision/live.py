@@ -294,7 +294,7 @@ class LiveCamera:
             if not await self._open_source():
                 log.error("live camera lockstep: could not open source")
                 return
-            async for _tick in self._lockstep_trigger:
+            async for _ in self._lockstep_trigger:  # noqa: F841
                 if self._stopped.is_set():
                     break
                 await self._capture_one_frame()

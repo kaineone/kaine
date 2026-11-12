@@ -298,7 +298,7 @@ class LiveMicrophone:
             if not self._active:
                 log.error("live mic lockstep: could not start audio stream")
                 return
-            async for _tick in self._lockstep_trigger:
+            async for _ in self._lockstep_trigger:  # noqa: F841
                 if self._stopped.is_set():
                     break
                 if self._active:
