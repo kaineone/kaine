@@ -9,7 +9,10 @@ import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import TYPE_CHECKING, Any, Iterable
+
+if TYPE_CHECKING:
+    from kaine.security.custody.encryptor import EntityEncryptor
 
 import pytest
 
@@ -26,11 +29,9 @@ from kaine.lifecycle.snapshot import (
     reencrypt_artifacts,
     save_snapshot,
     snapshot_dir,
-    snapshot_path,
 )
 from kaine.security.crypto import CryptoConfigError
 from kaine.security.custody.keyring import KeyRing, SoftwareKek
-
 
 _ENTITY_A = "ent-0123456789abcdef0123456789abcdef"
 _ENTITY_B = "ent-fedcba9876543210fedcba9876543210"
@@ -328,9 +329,8 @@ def test_no_keyring_merge_roundtrip(tmp_path: Path) -> None:
 # ── Low-level snapshot + encryptor tests ───────────────────────────────────
 
 
-def _make_encryptor(tmp_path: Path, entity_id: str) -> "EntityEncryptor":
+def _make_encryptor(tmp_path: Path, entity_id: str) -> EntityEncryptor:
     """Create a KeyRing, generate a DEK, return the EntityEncryptor."""
-    from kaine.security.custody.encryptor import EntityEncryptor
 
     kek = SoftwareKek(_fresh_kek())
     ring = KeyRing(kek, state_root=tmp_path / "kr-state")
