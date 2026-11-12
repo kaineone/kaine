@@ -60,12 +60,14 @@ class FitReport:
     domains: tuple[DomainFit, ...]
     co_resides: bool
     uncalibrated: tuple[str, ...]
+    recommendations: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "domains": [d.to_dict() for d in self.domains],
             "co_resides": self.co_resides,
             "uncalibrated": list(self.uncalibrated),
+            "recommendations": list(self.recommendations),
         }
 
     def lines(self) -> list[str]:
@@ -86,6 +88,8 @@ class FitReport:
             out.append(f"  feel: {fit.feel}")
         if self.uncalibrated:
             out.append("Uncalibrated components: " + ", ".join(self.uncalibrated))
+        for rec in self.recommendations:
+            out.append(f"Recommendation: {rec}")
         return out
 
 
@@ -214,16 +218,12 @@ def fit_report(
         ]
         pinned_component: str | None = None
         for candidate in candidates:
-            other_max = max(
-                (b for c, b in sizes.items() if c != candidate), default=0
-            )
+            other_max = max((b for c, b in sizes.items() if c != candidate), default=0)
             if sizes[candidate] + other_max <= budget_bytes:
                 pinned_component = candidate
                 break
 
-        multiplexed = [
-            n.component for n, _, _, _ in effective if n.component != pinned_component
-        ]
+        multiplexed = [n.component for n, _, _, _ in effective if n.component != pinned_component]
         largest = max(sizes.values(), default=0)
 
         if pinned_component is not None:
@@ -245,10 +245,7 @@ def fit_report(
         else:
             status = "does-not-fit"
             single_shortfall = largest - budget_bytes
-            feel = (
-                "even one at a time this domain is short by "
-                f"{_fmt_gib(single_shortfall)} GiB"
-            )
+            feel = f"even one at a time this domain is short by {_fmt_gib(single_shortfall)} GiB"
 
         domain_fits.append(
             DomainFit(
@@ -261,14 +258,25 @@ def fit_report(
                 multiplexed=tuple(multiplexed),
                 rungs=rungs,
                 feel=feel,
-                single_shortfall_bytes=(
-                    largest - budget_bytes if status == "does-not-fit" else 0
-                ),
+                single_shortfall_bytes=(largest - budget_bytes if status == "does-not-fit" else 0),
             )
+        )
+
+    recommendations: list[str] = []
+    interactive_components = {n.component for n in needs if n.interactive}
+    multiplexed_interactive = {
+        c for fit in domain_fits for c in fit.multiplexed if c in interactive_components
+    }
+    if multiplexed_interactive:
+        recommendations.append(
+            "set [cycle].auto_time_scale = true "
+            "(interactive organs are multiplexed; adaptive timing "
+            "compensates for swap latency)"
         )
 
     return FitReport(
         domains=tuple(domain_fits),
         co_resides=co_resides,
         uncalibrated=tuple(uncalibrated),
+        recommendations=tuple(recommendations),
     )
