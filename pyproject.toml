@@ -313,6 +313,7 @@ source_modules = [
     "kaine.remote",
     "kaine.research",
     "kaine.security",
+    "kaine.security.custody",
     "kaine.setup",
     "kaine.transfer",
     "kaine.workspace",
