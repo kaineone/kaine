@@ -26,7 +26,7 @@ import json
 import sys
 import unicodedata
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
 from kaine.bus import Event
 from kaine.cycle.types import WorkspaceSnapshot
