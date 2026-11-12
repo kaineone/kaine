@@ -323,3 +323,39 @@ async def test_speaker_embedding_disabled_no_event(bus: AsyncBus):
         assert "audition.speaker_embedding" not in await _event_types(bus)
     finally:
         await audition.shutdown()
+
+
+async def test_speaker_embedder_unload():
+    emb, sherpa = _embedder()
+    try:
+        await emb.warm_up()
+        assert emb.loaded is True
+        await emb.unload()
+        assert emb.loaded is False
+        assert emb._closed is False
+        assert emb._executor is not None
+        assert sherpa.builds == 1
+    finally:
+        await emb.aclose()
+
+
+async def test_speaker_embedder_unload_then_reload():
+    emb, sherpa = _embedder()
+    try:
+        await emb.warm_up()
+        await emb.unload()
+        result = await emb.extract(_make_wav())
+        assert result.embedding is not None
+        assert sherpa.builds == 2
+    finally:
+        await emb.aclose()
+
+
+async def test_speaker_embedder_unload_noop_when_not_loaded():
+    emb, sherpa = _embedder()
+    try:
+        await emb.unload()
+        assert emb._closed is False
+        assert sherpa.builds == 0
+    finally:
+        await emb.aclose()
