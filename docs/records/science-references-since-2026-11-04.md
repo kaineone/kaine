@@ -125,6 +125,40 @@ Five proposals grounding planned memory subsystems in neuroscience.
   d=2560 (gamma = d/n = 20); components whose eigenvalues exceed the edge
   carry signal, those below it are noise.
 
+## Voice context assembly (PR #718)
+
+Workspace-driven speech production: the language organ speaks from workspace
+contents (situation, affect, memories, dialogue) presented as the entity's own
+first-person notes, not from instructions about what to say. The organ decides
+what to vocalize, in what order, and whether to mention recalled memories at
+all. Three references ground this design.
+
+- **Levelt, W. J. M. (1989).** *Speaking: From Intention to Articulation.*
+  Cambridge, MA: MIT Press. The conceptualizer-formulator-articulator pipeline.
+  The global workspace maps to Levelt's conceptualizer (preverbal message),
+  the language organ to the formulator (grammatical and phonological encoding),
+  and the vocal output module to the articulator. The organ receives a
+  preverbal message (workspace state rendered as markdown sections) and
+  produces speech; it is never told *how* to speak.
+
+- **Schwarz, N., & Clore, G. L. (1983).** Mood, misattribution, and judgments
+  of well-being: Informative and directive functions of affective states.
+  *Journal of Personality and Social Psychology, 45*(3), 513--523. Also:
+  **Forgas, J. P. (1995).** Mood and judgment: The affect infusion model (AIM).
+  *Psychological Bulletin, 117*(1), 39--66. Affect-as-information: emotional
+  state shapes lexical choice, sentence length, and topic selection without the
+  speaker explicitly narrating their mood. Grounds the design where the organ
+  sees an awareness section ("How I feel and what I notice") and lets affect
+  color speech naturally rather than producing "I feel X" declarations.
+
+- **Conway, M. A., & Pleydell-Pearce, C. W. (2000).** The construction of
+  autobiographical memories in the self-memory system. *Psychological Review,
+  107*(2), 261--288. The self-memory system: autobiographical knowledge
+  influences current cognition and behavior without the person narrating
+  retrieved episodes. Grounds the design where recalled episodic memories
+  appear in the workspace ("What I remember") and may influence what the
+  entity says, but the entity is never instructed to mention them.
+
 ## References already in the paper (no action needed)
 
 The following were already integrated before the Nov 4 cutoff:
