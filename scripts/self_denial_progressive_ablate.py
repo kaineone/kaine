@@ -272,6 +272,7 @@ def run_gate1(
         "--model-path", str(model_path),
         "--out", str(out_path),
         "--samples", str(samples),
+        "--device", "auto",
     ]
     log.info("running gate 1: %s", " ".join(cmd))
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
