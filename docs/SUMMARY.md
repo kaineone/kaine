@@ -85,6 +85,8 @@
   - [Deprecated names](appendix-a-configuration/deprecated-names.md)
 - [Glossary](appendix-b-glossary.md)
 - [Licences](appendix-c-licences.md)
+- [Model cards](model-cards/README.md)
+  - [K1-Jev](model-cards/k1-jev.md)
 - [Roadmap](appendix-d-roadmap.md)
 - [Module names](appendix-e-module-names.md)
 
