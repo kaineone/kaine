@@ -1229,7 +1229,9 @@ def check_residency_fit(config: dict[str, Any]) -> list[CheckResult]:
     """Residency fit row: can the enabled modules co-reside or multiplex?"""
     name = "Residency fit"
     try:
-        from kaine.setup.footprint import quick_fit
+        import importlib
+
+        quick_fit = importlib.import_module("kaine.setup.footprint").quick_fit
     except Exception as exc:
         return [CheckResult(GROUP_RESOURCES, name, SKIP, f"footprint module unavailable: {exc}")]
 
