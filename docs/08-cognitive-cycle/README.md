@@ -78,6 +78,33 @@ Every change publishes a `cycle.time_scale` event with `from`, `to`, `reason` (`
 
 The interoception module's `reduce_rate` regulation still lowers the processing rate when it senses overload. That lowers utilization, and automatic dilation may then raise the scale back toward the ceiling.
 
+### Deterministic mode
+
+`[cycle].deterministic = true` replaces wall-clock timing with a logical clock. The engine's `_now()` returns a fixed base epoch plus a deterministic offset per tick, so two runs over the same scripted input produce byte-identical trajectories. Automatic time dilation is disabled (the controller is dropped at construction time). Pacing sleep is skipped: each tick runs as fast as the host allows, then advances immediately.
+
+Deterministic mode is the foundation for reproducible study runs, ablation experiments, and the ignition-log comparison tools. It does not change selection, scoring, or the workspace algorithm; it only removes the one source of nondeterminism the engine controls (wall-clock timestamps). Module-internal randomness, if any, is separately controlled by `set_global_seed()`.
+
+### Lockstep mode
+
+`[cycle].lockstep = true` (requires `deterministic = true`) adds a per-tick barrier: after reading module streams, the engine waits for every registered participant to emit a `tick_done` event before broadcasting the workspace and advancing to the next tick. This eliminates the remaining source of nondeterminism, the order in which modules finish relative to each other, by making progress depend on logical completion rather than wall time.
+
+The barrier works as follows. At the start of each tick the engine publishes a `cycle.tick_start` event carrying the tick number. Modules process that tick's input and publish a `<module>.tick_done` event with `{"tick": N}` when finished. The engine polls each participant's stream for the matching tick_done, sleeping 1 ms between polls, until all participants report or the timeout expires. The poll order does not matter: intake sorting (alphabetical by source, type, entry_id) determines the canonical event order in the workspace, so two runs with different module completion orders produce the same trace.
+
+Configuration:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `[cycle].lockstep` | `false` | Enable lockstep barrier |
+| `[cycle].lockstep_timeout_s` | `300` | Seconds before the barrier gives up on a participant |
+
+If a module does not report `tick_done` within the timeout, the engine raises `LockstepBarrierTimeout` with the tick number and the list of pending modules. The exception propagates to `run_forever`'s caller; the supervisor handles cleanup.
+
+**Cost.** Lockstep serializes every tick to the slowest module. A module that takes 2 seconds for its `on_workspace` holds all other modules idle for that time, so throughput drops compared to the default asynchronous mode. The supervisor accounts for this: while the barrier is active, stale heartbeats are reported as "alive" rather than "hung", so modules waiting at the barrier are not incorrectly restarted.
+
+**Boot validation.** Each `BaseModule` subclass carries a `lockstep_capable` class attribute (default `True`). If lockstep is enabled at boot, `validate_lockstep_modules()` checks every registered module and refuses boot with a `ConfigurationError` when any module has `lockstep_capable = False`. The check reads lockstep from either the config key or the `EntityClock.lockstep` property, so both wiring paths are covered.
+
+**When to use it.** Lockstep is a study mode. Use it when you need reproducible traces for ablation runs, regression tests, or comparative analysis. For production operation, leave it off: the default asynchronous mode lets fast modules run at full rate while slow modules catch up, and the dilation controller adapts the entity clock to sustained load.
+
 ## Tick sequence
 
 ```mermaid
@@ -249,6 +276,9 @@ auto_time_scale_high = 0.95
 auto_time_scale_low = 0.6
 auto_time_scale_dwell_s = 10.0
 auto_time_scale_floor = 0.1
+deterministic = false
+lockstep = false
+lockstep_timeout_s = 300
 
 [cycle.access_rate]
 enabled = true
@@ -278,5 +308,6 @@ Dynamic rate changes via the `cycle.control` stream override the `[cycle]` value
 | `kaine/cycle/boot_context.py` | Shared slotted dataclass for boot-phase state, `BootContext` |
 | `kaine/cycle/types.py` | `TickResult`, `WorkspaceSnapshot` dataclasses |
 | `kaine/cycle/protocols.py` | `CycleHook`, `ModuleRegistryProtocol`, `WorkspaceProtocol` |
-| `kaine/entity_clock.py` | Shared entity clock |
+| `kaine/entity_clock.py` | Shared entity clock; `lockstep` property controls logical tick advancement |
+| `kaine/cycle/time_scale_controller.py` | Automatic time-scale adjustment (disabled in deterministic mode) |
 | `state/cycle/control.json` | Runtime freeze state (operator-written) |
