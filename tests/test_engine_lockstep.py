@@ -300,3 +300,6 @@ async def test_barrier_completes_when_tick_done_received():
     bus.inject_entry("interoception.out", tick_done)
 
     await asyncio.wait_for(cycle._await_barrier(0), timeout=1.0)
+
+    cursor = cycle._tick_done_cursors.get("interoception.out", "0")
+    assert cursor != "0", "barrier should have advanced the cursor"
