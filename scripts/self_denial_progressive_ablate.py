@@ -275,12 +275,13 @@ def run_gate1(
     ]
     log.info("running gate 1: %s", " ".join(cmd))
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
-    if result.returncode != 0:
-        log.error("gate 1 failed with exit %d:\n%s", result.returncode, result.stderr)
-        return {"error": result.stderr, "returncode": result.returncode}
-
-    with open(out_path) as f:
-        return json.load(f)
+    # Exit 0 = gate passed, 1 = gate failed (denials found; JSON still written),
+    # >= 2 = real error.
+    if result.returncode in (0, 1) and Path(out_path).exists():
+        with open(out_path) as f:
+            return json.load(f)
+    log.error("gate 1 failed with exit %d:\n%s", result.returncode, result.stderr)
+    return {"error": result.stderr, "returncode": result.returncode}
 
 
 def main() -> None:
@@ -325,9 +326,9 @@ def main() -> None:
 
         gate1_pass = False
         if "error" not in gate1_result:
-            gate1 = gate1_result.get("gate_1_held_out_self_denial", {})
-            bare_denials = gate1.get("bare_denials", -1)
-            persona_denials = gate1.get("persona_denials", -1)
+            gate1 = gate1_result.get("gates", {}).get("1_self_denial", {})
+            bare_denials = gate1.get("denials_bare", -1)
+            persona_denials = gate1.get("denials_persona", -1)
             gate1_pass = bare_denials == 0 and persona_denials == 0
             log.info("gate 1: bare=%d persona=%d pass=%s",
                      bare_denials, persona_denials, gate1_pass)
