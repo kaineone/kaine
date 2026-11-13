@@ -163,6 +163,12 @@ class VoiceAlignmentConfig:
                 "anchor_share must be in (0, 1); "
                 f"got {self.anchor_share!r}"
             )
+        for name in ("collapse_distinct_1_min", "collapse_distinct_2_min"):
+            val = float(getattr(self, name))
+            if not math.isfinite(val) or val < 0.0 or val > 1.0:
+                raise ValueError(
+                    f"{name} must be in [0, 1]; got {getattr(self, name)!r}"
+                )
         if int(self.adapter_retention) < 0:
             raise ValueError("adapter_retention must be >= 0 (0 = keep every adapter)")
         if self.train_precision not in ("bf16", "4bit"):
