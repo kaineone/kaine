@@ -79,10 +79,10 @@ Each numbered group is one PR. Every PR gets an independent second review (ethic
 
 ## 10. Real-organ smoke test (operator-run, entity not live)
 - [x] 10.0 Harness: `validation/smoke.py` runs steps 10.1 to 10.5 against the configured organ through the producer's own probe path, persists only scalars, and exits 0 only when every acceptance threshold it ran passed. Usage: `python openspec/changes/individuation-rebuild/validation/smoke.py --config config/kaine.toml [--control-lora '[{"id": 0, "scale": 1.0}]']`.
-- [ ] 10.1 Answers worth comparing: 40 samples per prompt; within-prompt mean pairwise distance and share of near-identical answers recorded; stop and redesign the framing if answers are degenerate.
-- [ ] 10.2 Real-data null: 1,000 random splits of the 480 answers; rejection at α = 0.05 ≤ 0.05 + 2·SE; the 95th percentile of H sets `effect_min`.
+- [x] 10.1 Answers worth comparing: 40 samples per prompt; within-prompt mean pairwise distance and share of near-identical answers recorded; stop and redesign the framing if answers are degenerate.
+- [x] 10.2 Real-data null: 1,000 random splits of the 480 answers; rejection at α = 0.05 ≤ 0.05 + 2·SE; the 95th percentile of H sets `effect_min`.
 - [x] 10.7 The test LoRA for control (b), built with the existing voice-alignment pipeline (#294): `validation/test_lora.py` makes a fixed synthetic preference set from public, non-entity text and trains it through `JobQueueVoiceTrainer` and the `kaine-trainer` service, with production hyperparameters, the capability and abliteration vetoes, and GGUF conversion. `validation/calibration.compose.yml` swaps in separate calibration volumes for the trainer jobs and organ adapters, so the production adapter slot is never touched. The sleep module factory's voice-alignment config parsing becomes `voice_alignment_config_from_section`, which the fixture shares. Merged in #360.
 - [ ] 10.3 Positive controls: (a) changed identity clause, (b) a known test LoRA; power at α ≈ 3.8e-4 (look 10) ≥ 0.8 against (b), and the instrument stays disabled if it is below 0.5.
-- [ ] 10.4 No contamination during a full probe run (intent log unchanged, zero `language.*`/`*_speech` events); zero language module timeouts; added p95 language module latency ≤ one probe completion.
-- [ ] 10.5 Seed behaviour (informational), server build reporting, per-request latency and permutation wall time at B = 10^6; update the budgets in `design.md`.
+- [x] 10.4 No contamination during a full probe run (intent log unchanged, zero `language.*`/`*_speech` events); zero language module timeouts; added p95 language module latency ≤ one probe completion.
+- [x] 10.5 Seed behaviour (informational), server build reporting, per-request latency and permutation wall time at B = 10^6; update the budgets in `design.md`.
 - [ ] 10.6 Set `effect_min` and the budgets from the measurements, then enable `[individuation]` in the research config only if every acceptance threshold passed.
