@@ -176,6 +176,9 @@ class _FakeLanguage:
         base["situation_facts"] = list(base.get("situation_facts") or []) + self.facts
         return base
 
+    def set_probe_temperature(self, value: float) -> None:
+        pass
+
     def probe_request(self, about, *, seed, max_tokens, self_model):
         from types import SimpleNamespace
 
