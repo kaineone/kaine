@@ -31,7 +31,7 @@
 
 ## 5. Open (operator)
 
-- [ ] 5.1 Add rdrobust and record which broadcast preceded each prediction, for theta_band, b_band and the age bins
-  *The record half is done: reports carry `prediction_broadcast_tick`. Left: the rdrobust package (licence check before it is added), needed only by the offline analysis of the workspace-mediation planned test, not by any run's recording; it does not gate the module-ignition study.*
+- [x] 5.1 Add rdrobust and record which broadcast preceded each prediction, for theta_band, b_band and the age bins
+  *The record half is done: reports carry `prediction_broadcast_tick`. Licence check (2026-11-13): rdrobust is GPL-3.0-only; added as the `analysis` optional extra in pyproject.toml so the CAL-licensed core never depends on it. GPL does not propagate because rdrobust is an optional offline analysis tool, never imported at runtime or distributed as part of the KAINE package. The analysis scripts that import it are separate works.*
 - [x] 5.2 Build the tone variant and log the tone model's error ratio, for the tone bins
   *Done: the tone variant of the on arm, `tone_error_ratio` on `audition.emotion` and `kaine/experiment/tone_analysis.py`.*
