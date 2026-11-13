@@ -1886,7 +1886,7 @@ battery_path = ""
 language_quiet_s = 10.0
 # Decoding temperature of the probe, fixed apart from the voice's [language].temperature
 # so study or voice settings never change the probe's conditions. 0 is greedy.
-probe_temperature = 0.0
+probe_temperature = 0.7
 # Answers per battery prompt in the reference.
 n_reference = 16
 # Answers per battery prompt at each look.

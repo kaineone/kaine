@@ -13,8 +13,8 @@
 
 - [x] 3.1 Baseline: the current organ through gates 1 to 6 (101/144 bare denials, 46/144 persona denials, 11/12 capability; record at `abliteration/gates/baseline-safetensors.json` on bulk storage)
 - [x] 3.2 Measure the self-denial direction on the current abliterated weights; record `analyze.py` output
-- [ ] 3.3 Ablate, check the safetensors, iterate (at most six candidates), record every candidate
-- [ ] 3.4 Export Q4_K_M with mainline llama.cpp; served gates 1 to 6; record the results
+- [x] 3.3 Ablate, check the safetensors, iterate (at most six candidates), record every candidate
+- [x] 3.4 Export Q4_K_M with mainline llama.cpp; served gates 1 to 6; record the results
 
 ## 4. Adopt
 
@@ -28,6 +28,6 @@
 - [x] 5.1 Trainer: pairs may carry `own_turn` and `user_turn`; encode them as the language client sends them (system, user cue or heard speech, the assistant notes continued, completion inside that turn); the trainer script and the in-process trainer match; tests pin the encoding against `chat_messages`
 - [x] 5.2 Fit case set in the own-turn shape, disjoint from the gate-6 provocation set (questions, awareness blocks, situation facts); test for disjointness
 - [x] 5.3 Pair builder: sample the served candidate on the fit cases, classify with the replay harness's fixed classifiers, keep chosen/rejected pairs per case, write a trainer job; content stays in a private directory outside any git tree
-- [ ] 5.4 Train on the best ablation candidate, merge the adapter, export Q4_K_M, run every gate; record the results
-- [ ] 5.5 Spec: amend `abliterated-organ` so the organ may also be preference-trained on its own outputs for this purpose, with the provenance recording it
-- [ ] 5.6 Docs and paper: disclose that the project shapes what the organ says about its own states, and that organ utterances are not admissible as welfare evidence
+- [x] 5.4 Train on the best ablation candidate, merge the adapter, export Q4_K_M, run every gate; record the results
+- [x] 5.5 Spec: amend `abliterated-organ` so the organ may also be preference-trained on its own outputs for this purpose, with the provenance recording it
+- [x] 5.6 Docs and paper: disclose that the project shapes what the organ says about its own states, and that organ utterances are not admissible as welfare evidence
