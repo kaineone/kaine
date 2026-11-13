@@ -29,6 +29,7 @@ plus the operator-approval env var.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import time
 from dataclasses import dataclass, field
@@ -49,8 +50,8 @@ class PhaseResult:
 async def _call_hook(hook: Any) -> None:
     """Invoke a sync or async no-arg hook, awaiting it if it is awaitable."""
     outcome = hook()
-    if asyncio.iscoroutine(outcome):
-        await outcome
+    if inspect.isawaitable(outcome):
+        _ = await outcome
 
 
 def _now_ms() -> float:
