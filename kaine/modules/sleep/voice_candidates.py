@@ -70,7 +70,7 @@ async def sample_and_rank(
 
     pairs: list[DPOPair] = []
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(trust_env=False) as client:
         for record in records:
             if record.get("preempted"):
                 continue
