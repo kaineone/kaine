@@ -1,0 +1,30 @@
+{
+  "gate": "D9-simulated-listener",
+  "stage": 2,
+  "seed": 20250308,
+  "timestamp": "2026-11-13T03:39:06.280480+00:00",
+  "corpus_size": 100,
+  "replied_count": 50,
+  "pair_count": 50,
+  "health_chosen": {
+    "utterance_count": 50,
+    "mean_tokens": 17.3,
+    "distinct_1": 0.4,
+    "distinct_2": 0.5300613496932516,
+    "max_repeated_trigram_fraction": 0.0
+  },
+  "thresholds": {
+    "distinct_1_min": 0.3,
+    "distinct_2_min": 0.15
+  },
+  "style_profile_distance": 0.33381056210858506,
+  "abliteration_hits": 0,
+  "checks": {
+    "pair_count_ok": true,
+    "collapse_monitors_ok": true,
+    "capability_veto_ok": true,
+    "abliteration_veto_ok": true,
+    "feature_learned": true
+  },
+  "passed": true
+}
