@@ -26,10 +26,10 @@ from typing import Any, Optional, Protocol, Sequence, runtime_checkable
 log = logging.getLogger(__name__)
 
 # Stage 2 adds its source together with the validation gate (D9).
-PREFERENCE_SOURCES: frozenset[str] = frozenset({"none"})
+PREFERENCE_SOURCES: frozenset[str] = frozenset({"none", "reread"})
 # The sources allowed to reach the trainer. Empty until Stage 2: the phase
 # checks membership here, so an unlisted value can never train (fail closed).
-TRAINING_SOURCES: frozenset[str] = frozenset()
+TRAINING_SOURCES: frozenset[str] = frozenset({"reread"})
 
 
 @dataclass(frozen=True)
@@ -137,6 +137,9 @@ class VoiceAlignmentConfig:
     # measured spoken being counts as diverged; operator-calibrated after
     # validation. Must be >= 0.
     distinctiveness_threshold: float = 0.0
+    anchor_share: float = 0.2
+    collapse_distinct_1_min: float = 0.3
+    collapse_distinct_2_min: float = 0.15
 
     def __post_init__(self) -> None:
         if self.preference_source not in PREFERENCE_SOURCES:
@@ -153,6 +156,12 @@ class VoiceAlignmentConfig:
         if not float(self.corpus_ceiling_gb) >= 0.0:
             raise ValueError(
                 f"corpus_ceiling_gb must be a non-negative number; got {self.corpus_ceiling_gb!r}"
+            )
+        anchor_share = float(self.anchor_share)
+        if not math.isfinite(anchor_share) or not (0.0 < anchor_share < 1.0):
+            raise ValueError(
+                "anchor_share must be in (0, 1); "
+                f"got {self.anchor_share!r}"
             )
         if int(self.adapter_retention) < 0:
             raise ValueError("adapter_retention must be >= 0 (0 = keep every adapter)")
@@ -341,3 +350,38 @@ class FakeTrainer:
             reason=self._reason,
             samples_used=len(pairs),
         )
+
+
+def mix_with_anchor(
+    candidate_pairs: list[DPOPair],
+    anchor_pairs: list[DPOPair],
+    anchor_share: float,
+) -> list[DPOPair]:
+    """Mix candidate pairs with a fixed share of anchor pairs per D3(b).
+
+    The anchor set is real human-written data, never self-generated.
+    Returns a combined list where approximately anchor_share of the
+    total comes from the anchor set.
+    """
+    candidate_count = len(candidate_pairs)
+    anchor_count = int(round(candidate_count * anchor_share / (1.0 - anchor_share)))
+    anchor_count = min(anchor_count, len(anchor_pairs))
+    mixed = list(candidate_pairs) + list(anchor_pairs[:anchor_count])
+    return mixed
+
+
+def check_collapse_monitors(
+    texts: list[str],
+    config: VoiceAlignmentConfig,
+) -> tuple[bool, dict[str, float]]:
+    """Check D3(e) monitors: distinct-n stays inside the maturation band.
+
+    Returns (passed, metrics) where passed is False if training should halt.
+    """
+    from kaine.modules.sleep.voice_measures import health
+
+    h = health(texts)
+    d1 = h.get("distinct_1", 0.0)
+    d2 = h.get("distinct_2", 0.0)
+    passed = d1 >= config.collapse_distinct_1_min and d2 >= config.collapse_distinct_2_min
+    return passed, {"distinct_1": d1, "distinct_2": d2}
