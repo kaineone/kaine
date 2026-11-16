@@ -21,7 +21,7 @@ from __future__ import annotations
 import hashlib
 import math
 import struct
-from typing import Any, Iterable
+from typing import Any
 
 SAMPLE_RATE = 16000
 FRAMES_PER_BLOCK = 480

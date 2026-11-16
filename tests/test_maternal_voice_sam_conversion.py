@@ -11,7 +11,6 @@ code, and they do not render audio.
 
 from __future__ import annotations
 
-import hashlib
 import importlib.util
 import json
 import sys

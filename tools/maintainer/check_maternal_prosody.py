@@ -33,7 +33,6 @@ MIN_TRANSIENT_REDUCTION = 0.55
 MAX_READABILITY = 40.0  # Flesch reading ease; lower = harder to read
 
 _HARD_TRANSIENTS = set("ptkbdgcqxs fz".replace(" ", ""))
-_SOFT = set("aeiouylnmrw")
 
 
 def _words(text: str) -> list[str]:
@@ -108,6 +107,7 @@ def check_syllable_density(text: str, *args: Any, **kwargs: Any) -> bool:
         try:
             limit = min(limit, float(per_word_cap))
         except (TypeError, ValueError):
+            # per_word_cap is not numeric; keep the previously resolved limit
             pass
     dens = syllable_density(text)
     # also check per-word max
