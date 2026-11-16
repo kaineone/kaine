@@ -22,7 +22,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
 # Maternal voice runtime module (manifest reader).
-from kaine.modules.audition.maternal_voice import MANIFEST_FORMAT, VOICE_DATA_DIR
+from kaine.modules.audition.maternal_voice import MANIFEST_FORMAT, VOICE_DATA_DIR  # noqa: E402
 
 # Prosody gate checker (offline).
 _spec = importlib.util.spec_from_file_location(

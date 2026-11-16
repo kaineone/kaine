@@ -10,7 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-import bench_audition_feeds as baf
+import bench_audition_feeds as baf  # noqa: E402
 
 
 def test_positive_record_structure_and_determinism(tmp_path):
