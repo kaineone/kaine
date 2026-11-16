@@ -1,0 +1,12 @@
+KAINE audition encoder bake-off — offline, no entity boot, nothing persisted but the result JSON.
+
+audio: 1200 blocks x 8000 samples @ 16000 Hz, 8 surprise blocks (every 150)
+
+
+encoder        AUC   FA/min    p50 ms    p95 ms    RSS MB
+---------------------------------------------------------
+spectral     0.989     6.00      1.68      3.09       468
+dasheng      0.927     6.00      3.60      3.86      1727
+wavjepa      0.997     6.00      5.76      6.24      3160
+
+wrote /var/home/erik/Projects/kaineone/kaine/docs/records/audition-encoder-bakeoff.json
