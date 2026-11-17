@@ -6,3 +6,4 @@ name: "KAINE CodeQL config"
 # external/jlens) surface as findings on our PRs that we would not act on.
 paths-ignore:
   - external
+  - tests/fixtures/rename_modules

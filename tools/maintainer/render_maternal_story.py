@@ -1,5 +1,4 @@
 import argparse
-import hashlib
 import json
 import re
 import unicodedata
@@ -8,7 +7,6 @@ from typing import Iterable, List, Optional
 
 import numpy as np
 import soundfile as sf
-
 
 SAMPLE_RATE = 8000
 DEFAULT_MAX_DURATION_SEC = 30.0
