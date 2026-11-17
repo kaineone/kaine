@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-MAX_CONCURRENCY = 3
+MAX_CONCURRENCY = 4
 SPDX = "SPDX-License-Identifier: LicenseRef-CAL-0.5"
 
 
