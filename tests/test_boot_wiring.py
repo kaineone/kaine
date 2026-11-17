@@ -827,7 +827,7 @@ def test_shipped_language_model_id_is_published_kaine_organ():
     root = Path(__file__).parent.parent
     raw = tomllib.loads((root / "config" / "kaine.toml").read_text())
     model_id = raw["language"]["model_id"]
-    assert model_id == "kaineone/Qwen3.5-4B-abliterated-GGUF", (
+    assert model_id == "kaineone/Qwen3.5-4B-abliterated-GGUF:latest", (
         "shipped [language].model_id must be the published KAINE organ's served "
         f"alias; got {model_id!r}"
     )
