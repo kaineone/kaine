@@ -2,17 +2,21 @@
   "format": 1,
   "generator": {
     "base_seed": 20261018,
-    "cfg_weight": 0.5,
-    "chatterbox_tts": "0.1.6",
-    "exaggeration": 0.5,
-    "model_repo": "ResembleAI/chatterbox",
-    "model_revision": "5bb1f6ee58e50c3b8d408bc82a6d3740c2db6e18",
+    "lowpass_cutoff_hz": 300,
+    "lowpass_hz": 300,
     "peak_ceiling_dbfs": -1.0,
+    "renderer": "sam",
+    "sam_checkpoint": "checkpoint-epoch-1",
+    "sam_model_path": "/run/media/erik/2TBm2Store/kaine/qwen3-tts-training/sam-model-v2/checkpoint-epoch-1",
+    "sam_model_repo": "kaineone/Qwen3-TTS-Sam-0.6B",
+    "sam_model_source": "/run/media/erik/2TBm2Store/kaine/qwen3-tts-training/sam-model-v2/checkpoint-epoch-1",
+    "sam_sample_rate": 24000,
+    "sam_speaker": "sam",
+    "spectral_ceiling_hz": 300,
     "target_rms_dbfs": -20.0,
-    "temperature": 0.8,
     "tool": "tools/maintainer/generate_maternal_voice.py",
     "trim_top_db": 40.0,
-    "watermark": "Chatterbox applies its Perth implicit watermark (resemble-perth) to every output before post-processing"
+    "watermark": "none (Sam renderer applies no implicit watermark)"
   },
   "initial_unlocked": 5,
   "items": [
@@ -544,44 +548,41 @@
         }
       ],
       "text_sha256": "a9016791a746898324d777d8d2a09c8ae99968fbe1c78e7ddbf8909d87ac3bb7"
+    },
+    {
+      "id": "p8-red-riding-hood",
+      "index": 20,
+      "kind": "passage",
+      "takes": [
+        {
+          "file": "p8-red-riding-hood.t0.flac",
+          "frames": 105302,
+          "rms_dbfs": -20.0,
+          "seconds": 13.163,
+          "seed": 20281018,
+          "sha256": "6be90ed85486584b3b3aed532e9c9e98e063b4ef7125edf85d132a1e407d5ac0",
+          "take": 0
+        },
+        {
+          "file": "p8-red-riding-hood.t1.flac",
+          "frames": 100182,
+          "rms_dbfs": -20.0,
+          "seconds": 12.523,
+          "seed": 20281019,
+          "sha256": "8715f9147b43342ec2d0b5c65763ff5f7e7d14b3457c2deb0b9da301a968355e",
+          "take": 1
+        }
+      ],
+      "text_sha256": "917a4e171653428c7267a7c5c870b8ec7ef0009bc11c833722311d14c30000a8"
     }
   ],
   "reference_voice": {
-    "attribution": "CMU ARCTIC speaker slt (Kominek and Black 2003), Carnegie Mellon University, http://www.festvox.org/cmu_arctic/",
-    "files": [
-      {
-        "file": "arctic_a0001.wav",
-        "sha256": "7862eb2cccb56875910f6bf46f9b8d26dac36e7672829aabe3956b0837ae122e"
-      },
-      {
-        "file": "arctic_a0003.wav",
-        "sha256": "0b32e00846e132826f46d7e5cabb2d8b370a5dc654bac0447cb63285f81cc413"
-      },
-      {
-        "file": "arctic_a0004.wav",
-        "sha256": "2a653cf74346ff24690f8a2abcff5091b81463f277b0062c851031a293f25167"
-      },
-      {
-        "file": "arctic_a0005.wav",
-        "sha256": "f93c823f955875d2389ae0f731a95128afb1ee096df7614e063e8b4b5695801d"
-      },
-      {
-        "file": "arctic_a0006.wav",
-        "sha256": "69b800a69455e35d05162b78b69446294ace69be903693ffd02ccd0150f17d66"
-      },
-      {
-        "file": "arctic_a0007.wav",
-        "sha256": "3c10caa9c2b5434f64c393a85a70aba57adf2858628d7983a8fd4f98a19a83d6"
-      },
-      {
-        "file": "arctic_a0008.wav",
-        "sha256": "603ac9585ddb5022d9c973bde867d7957fa1b8c1f44b2ee40fbbafedde8b5f0e"
-      }
-    ],
-    "reference_wav_sha256": "0639b873e49fb8dc8d4a1a06857e978730c679cfad0eaf0dfa2e9a267458c12e"
+    "attribution": "Qwen3-TTS Sam",
+    "files": [],
+    "reference_wav_sha256": null
   },
   "sample_rate": 8000,
-  "texts_sha256": "9bdccec4366cd4804d5664434f3deaf54562d42cf202bc4f05d8f319c8c82750",
-  "total_bytes": 2073087,
-  "total_seconds": 199.739
+  "texts_sha256": "b72454f6170d0c62c1bab66d1fd3dd7ecb63b174eda6f7c05f65fbb82f9d6a4c",
+  "total_bytes": 2165487,
+  "total_seconds": 225.425
 }
