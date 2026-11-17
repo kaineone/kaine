@@ -171,6 +171,13 @@ oscillator = [
     "snntorch>=1.0.0,<2",
     "scipy>=1.17.1",
 ]
+# Offline statistical analysis for the pilot-calibration planned test
+# (theta_band, b_band, age bins via rdrobust). GPL-3.0-only; kept in a
+# separate optional extra so KAINE's CAL-licensed core never imports or
+# depends on it at runtime. Install with: pip install .[analysis]
+analysis = [
+    "rdrobust>=2.0.0,<3",
+]
 
 [tool.setuptools.packages.find]
 # Every package under kaine/ ships; a new package needs no list edit.
