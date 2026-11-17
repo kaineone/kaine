@@ -437,6 +437,8 @@ def _line_starts(text: str) -> list[int]:
     for idx, ch in enumerate(text):
         if ch == "\n":
             starts.append(idx + 1)
+    if not text.endswith("\n"):
+        starts.append(len(text))
     return starts
 
 
