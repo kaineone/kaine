@@ -24,6 +24,7 @@ Chatterbox applies its Perth implicit watermark (resemble-perth) to every raw
 output waveform before the post-processing in this script.
 """
 
+import argparse
 import hashlib
 import json
 import math
@@ -74,6 +75,11 @@ REFERENCE_ATTRIBUTION = (
 
 
 _ID_RE = re.compile(r"^[a-z0-9-]+$")
+
+# Supported renderer backends. Chatterbox is the legacy authoring path; Sam is
+# the planned alternate backend (contract owner: render_maternal_voice_sam.py).
+VALID_RENDERERS = ("chatterbox", "sam")
+DEFAULT_RENDERER = "chatterbox"
 
 
 def file_sha256(path: Path) -> str:
@@ -357,9 +363,19 @@ def verify_manifest(out_dir: Path) -> int:
     return 0
 
 
-def main() -> int:
-    import argparse
 
+
+def validate_renderer(value: str) -> str:
+    """Validate a renderer choice, returning it unchanged if supported."""
+    if value not in VALID_RENDERERS:
+        raise ValueError(
+            f"invalid renderer {value!r}; expected one of {', '.join(VALID_RENDERERS)}"
+        )
+    return value
+
+
+def build_parser():
+    """Build the argument parser for the maternal-voice generator."""
     repo_root = Path(__file__).resolve().parents[2]
 
     parser = argparse.ArgumentParser(
@@ -389,6 +405,12 @@ def main() -> int:
         help="torch device for ChatterboxTTS (default: cuda)",
     )
     parser.add_argument(
+        "--renderer",
+        choices=VALID_RENDERERS,
+        default=DEFAULT_RENDERER,
+        help="TTS renderer backend (default: chatterbox)",
+    )
+    parser.add_argument(
         "--only",
         action="append",
         nargs="+",
@@ -400,10 +422,31 @@ def main() -> int:
         action="store_true",
         help="verify the manifest and audio files instead of rendering",
     )
-    args = parser.parse_args()
+    return parser
+
+
+def parse_args(argv=None):
+    """Parse CLI arguments, returning the argparse Namespace."""
+    return build_parser().parse_args(argv)
+
+
+make_parser = build_parser
+renderer_choices = VALID_RENDERERS
+
+
+def main(argv=None) -> int:
+    args = parse_args(argv)
 
     if args.verify:
         return verify_manifest(args.out.expanduser())
+
+    # The Sam backend is a minimal alternate renderer in this slice: the heavy
+    # Chatterbox authoring path and its text processing remain untouched.
+    if args.renderer != "chatterbox":
+        raise SystemExit(
+            f"error: renderer {args.renderer!r} is not implemented in this generator yet "
+            "(use --renderer chatterbox)"
+        )
 
     # Heavy imports are deferred until after argument parsing so --help is fast.
     # They are bound as module globals because the helpers above use them.

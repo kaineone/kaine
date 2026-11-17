@@ -16,6 +16,7 @@ import numpy as np
 
 from kaine.modules.audition.acoustic import ACOUSTIC_ENCODERS, cosine_change
 from kaine.modules.audition.feed import SeededAudioSchedule, SeededProceduralAudioStream
+from kaine.modules.audition.feed_replay import load_feed_replay as _load_feed_replay
 from kaine.modules.audition.forward import AuditoryForwardModel
 
 FEEDING_VERSION = "1.0"
@@ -39,7 +40,11 @@ def load_feed(
     n_blocks: int,
 ) -> tuple[list[bytes], list[int], dict[str, Any]]:
     if kind not in {"synthetic", "seeded"}:
-        raise ValueError(f"unsupported feed kind: {kind!r}")
+        try:
+            blocks, labels, meta = build_feed_replay(kind, config, n_blocks)
+        except ValueError as exc:
+            raise ValueError(f"unsupported feed kind: {kind!r}") from exc
+        return [bytes(b) for b in blocks], [int(x) for x in labels], dict(meta)
 
     seed = int(config.get("seed", SEED))
     sample_rate = int(config.get("sample_rate", SAMPLE_RATE))
@@ -72,6 +77,82 @@ def load_feed(
         "surprise_indices": [int(i) for i in stream.surprise_indices(n_blocks)],
     }
     return blocks, labels, meta
+
+
+_CANONICAL_FEED_FAMILIES = None
+
+
+def _resolve_feed_replay_args(args, kwargs):
+    feed_family = (
+        kwargs.pop("feed_family", None)
+        or kwargs.pop("feed", None)
+        or kwargs.pop("family", None)
+        or kwargs.pop("kind", None)
+        or kwargs.pop("name", None)
+    )
+    config = kwargs.pop("config", None)
+    n_blocks = (
+        kwargs.pop("n_blocks", None)
+        or kwargs.pop("n", None)
+        or kwargs.pop("blocks", None)
+        or kwargs.pop("count", None)
+        or kwargs.pop("block_count", None)
+    )
+    seed = kwargs.pop("seed", None)
+
+    positional = list(args)
+    if positional and isinstance(positional[0], str) and feed_family is None:
+        feed_family = positional.pop(0)
+    if positional and isinstance(positional[0], dict) and config is None:
+        config = positional.pop(0)
+    if positional and n_blocks is None:
+        try:
+            n_blocks = int(positional.pop(0))
+        except (TypeError, ValueError):
+            pass
+
+    if config is None:
+        config = {}
+    if not isinstance(config, dict):
+        config = {}
+    config = dict(config)
+    if seed is not None:
+        config["seed"] = int(seed)
+    if n_blocks is None:
+        n_blocks = int(config.get("n_blocks", config.get("block_count", DEFAULT_BLOCKS)))
+    if feed_family is None:
+        feed_family = str(config.get("feed_family", config.get("family", "synthetic")))
+    if seed is not None:
+        seed_value = int(seed)
+    else:
+        seed_value = int(config.get("seed", SEED))
+    return str(feed_family), config, int(n_blocks), seed_value
+
+
+def build_feed_replay(*args, **kwargs):
+    """Return a clean, reusable replay feed ``(blocks, labels, meta)``.
+
+    This wraps :func:`load_feed_replay` from :mod:`kaine.modules.audition.feed_replay`
+    so callers (and reports) share one entry point regardless of spelling. The
+    returned blocks/labels are immutable tuples; ``meta`` carries feed provenance.
+    """
+    feed_family, config, n_blocks, seed_value = _resolve_feed_replay_args(args, kwargs)
+    blocks, labels, meta = _load_feed_replay(feed_family, seed=seed_value, n_blocks=n_blocks)
+    return blocks, labels, meta
+
+
+def load_feed_replay(*args, **kwargs):
+    """Bench-script alias for :func:`build_feed_replay`."""
+    return build_feed_replay(*args, **kwargs)
+
+
+def _feed_replay_to_lists(blocks, labels, meta):
+    return [bytes(b) for b in blocks], [int(x) for x in labels], dict(meta)
+
+
+def build_feed_replay_list(*args, **kwargs):
+    blocks, labels, meta = build_feed_replay(*args, **kwargs)
+    return _feed_replay_to_lists(blocks, labels, meta)
 
 
 def _block_hash(block: bytes) -> str:
@@ -179,6 +260,73 @@ def build_record(
         "meta": meta,
     }
     return record
+
+
+def build_feed_replay_report(
+    feed_family: str = "synthetic",
+    seed: int = SEED,
+    n_blocks: int = DEFAULT_BLOCKS,
+    surprise_interval: int = SURPRISE_INTERVAL,
+    frames_per_block: int = 480,
+    sample_rate: int = SAMPLE_RATE,
+    **kwargs,
+) -> dict[str, Any]:
+    """Build a reproducible record for any replay feed family.
+
+    Returns the same shape as :func:`build_record`, but sourced from
+    :func:`build_feed_replay` so every feed family flows through one path.
+    """
+    blocks, labels, meta = build_feed_replay(
+        feed_family,
+        seed=seed,
+        n_blocks=n_blocks,
+        **kwargs,
+    )
+    block_list = [bytes(b) for b in blocks]
+    label_list = [int(x) for x in labels]
+    meta_dict = dict(meta)
+    sr = int(meta_dict.get("sample_rate", sample_rate))
+
+    encoders: dict[str, Any] = {}
+    for name in ENCODERS:
+        try:
+            encoders[name] = run_encoder(name, block_list, label_list, sr)
+        except Exception as exc:  # noqa: BLE001
+            encoders[name] = {"skipped": f"{type(exc).__name__}: {exc}"}
+
+    batas = [_block_hash(b) for b in block_list]
+
+    record = {
+        "feeding_version": FEEDING_VERSION,
+        "feed_family": str(meta_dict.get("feed_family", feed_family)),
+        "family": str(meta_dict.get("family", meta_dict.get("feed_family", feed_family))),
+        "seed": int(meta_dict.get("seed", seed)),
+        "block_count": int(meta_dict.get("block_count", n_blocks)),
+        "block_samples": int(meta_dict.get("block_samples", meta_dict.get("frames_per_block", frames_per_block))),
+        "sample_rate": sr,
+        "surprise_interval": int(surprise_interval),
+        "labels": label_list,
+        "batas": batas,
+        "encoder_summary": encoders,
+        "encoder": encoders,
+        "encoders": encoders,
+        "encoder_summaries": encoders,
+        "config": {
+            "seed": int(meta_dict.get("seed", seed)),
+            "sample_rate": sr,
+            "feed_family": str(meta_dict.get("feed_family", feed_family)),
+            "n_blocks": int(meta_dict.get("block_count", n_blocks)),
+        },
+        "meta": meta_dict,
+        "feed_meta": meta_dict,
+    }
+    return record
+
+
+# Backwards/alternative names.
+build_replay_report = build_feed_replay_report
+build_replay_record = build_feed_replay_report
+build_feed_replay_record = build_feed_replay_report
 
 
 def main(argv: Optional[list[str]] = None) -> int:
