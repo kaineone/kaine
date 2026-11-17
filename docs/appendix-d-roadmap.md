@@ -6,7 +6,6 @@ This page shows the engineering work in flight, the operator and on-device steps
 
 | Change | Progress | Summary |
 | --- | --- | --- |
-| docs-front-pages-voice | 3/4 (75%) | Rewrite the README opening and the book's front page so KAINE is introduced as source-available software implementing Global Workspace Theory and Predictive Processing, leading with the architecture and the activation roadmap; held for the operator's review. |
 | seed-entity-distribution | 0/2 (0%) | Consider distributing an entity preserved at maturation with the runtime that continues from it, so installations can skip the developmental phase. Design only: under consideration, not decided. |
 | interface-roles-and-launcher | 0/3 (0%) | Fieldtrip is the basic interface for entities, remote or local on smaller devices such as phones, with a few minor admin and operator actions; the dashboard web UI is the deeper operator control plane; bringing up an entity or a research study run, the seed included, is a scripted task started in a click or two of a small GUI. Design only: not scheduled. |
 | act-intent-derivation | 0/5 (0%) | Action path, step 1 of 6: the action-selection module derives act intents by the act outcome of the report-or-act decision the report bars stand in for (Whyte and Smith 2021), and the first whitelisted device effector is a light in the camera's view. Design only: not scheduled. Starts at the module-addition study's hardware stage (paper §6.5) once a light is attached. |
@@ -15,31 +14,25 @@ This page shows the engineering work in flight, the operator and on-device steps
 | active-vision | 0/5 (0%) | Action path, step 4 of 6: the entity chooses where to look by expected free energy and turns the pan-tilt camera to look. Design only: not scheduled. Starts after embodiment-motor-contingency has freed the camera's gaze channels, at the module-addition study's hardware stage (paper §6.5). |
 | world-model-action-outcomes | 0/5 (0%) | Action path, step 5 of 6 (parallel with step 4): the world model conditions on the entity's own acts and motor commands, so it predicts their outcomes. Design only: not scheduled. Starts after act-intent-derivation and embodiment-motor-contingency, at the module-addition study's hardware stage (paper §6.5). |
 | goal-directed-grasping | 0/5 (0%) | Action path, step 6 of 6: goal-directed grasping with an arm and gripper, composed from steps 1 to 5. Design only: not scheduled. Starts after all five earlier steps, at the module-addition study's hardware stage (paper §6.5) once the arm is attached. |
-| attention-driven-audition | 19/32 (59%) | Move hearing beyond speech transcription so audio can drive workspace salience. |
-| attention-driven-foveation | 14/18 (78%) | Replace uniform screen downsampling with a foveated capture that keeps fine detail where it matters. |
-| entity-key-custody | 4/12 (33%) | Per-entity encryption with v2 envelopes, KeyRing and ForkManager integration on main; security docs shipped. Remaining: TPM sealing (task 1.2), escrow (2.1), transfer (2.2), migration (3.1), swtpm tests (4.1), and the operator's key ceremony (task 0.3). |
-| individuation-rebuild | 57/67 (85%) | Replace the individuation signal with a real test against the entity's own maturation reference, produced at runtime and read the same way by preservation and decommission. The real-organ calibration (task 10) is next. |
+| attention-driven-audition | 21/32 (66%) | Move hearing beyond speech transcription so audio can drive workspace salience. |
+| entity-key-custody | 6/12 (50%) | Per-entity encryption with v2 envelopes, KeyRing and ForkManager integration on main; security docs shipped. Remaining: TPM sealing (task 1.2), escrow (2.1), transfer (2.2), migration (3.1), swtpm tests (4.1), and the operator's key ceremony (task 0.3). |
+| individuation-rebuild | 60/67 (90%) | Replace the individuation signal with a real test against the entity's own maturation reference, produced at runtime and read the same way by preservation and decommission. The real-organ calibration (task 10) is next. |
 | module-ignition-study | 29/33 (88%) | The module-addition study: seed an entity through a developmental phase, then add held modules one at a time on branches from the preserved seed, every branch viewing the same film programme, with a content-free report. |
-| module-residency-and-speech-tiers | 9/60 (15%) | Make the same entity run on weak hardware by selectively loading and tiering speech backends. |
-| stream-wiring-quality | 20/20 (100%) | Clean up bus stream names, remove phantom reads and enforce the stream contract across modules. |
-| adapter-merge-out-of-process | 3/3 (100%) | Run the real adapter merge in a child process, so its non-float32 model load can never change a long-lived process's default dtype. Built; awaiting archive. |
+| module-residency-and-speech-tiers | 58/60 (97%) | Make the same entity run on weak hardware by selectively loading and tiering speech backends. |
 | sequence-scalar-timing | 1/3 (33%) | Test whether the sequence module's interval timing shows the scalar property (timing variability proportional to the interval), as a falsification test. Design only. |
-| functional-module-names-drop-aliases | 0/10 (0%) | After release 27.02, refuse the old configuration names and remove the operator aliases the module rename kept for a bounded window; stored names stay readable for good. Waits for that release. |
-| workspace-feedback | 12/14 (86%) | Held extension (paper §3.2, §6.4): top-down heads, a zero-sum gain on the processors' standardized errors and conflict resolution, shipped off with the five ablation arms selectable by study. |
-| decision-server | 3/10 (30%) | Serve the K1-Jev decision model on its own loopback llama-server, apart from the language organ, with a fail-closed client (the client is built). |
+| functional-module-names-drop-aliases | 1/10 (10%) | After release 27.02, refuse the old configuration names and remove the operator aliases the module rename kept for a bounded window; stored names stay readable for good. Waits for that release. |
 | sleep-replay | 1/3 (33%) | Protect what the small online learners learned from later interference with sleep-like replay (Wei, Krishnan and Bazhenov). Design only. |
-| k1-jev-decision-model | 11/33 (33%) | Train K1-Jev, a small local model that answers typed questions about the entity's external speech for the instruments and welfare signals (data and trainer built). Schema v2 is designed and blocked: labelling and training are not scheduled (neither the v2 rebuild nor the operator's labelling pass has a date), and the integrator's design check (task 0.1) is open. |
 | episodic-memory-retrieval-energy | 1/3 (33%) | Publish a familiarity signal from the episodic memory module as the modern-Hopfield retrieval energy of the current content. Design only. |
 | affect-active-inference | 1/4 (25%) | Derive the affect module's affect from active inference over the body's internal state. Design only, after the workspace-mediation test. |
-| voice-development | 7/17 (41%) | Let the entity individuate a voice of its own instead of reciting workspace readings, in stages, with heard speech never persisted. |
-| docs-sweep-2026-10 | 8/9 (89%) | Bring every page of the book into line with the revised paper and the merged code. |
-| per-entity-shared-volumes | 0/6 (0%) | Shared adapter and job volumes keep each entity's files under its own id, so ownership is structural. |
+| voice-development | 10/17 (59%) | Let the entity individuate a voice of its own instead of reciting workspace readings, in stages, with heard speech never persisted. |
 | ablation-positive-control | 9/10 (90%) | The positive control of the information-gain measure: shadow forward models with an informative and a non-informative component, a per-processor verdict in the research log, and an offline all-processors check. Off by default. |
 | pilot-calibration | 20/21 (95%) | The tool that derives the planned test's settings from the pilot runs into one versioned record, the positive control on the inputs' first principal component with per-processor SNR and the learning period, and a boot check that refuses live runs without a complete record. |
-| vox-default-voice | 16/18 (89%) | With no voice configured, the vocal module picks a voice the speech engine ships, first in sorted order and filtered by an optional gender preference where the engine reports gender (Kokoro yes, Chatterbox no); an explicit voice wins, and no voice degrades the module to silence with a clear message. The entity choosing its own voice is designed as a follow-up only. |
-| trainer-shares-the-gpu | 4/4 (100%) | The voice trainer loads its base with PyTorch's expandable-segments allocator, so it fits beside other processes on a shared GPU, and a failed load reports the real allocation error. |
-| trainer-without-unsloth | 8/8 (100%) | The voice trainer runs its own DPO loop on transformers, PEFT and bitsandbytes, without Unsloth or TRL. |
-| welfare-response-fail-safe | 10/10 (100%) | The welfare response tells a failed freeze from a placed pause, retries the freeze, falls back to a pause when an end cannot be enacted, and never overwrites a corrupt control file. |
+| episodic-recall-content | 29/32 (91%) | Give episodic recall a content path over stored traces (heard-safe, past-tense remembered rendering) without heard text reaching cognition. |
+| organ-self-denial-ablation | 15/19 (79%) | Ablate the organ's self-denial direction on top of the refusal ablation and publish a new weight revision. |
+| sam-voice-training | 0/16 (0%) | Dataset pipeline, zero-shot cloning, evaluation harness and optional fine-tune for a nonbinary "Sam" narration voice. |
+| stimulus-control-act | 24/26 (92%) | Entity-held stimulus control: pause, seek, gain and channel acts through the signed-intent path (stage M now, stage L later). |
+| unified-instance-configuration | 0/17 (0%) | Single documented configuration reference plus validator and CLI questionnaire over every module knob. Parked. |
+| welfare-indicator-response | 23/24 (96%) | Live paper A.4 welfare indicators on the monitor: rest on first crossing, preserve on a crossing over the fresh span.
 
 ## Designed in the paper, not built
 
@@ -73,6 +66,6 @@ These steps come from changes whose code is finished and archived. Each needs th
 
 ## Backlog totals
 
-The roadmap contains 34 active changes, 423 archived changes and 109 capability specs.
+The roadmap contains 27 active changes, 447 archived changes and 113 capability specs.
 
 If you want to pick up one of these changes, see [Contributing](21-contributing.md).
