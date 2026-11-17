@@ -14,14 +14,14 @@
 ## 1. Stage 1: speaking from memory (off by default)
 
 - [x] 1.1 Context assembly adds the self-model module's values and norms, the episodic memory module's recall of the entity's own utterances and episodes with affect, and recent dialogue, within the token budget. PR #718.
-- [ ] 1.2 Offline A/B on a frozen synthetic memory store against the Stage 0 persona, scored by the D8 measures; recorded under `docs/records/`.
+- [x] 1.2 Offline A/B on a frozen synthetic memory store against the Stage 0 persona, scored by the D8 measures; recorded under `docs/records/`.
 
 ## 2. Stage 2: learning to say what it means (off by default)
 
-- [ ] 2.1 K-candidate sampling at sleep from the entity's own organ.
-- [ ] 2.2 Ranking by the internal re-reading signal; listener uptake weighted by the social cognition module only in full-entity configurations with conversation (V3).
-- [ ] 2.3 KTO or DPO from the previous adapter, on the accumulated corpus, with a fixed real-data anchor and the D3(e) monitors.
-- [ ] 2.4 Offline simulated-listener validation (D9); recorded under `docs/records/`.
+- [x] 2.1 K-candidate sampling at sleep from the entity's own organ.
+- [x] 2.2 Ranking by the internal re-reading signal; listener uptake weighted by the social cognition module only in full-entity configurations with conversation (V3).
+- [x] 2.3 KTO or DPO from the previous adapter, on the accumulated corpus, with a fixed real-data anchor and the D3(e) monitors.
+- [x] 2.4 Offline simulated-listener validation (D9); recorded under `docs/records/`.
 
 ## 3. Validation
 

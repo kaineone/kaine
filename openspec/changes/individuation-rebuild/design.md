@@ -382,6 +382,12 @@ An entity matured before this change, or revived from a bundle without `state/in
 5. **Language impact.** Zero language module timeouts; added p95 language module latency ≤ one probe completion.
 6. **Seed behaviour.** Two requests with the same seed and same conditions: record whether the texts are identical (informational).
 7. **Cost.** Measure per-request latency and permutation wall time at B = 10^6; update the budgets in this design.
+
+   Measured (smoke-20261113T030433Z, organ via Ollama on port 11434, Qwen3.5-4B-abliterated Q4_K_M, 480 requests, B = 10^6):
+   - Per-request latency: p50 = 148 ms, p95 = 627 ms, max = 1.3 s
+   - Permutation wall time at B = 10^6: 40.1 s
+   - `effect_min` (95th percentile of H under the null, 1000 splits): 0.011
+   - `b_max = 2_000_000` and `run_deadline_s = 2700` have ample headroom at these rates.
 8. **Upgrades.** Repeat steps 2 and 4 after any change to the llama.cpp server, the organ GGUF or the embedder. The conditions digest cannot see every infrastructure change.
 
 ## 7. Spec deltas

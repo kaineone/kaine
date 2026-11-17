@@ -51,13 +51,13 @@ def test_set_probe_temperature_validates():
             language.set_probe_temperature(bad)
 
 
-def test_shipped_probe_temperature_is_greedy():
+def test_shipped_probe_temperature_is_calibrated():
     cfg = IndividuationConfig.from_dict(
         load_kaine_config(operator_path="/nonexistent-operator-for-tests.toml")[
             "individuation"
         ]
     )
-    assert cfg.probe_temperature == 0.0
+    assert cfg.probe_temperature == 0.7
 
 
 def test_config_probe_temperature_validation():

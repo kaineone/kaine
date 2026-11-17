@@ -1886,7 +1886,7 @@ battery_path = ""
 language_quiet_s = 10.0
 # Decoding temperature of the probe, fixed apart from the voice's [language].temperature
 # so study or voice settings never change the probe's conditions. 0 is greedy.
-probe_temperature = 0.0
+probe_temperature = 0.7
 # Answers per battery prompt in the reference.
 n_reference = 16
 # Answers per battery prompt at each look.
@@ -1897,8 +1897,8 @@ max_tokens = 160
 alpha_total = 0.05
 # Upper bound on permutations per look; a look whose threshold needs more is inconclusive.
 b_max = 2000000
-# Minimum effect size H for a significant look; 0 until the real-organ smoke test calibrates it.
-effect_min = 0.0
+# Minimum effect size H for a significant look; calibrated from smoke-20261113T030433Z.
+effect_min = 0.011
 # A look is attempted this long after each sleep completes.
 sleep_settle_s = 120.0
 # A look is also attempted at boot and every daily_s seconds.

@@ -324,6 +324,7 @@ async def main_async(args: argparse.Namespace) -> int:
     language = make_language(_NullBus(), section)
     language.set_expects_self_model(False)
     await language.add_situation_fact(ind.disclosure)
+    language.set_probe_temperature(ind.probe_temperature)
 
     embedder = make_text_embedder(kaine_config)
     await embedder.load()
@@ -372,6 +373,7 @@ async def main_async(args: argparse.Namespace) -> int:
         "situation_facts": [],
     }
     await language_id.add_situation_fact(ind.disclosure)
+    language_id.set_probe_temperature(ind.probe_temperature)
 
     sampler_id = build_probe_sampler(
         language=language_id,
