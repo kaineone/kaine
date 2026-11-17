@@ -27,7 +27,7 @@ from pathlib import Path
 
 MODEL = os.environ.get("WORKER_MODEL", "kimi-k2.7-code:cloud")
 CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]|\x1b\[[0-9;?]*[A-Za-z]")
-BLOCK = re.compile(r"^@@@FILE[ \t]+(\S+)[ \t]*\n(.*?)^@@@END[ \t]*$", re.S | re.M)
+BLOCK = re.compile(r"^@@@FILE[ \t]*:?[ \t]*(\S+)[ \t]*\n(.*?)^@@@END[ \t]*$", re.S | re.M)
 
 
 def _unfence(content: str) -> str:

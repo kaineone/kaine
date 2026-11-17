@@ -20,7 +20,8 @@
 - [x] 2.2 The study runner: line roots and isolation, the step loop, the step manifests, resumable after an interruption; it refuses a step whose preservation did not capture the world model while the world model module is enabled.
 - [x] 2.3 The ignition analysis and its report.
 - [x] 2.4 A dry run of the runner end to end with a tiny stand-in programme and no entity (fakes), before the real run.
-- [ ] 2.5 The real run: `init`, then `run` through the seed, branch, repeat and accumulate steps, with state encryption configured, started by the operator.
+- [ ] 2.5 The real run: `init`, then `run` through the seed, branch, repeat and accumulate steps, with state encryption configured, started by the operator. *(operator-deferred)*
+  - Note: operator-deferred. Reason: unattended multi-day study run; requires the pre-boot gate green, `$KAINE_STATE_KEY` configured, and the operator's explicit go. Owner: operator.
 - [x] 2.6 The runner follows the seed and branch protocol (revised 2026-09-28):
   - the step order seed, branch 0, repeat, then branch k and accumulate k;
   - start bundles as specified;
@@ -40,6 +41,9 @@
   - [x] 3.2.2 One shared NumPy text embedder for the episodic memory, social cognition and sleep modules (`numpy-text-embedder`).
   - [x] 3.2.3 sherpa-onnx speech backends.
   - [x] 3.2.4 Slip-driven automatic time dilation (`entity-clock-injection`, `slip-driven-time-dilation`).
-- [ ] 3.3 Phase 3: JAX-free planning and world model modules; the Termux (Android arm64) install path; a Pixel 6a profile.
-- [ ] 3.4 Phase 4: memory residency and swap for the Orin Nano Super; arm64 images.
-- [ ] 3.5 A full entity verified on the desktop, the Orin Nano Super and the Pixel 6a.
+- [ ] 3.3 Phase 3: JAX-free planning and world model modules; the Termux (Android arm64) install path; a Pixel 6a profile. *(not required for the first base boot)*
+  - Note: not required for the first base boot. Reason: JAX remains available on the desktop; Termux/Pixel 6a targets are paused in the hardware leg, so the JAX-free work is not on the base-boot critical path. Owner: portability program (Dev Lead).
+- [ ] 3.4 Phase 4: memory residency and swap for the Orin Nano Super; arm64 images. *(blocked on hardware phase)*
+  - Note: blocked on hardware phase. Reason: requires the Orin Nano Super and its memory/residency integration; desktop base boot does not need residency. Owner: operator / portability program.
+- [ ] 3.5 A full entity verified on the desktop, the Orin Nano Super and the Pixel 6a. *(blocked on hardware phase)*
+  - Note: blocked on hardware phase. Reason: desktop verification is tracked in the pre-boot/base phases; Orin Nano Super and Pixel 6a verification await device access. Owner: operator.

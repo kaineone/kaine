@@ -848,3 +848,31 @@ def load_runtime_config(
         study=resolved_study,
         studies_dir=studies_dir,
     )
+
+
+def _sort_defaults(value: Any) -> Any:
+    """Recursively sort the keys of every mapping in ``value``."""
+    if isinstance(value, dict):
+        return {key: _sort_defaults(value[key]) for key in sorted(value)}
+    if isinstance(value, list):
+        return [_sort_defaults(item) for item in value]
+    return value
+
+
+def list_all_defaults() -> dict[str, Any]:
+    """Return every default value from the shipped configuration as a sorted dict.
+
+    The shipped ``config/kaine.toml`` is the single source of truth for KAINE's
+    defaults: every module and config value defaults to off/conservative, and
+    operator overrides (``config/kaine.operator.toml``) and tier profiles are
+    layered on top at runtime. This helper exposes those shipped defaults in a
+    deterministically sorted form so callers (reference generation, validation,
+    tests) can rely on key order. Neither the shipped file nor any caller input
+    is mutated. Missing shipped config raises :class:`FileNotFoundError`.
+    """
+    shipped_path = SHIPPED_CONFIG_PATH
+    if not shipped_path.exists():
+        raise FileNotFoundError(f"config/kaine.toml not found at {shipped_path}")
+    with shipped_path.open("rb") as fh:
+        raw = tomllib.load(fh)
+    return _sort_defaults(raw)

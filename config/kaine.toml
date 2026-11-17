@@ -977,7 +977,7 @@ chat_url = "http://127.0.0.1:11434/v1"
 # huggingface.co/kaineone/Qwen3.5-4B-abliterated). Operators with larger hardware
 # scale up to a bigger abliterated model in config/kaine.operator.toml (the eval
 # baseline tracks this value automatically).
-model_id = "kaineone/Qwen3.5-4B-abliterated-GGUF"
+model_id = "kaineone/Qwen3.5-4B-abliterated-GGUF:latest"
 temperature = 0.7
 # max_tokens caps a speak intent; think_max_tokens caps a think intent, shorter
 # because inner speech is condensed (paper 3.5, Table A1). Without

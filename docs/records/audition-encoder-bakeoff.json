@@ -1,0 +1,39 @@
+{
+  "config": {
+    "blocks": 600,
+    "block_samples": 8000,
+    "sample_rate": 16000,
+    "surprise_interval": 150,
+    "seed": 42,
+    "device": "cuda:0"
+  },
+  "results": {
+    "spectral": {
+      "embedding_dim": 64,
+      "roc_auc": 0.9991610738255033,
+      "false_alerts_per_min": 6.0,
+      "p95_threshold": 1.398011010911732,
+      "latency_ms_p50": 1.5917150003588176,
+      "latency_ms_p95": 1.622830949645504,
+      "peak_rss_mb": 284.96484375
+    },
+    "dasheng": {
+      "embedding_dim": 768,
+      "roc_auc": 0.9836409395973155,
+      "false_alerts_per_min": 6.0,
+      "p95_threshold": 3.135716154808814,
+      "latency_ms_p50": 3.6828820002483553,
+      "latency_ms_p95": 3.790205999939644,
+      "peak_rss_mb": 1712.7578125
+    },
+    "wavjepa": {
+      "embedding_dim": 768,
+      "roc_auc": 0.9949664429530202,
+      "false_alerts_per_min": 6.0,
+      "p95_threshold": 3.1190649882827266,
+      "latency_ms_p50": 5.920468000113033,
+      "latency_ms_p95": 6.545573499488454,
+      "peak_rss_mb": 3141.45703125
+    }
+  }
+}

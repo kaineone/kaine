@@ -392,17 +392,36 @@ def beat_pulse(phase: float | np.ndarray) -> float | np.ndarray:
     return np.clip(pulse, 0.0, 1.0)
 
 
-def colour_saturation(hearing_stage: int) -> float:
-    """Schedule saturation for a hearing stage: k/5 in stage k (0.0 to 0.8).
+def colour_saturation(hearing_stage: int, progress: float = 0.0) -> float:
+    """Schedule saturation for a hearing stage.
 
-    Paper A.7, Table A1. The k/5 steps are a design choice without a source;
-    newborn colour vision is limited (Adams, Courage and Mercer 1994). A stage
-    above 4 is clamped to 4 and below 0 to 0. A bool, a non-int or None gives
-    0.0.
+    With ``progress=0.0`` this returns the discrete step ``k/5`` in stage ``k``
+    (0.0 to 0.8), unchanged from the original design.  With a ``progress`` in
+    ``(0, 1]`` the saturation linearly interpolates from the current stage's
+    step toward the next stage's step (``(k+1)/5``), clamped at stage 4.  This
+    is the single feed-level interpolation cue used to smooth hearing-stage
+    transitions without changing the step at ``progress=0``.
+
+    Paper A.7, Table A1. Newborn colour vision is limited (Adams, Courage and
+    Mercer 1994). A stage above 4 is clamped to 4 and below 0 to 0. A bool, a
+    non-int or None hearing_stage gives 0.0. A non-finite or out-of-range
+    ``progress`` is clamped to [0.0, 1.0].
     """
     if isinstance(hearing_stage, bool) or not isinstance(hearing_stage, int):
         return 0.0
-    return max(0, min(4, hearing_stage)) / 5.0
+    stage = max(0, min(4, hearing_stage))
+    base = stage / 5.0
+    if stage >= 4:
+        return base
+    try:
+        p = float(progress)
+    except (TypeError, ValueError):
+        p = 0.0
+    if not math.isfinite(p):
+        p = 0.0
+    p = max(0.0, min(1.0, p))
+    nxt = (stage + 1) / 5.0
+    return float(base + (nxt - base) * p)
 
 
 def flow_phase(seed: int, t: float | np.ndarray, params: StimulusSourceParams) -> float | np.ndarray:

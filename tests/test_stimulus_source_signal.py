@@ -205,6 +205,16 @@ def test_colour_saturation_clamps_and_rejects_non_ints() -> None:
         assert colour_saturation(bad) == 0.0  # type: ignore[arg-type]
 
 
+def test_colour_saturation_interpolates_between_stages() -> None:
+    assert colour_saturation(0, 0.5) == 0.1
+    assert colour_saturation(1, 1.0) == 0.4
+    assert colour_saturation(3, 0.5) == 0.7
+    assert colour_saturation(4, 0.5) == 0.8
+    assert colour_saturation(1, 0.0) == 0.2
+    for bad in (float("nan"), float("inf"), -0.5, 2.0, "x"):
+        assert colour_saturation(1, bad) in (0.2, 0.4)  # clamped progress
+
+
 def test_flow_phase_properties() -> None:
     params = StimulusSourceParams()
     t = np.array([0.0, 1.0, 1e3, 1e6, 1e7], dtype=np.float64)

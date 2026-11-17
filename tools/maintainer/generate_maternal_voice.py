@@ -24,12 +24,14 @@ Chatterbox applies its Perth implicit watermark (resemble-perth) to every raw
 output waveform before the post-processing in this script.
 """
 
+import argparse
 import hashlib
 import json
 import math
 import re
 import sys
 import time
+
 try:
     import tomllib
 except ModuleNotFoundError:  # Python 3.10, where Chatterbox 0.1.6 environments often live
@@ -72,8 +74,20 @@ REFERENCE_ATTRIBUTION = (
     "Carnegie Mellon University, http://www.festvox.org/cmu_arctic/"
 )
 
+SAM_HF_MODEL_ID = "kaineone/Qwen3-TTS-Sam-0.6B"
+SAM_MODEL_PATH = "/run/media/erik/2TBm2Store/kaine/qwen3-tts-training/sam-model-v2/checkpoint-epoch-1"
+SAM_SPEAKER = "sam"
+SAM_CHECKPOINT = "checkpoint-epoch-1"
+SAM_SAMPLE_RATE = 24000
+SPECTRAL_CEILING_HZ = 300
+
 
 _ID_RE = re.compile(r"^[a-z0-9-]+$")
+
+# Supported renderer backends. Chatterbox is the legacy authoring path; Sam is
+# the planned alternate backend (contract owner: render_maternal_voice_sam.py).
+VALID_RENDERERS = ("chatterbox", "sam")
+DEFAULT_RENDERER = "chatterbox"
 
 
 def file_sha256(path: Path) -> str:
@@ -302,6 +316,134 @@ def render_take(model, reference_wav: Path, text: str, item: dict, index: int, t
     }, size
 
 
+def load_sam_model(device="cuda", sam_model_path=SAM_MODEL_PATH):
+    """Load the Qwen3-TTS Sam model, preferring the cached HF id."""
+    global torch, qwen_tts
+    if "torch" not in globals():
+        import torch
+    if "qwen_tts" not in globals():
+        import qwen_tts
+
+    errors = []
+    for source, kwargs in [(SAM_HF_MODEL_ID, {"local_files_only": True}), (sam_model_path, {})]:
+        try:
+            model = qwen_tts.Qwen3TTSModel.from_pretrained(
+                source,
+                device_map=device,
+                dtype=torch.bfloat16,
+                **kwargs,
+            )
+            return model, source
+        except Exception as exc:
+            errors.append(exc)
+    raise SystemExit(f"error: could not load Sam model: {errors[-1]}")
+
+
+def apply_prosody_muffling(audio, sample_rate):
+    """Apply the Sam spectral lowpass muffle to an audio buffer."""
+    global scipy
+    if "scipy" not in globals():
+        import scipy
+    butter = scipy.signal.butter
+    sosfiltfilt = scipy.signal.sosfiltfilt
+
+    nyq = 0.5 * sample_rate
+    cutoff = min(SPECTRAL_CEILING_HZ, nyq * 0.99)
+    sos = butter(6, cutoff, btype="low", fs=sample_rate, output="sos")
+    return sosfiltfilt(sos, audio).astype("float64")
+
+
+def render_sam_take(model, text, item, index, take, out_dir: Path):
+    """Render a single Sam take and write the FLAC file."""
+    global random, np, librosa, soundfile, torch
+    if "random" not in globals():
+        import random
+    if "np" not in globals():
+        import numpy as np
+    if "librosa" not in globals():
+        import librosa
+    if "soundfile" not in globals():
+        import soundfile
+    if "torch" not in globals():
+        import torch
+
+    seed = BASE_SEED + 1000 * index + take
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+    print(f"generating {item['id']} take {take} (seed {seed}) ...")
+    result = model.generate_custom_voice(
+        text=text,
+        language="English",
+        speaker=SAM_SPEAKER,
+    )
+
+    if isinstance(result, tuple) and len(result) == 2:
+        wavs, sr = result
+    elif isinstance(result, (list, tuple)) and len(result) == 1:
+        wavs = result[0]
+        sr = SAM_SAMPLE_RATE
+    else:
+        wavs = [result]
+        sr = SAM_SAMPLE_RATE
+
+    wav = np.asarray(wavs[0], dtype="float64")
+
+    trimmed, _ = librosa.effects.trim(wav, top_db=TRIM_TOP_DB)
+    if trimmed.size == 0:
+        raise SystemExit(f"error: {item['id']} take {take} is silent after trimming")
+    if len(trimmed) < int(0.3 * sr):
+        raise SystemExit(f"error: {item['id']} take {take} is shorter than 0.3 s after trimming")
+
+    muffled = apply_prosody_muffling(trimmed, sr)
+
+    resampled = librosa.resample(
+        muffled, orig_sr=sr, target_sr=OUTPUT_SAMPLE_RATE
+    )
+
+    rms = np.sqrt(np.mean(resampled**2))
+    if rms == 0.0:
+        raise SystemExit(f"error: {item['id']} take {take} has zero RMS")
+
+    target_linear = 10 ** (TARGET_RMS_DBFS / 20.0)
+    scaled = resampled * (target_linear / rms)
+
+    peak = np.max(np.abs(scaled))
+    if peak > 0.0:
+        peak_dbfs = 20 * math.log10(peak)
+        if peak_dbfs > PEAK_CEILING_DBFS:
+            peak_target = 10 ** (PEAK_CEILING_DBFS / 20.0)
+            scaled = scaled * (peak_target / peak)
+
+    int16_wav = np.clip(np.round(scaled * 32767.0), -32768, 32767).astype(np.int16)
+
+    out_path = out_dir / f"{item['id']}.t{take}.flac"
+    soundfile.write(
+        str(out_path), int16_wav, OUTPUT_SAMPLE_RATE, format="FLAC", subtype="PCM_16"
+    )
+
+    digest = file_sha256(out_path)
+    size = out_path.stat().st_size
+    frames = len(int16_wav)
+    seconds = round(frames / OUTPUT_SAMPLE_RATE, 3)
+
+    final_rms = np.sqrt(np.mean(scaled**2))
+    final_rms_dbfs = 20 * math.log10(final_rms) if final_rms > 0.0 else -float("inf")
+
+    return {
+        "take": take,
+        "file": out_path.name,
+        "sha256": digest,
+        "frames": frames,
+        "seconds": seconds,
+        "seed": seed,
+        "rms_dbfs": round(final_rms_dbfs, 2),
+    }, size
+
+
 def reuse_existing_takes(existing_item: dict, out_dir: Path) -> list:
     """Verify existing take files and return their manifest entries unchanged."""
     verified = []
@@ -357,9 +499,19 @@ def verify_manifest(out_dir: Path) -> int:
     return 0
 
 
-def main() -> int:
-    import argparse
 
+
+def validate_renderer(value: str) -> str:
+    """Validate a renderer choice, returning it unchanged if supported."""
+    if value not in VALID_RENDERERS:
+        raise ValueError(
+            f"invalid renderer {value!r}; expected one of {', '.join(VALID_RENDERERS)}"
+        )
+    return value
+
+
+def build_parser():
+    """Build the argument parser for the maternal-voice generator."""
     repo_root = Path(__file__).resolve().parents[2]
 
     parser = argparse.ArgumentParser(
@@ -389,6 +541,12 @@ def main() -> int:
         help="torch device for ChatterboxTTS (default: cuda)",
     )
     parser.add_argument(
+        "--renderer",
+        choices=VALID_RENDERERS,
+        default=DEFAULT_RENDERER,
+        help="TTS renderer backend (default: chatterbox)",
+    )
+    parser.add_argument(
         "--only",
         action="append",
         nargs="+",
@@ -400,10 +558,142 @@ def main() -> int:
         action="store_true",
         help="verify the manifest and audio files instead of rendering",
     )
-    args = parser.parse_args()
+    return parser
+
+
+def parse_args(argv=None):
+    """Parse CLI arguments, returning the argparse Namespace."""
+    return build_parser().parse_args(argv)
+
+
+make_parser = build_parser
+renderer_choices = VALID_RENDERERS
+
+
+def main(argv=None) -> int:
+    args = parse_args(argv)
 
     if args.verify:
         return verify_manifest(args.out.expanduser())
+
+    if args.renderer == "sam":
+        texts_path = args.texts
+        out_dir = args.out.expanduser()
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        items, initial_unlocked, texts_sha256 = load_texts(texts_path)
+
+        only_set = None
+        if args.only:
+            only_set = {id_ for group in args.only for id_ in group}
+            missing = only_set - {it["id"] for it in items}
+            if missing:
+                raise SystemExit(f"error: --only ids not found in texts file: {', '.join(sorted(missing))}")
+
+        existing_by_id = {}
+        if only_set:
+            existing_manifest = load_existing_manifest(out_dir)
+            if existing_manifest is None:
+                raise SystemExit("error: --only requires an existing manifest to reuse entries for other items")
+            for it in existing_manifest.get("items", []):
+                existing_by_id[it["id"]] = it
+
+        model, source = load_sam_model(args.device)
+
+        manifest_items = []
+        total_bytes = 0
+        total_seconds = 0.0
+        take_count = 0
+
+        for index, item in enumerate(items):
+            text_bytes = item["text"].encode("utf-8")
+            text_sha256 = hashlib.sha256(text_bytes).hexdigest()
+
+            if only_set and item["id"] not in only_set:
+                old_item = existing_by_id.get(item["id"])
+                if old_item is None:
+                    raise SystemExit(
+                        f"error: item {item['id']} is not in the existing manifest, cannot reuse"
+                    )
+                verified_takes = reuse_existing_takes(old_item, out_dir)
+                entry = {
+                    "id": item["id"],
+                    "kind": item["kind"],
+                    "index": index,
+                    "text_sha256": text_sha256,
+                    "takes": verified_takes,
+                }
+            else:
+                takes = []
+                for take in range(item["takes"]):
+                    take_entry, size = render_sam_take(
+                        model, item["text"], item, index, take, out_dir
+                    )
+                    takes.append(take_entry)
+                    print(
+                        f"{item['id']} take {take}: {take_entry['seconds']:.3f} s, {size} bytes"
+                    )
+                entry = {
+                    "id": item["id"],
+                    "kind": item["kind"],
+                    "index": index,
+                    "text_sha256": text_sha256,
+                    "takes": takes,
+                }
+
+            manifest_items.append(entry)
+            for take in entry["takes"]:
+                total_seconds += take["seconds"]
+                take_count += 1
+
+        for entry in manifest_items:
+            for take in entry["takes"]:
+                path = out_dir / take["file"]
+                total_bytes += path.stat().st_size
+
+        manifest = {
+            "format": 1,
+            "sample_rate": OUTPUT_SAMPLE_RATE,
+            "initial_unlocked": initial_unlocked,
+            "texts_sha256": texts_sha256,
+            "generator": {
+                "tool": "tools/maintainer/generate_maternal_voice.py",
+                "renderer": "sam",
+                "sam_model_repo": SAM_HF_MODEL_ID,
+                "sam_model_source": source,
+                "sam_model_path": SAM_MODEL_PATH,
+                "sam_speaker": SAM_SPEAKER,
+                "sam_checkpoint": SAM_CHECKPOINT,
+                "sam_sample_rate": SAM_SAMPLE_RATE,
+                "base_seed": BASE_SEED,
+                "spectral_ceiling_hz": SPECTRAL_CEILING_HZ,
+                "lowpass_hz": SPECTRAL_CEILING_HZ,
+                "lowpass_cutoff_hz": SPECTRAL_CEILING_HZ,
+                "trim_top_db": TRIM_TOP_DB,
+                "target_rms_dbfs": TARGET_RMS_DBFS,
+                "peak_ceiling_dbfs": PEAK_CEILING_DBFS,
+                "watermark": "none (Sam renderer applies no implicit watermark)",
+            },
+            "reference_voice": {
+                "attribution": "Qwen3-TTS Sam",
+                "files": [],
+                "reference_wav_sha256": None,
+            },
+            "items": manifest_items,
+            "total_bytes": total_bytes,
+            "total_seconds": round(total_seconds, 3),
+        }
+
+        manifest_path = out_dir / "manifest.json"
+        with open(manifest_path, "w", encoding="utf-8") as f:
+            json.dump(manifest, f, indent=2, sort_keys=True)
+            f.write("\n")
+
+        print(
+            f"summary: {take_count} takes, {total_bytes} bytes, "
+            f"{round(total_seconds, 3)} seconds -> {out_dir}"
+        )
+        return 0
 
     # Heavy imports are deferred until after argument parsing so --help is fast.
     # They are bound as module globals because the helpers above use them.
