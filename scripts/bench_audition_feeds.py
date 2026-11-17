@@ -33,7 +33,6 @@ OUT_PATH = (
 )
 ENCODERS = ("spectral",)
 
-
 def load_feed(
     kind: str,
     config: dict[str, Any],
@@ -78,10 +77,6 @@ def load_feed(
     }
     return blocks, labels, meta
 
-
-_CANONICAL_FEED_FAMILIES = None
-
-
 def _resolve_feed_replay_args(args, kwargs):
     feed_family = (
         kwargs.pop("feed_family", None)
@@ -109,6 +104,8 @@ def _resolve_feed_replay_args(args, kwargs):
         try:
             n_blocks = int(positional.pop(0))
         except (TypeError, ValueError):
+            # Positional value is not an integer block count; leave n_blocks
+            # unset so it resolves from config/defaults below.
             pass
 
     if config is None:
@@ -128,7 +125,6 @@ def _resolve_feed_replay_args(args, kwargs):
         seed_value = int(config.get("seed", SEED))
     return str(feed_family), config, int(n_blocks), seed_value
 
-
 def build_feed_replay(*args, **kwargs):
     """Return a clean, reusable replay feed ``(blocks, labels, meta)``.
 
@@ -140,24 +136,19 @@ def build_feed_replay(*args, **kwargs):
     blocks, labels, meta = _load_feed_replay(feed_family, seed=seed_value, n_blocks=n_blocks)
     return blocks, labels, meta
 
-
 def load_feed_replay(*args, **kwargs):
     """Bench-script alias for :func:`build_feed_replay`."""
     return build_feed_replay(*args, **kwargs)
 
-
 def _feed_replay_to_lists(blocks, labels, meta):
     return [bytes(b) for b in blocks], [int(x) for x in labels], dict(meta)
-
 
 def build_feed_replay_list(*args, **kwargs):
     blocks, labels, meta = build_feed_replay(*args, **kwargs)
     return _feed_replay_to_lists(blocks, labels, meta)
 
-
 def _block_hash(block: bytes) -> str:
     return hashlib.sha256(block).hexdigest()
-
 
 def _roc_auc(labels: list[int], scores: list[float]) -> Optional[float]:
     if len(set(labels)) < 2:
@@ -179,7 +170,6 @@ def _roc_auc(labels: list[int], scores: list[float]) -> Optional[float]:
     if n_pos == 0 or n_neg == 0:
         return None
     return float((ranks[y == 1].sum() - n_pos * (n_pos + 1) / 2.0) / (n_pos * n_neg))
-
 
 def run_encoder(
     name: str, blocks: list[bytes], labels: list[int], sample_rate: int
@@ -213,7 +203,6 @@ def run_encoder(
         "false_alerts_per_min": false_alerts / minutes if minutes > 0 else 0.0,
         "p95_threshold": threshold,
     }
-
 
 def build_record(
     seed: int = SEED,
@@ -260,7 +249,6 @@ def build_record(
         "meta": meta,
     }
     return record
-
 
 def build_feed_replay_report(
     feed_family: str = "synthetic",
@@ -322,12 +310,10 @@ def build_feed_replay_report(
     }
     return record
 
-
 # Backwards/alternative names.
 build_replay_report = build_feed_replay_report
 build_replay_record = build_feed_replay_report
 build_feed_replay_record = build_feed_replay_report
-
 
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -352,7 +338,6 @@ def main(argv: Optional[list[str]] = None) -> int:
     digest = hashlib.sha256(text.encode()).hexdigest()
     print(f"wrote {args.out} (sha256={digest})")
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

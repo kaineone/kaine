@@ -254,8 +254,6 @@ def _resolve_output_file(output: Any, default_dir: Path) -> Path:
     resolved = _resolve_path(output)
     if resolved is None:
         resolved = default_dir / "seed_command.txt"
-    if resolved.suffix == "":
-        resolved = resolved / "seed_command.txt" if False else resolved
     # treat existing-ish directory intent: if path has no suffix and not existing file, make dir+file
     if resolved.suffix == "" and (not resolved.exists() or resolved.is_dir()):
         resolved.mkdir(parents=True, exist_ok=True)
@@ -300,7 +298,6 @@ def render_seed_command(*args: Any, **kwargs: Any) -> Path:
     if out_dir is None:
         out_dir = (mpath.parent if mpath is not None else VOICE_DATA_DIR)
 
-    seed = _base_seed(data)
     tp = Path(texts_path)
     od = Path(out_dir)
     od.mkdir(parents=True, exist_ok=True)
