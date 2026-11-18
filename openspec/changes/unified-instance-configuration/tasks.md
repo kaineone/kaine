@@ -9,7 +9,7 @@ Status: PARKED (roadmap item, not active work)
 ## 2. Reference file
 
 - [x] 2.1 Generator script: reads `list_all_defaults()`, emits `config/kaine.reference.toml` with default values and structured comment placeholders (`# tier: ...  bounds: ...`).
-- [ ] [docs] 2.2 Hand-write inline explanations for every key. Each explanation says what the key controls and when you would change it, in plain language.
+- [x] [docs] 2.2 Hand-write inline explanations for every key. Each explanation says what the key controls and when you would change it, in plain language.
 - [x] 2.3 CI check: the reference file's keys and defaults match `list_all_defaults()`. Fails on drift.
 - [x] 2.4 CI check: every reference entry has a non-placeholder explanation. Fails on `TODO` comments.
 
@@ -32,5 +32,5 @@ Status: PARKED (roadmap item, not active work)
 
 ## 6. Documentation
 
-- [ ] 6.1 Docs page explaining the config layers (shipped, operator override, secrets, env vars, tier profiles) and how to use the reference file and validation command.
-- [ ] 6.2 Docs page with a walkthrough of first-time setup using the questionnaire.
+- [x] 6.1 Docs page explaining the config layers (shipped, operator override, secrets, env vars, tier profiles) and how to use the reference file and validation command.
+- [x] 6.2 Docs page with a walkthrough of first-time setup using the questionnaire.

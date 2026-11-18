@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Tuple
 
 ROOT = Path.cwd()
+RELEASE_PHASES = ["internal-alpha", "engineering-complete", "release-candidate", "release"]
 DEFAULT_CONFIG = Path("config/dark-factory.json")
 
 
@@ -31,10 +32,14 @@ DEFAULTS = {
     "lessons_file": ".dark-factory-lessons.md",
     "reassessment_dir": ".dark-factory-reassessments",
     "allowed_paths": None,
+    "docs_model": "kimi-k3:cloud",
+    "docs_think": "high",
+    "docs_allowed_paths": ["docs"],
     "work_package_registry_file": ".dark-factory-work-packages.json",
     "tasks_files": None,
     "auto_checkpoint_dirty": False,
     "auto_clear_failed_on_blocked": False,
+    "release_gates": None,
     "until_done_max_iterations": 100,
     "until_done_sleep_seconds": 2,
 }
@@ -274,9 +279,9 @@ def task_kind(title: str) -> str:
     low = title.lower()
     if any(k in low for k in ("[code]", "implement", "add ", "fix ", "create ", "port ")):
         return "code"
-    if low.startswith("[docs]") or low.startswith("docs:") or low.startswith("document ") or low.startswith("hand-write") or low.startswith("hand write") or low.startswith("docs page"):
+    if low.startswith("[docs]") or low.startswith("docs:") or low.startswith("docs page") or "docs page" in low or "document" in low or "hand-write" in low or "hand write" in low:
         return "docs"
-    if any(k in low for k in ("[design]", "design ", "architecture", "docs page")):
+    if any(k in low for k in ("[design]", "design ", "architecture")):
         return "design"
     if low.startswith("[validate]") or low.startswith("validate:") or low.startswith("verify:"):
         return "validate"
@@ -371,7 +376,8 @@ def dispatch(cfg, state, tasks, state_path):
             meta.setdefault("attempts", 1)
         normalized_failed[task_name] = meta
     state["failed"] = normalized_failed
-
+    if cfg.get("auto_clear_failed_on_blocked", False):
+        _auto_clear_exhausted_failures(cfg, state, state_path)
     if cfg.get("auto_clear_failed_on_blocked", False):
         _auto_clear_exhausted_failures(cfg, state, state_path)
     quarantined = set(state.get("auto_quarantined_failures", []))
@@ -466,7 +472,7 @@ def dispatch(cfg, state, tasks, state_path):
         print(f"validated: {task}")
         return True
 
-    if kind in ("docs", "design", "operator"):
+    if kind in ("design", "operator"):
         state.setdefault("deferred", [])
         if task not in state["deferred"]:
             state["deferred"].append(task)
@@ -507,9 +513,14 @@ def dispatch(cfg, state, tasks, state_path):
             + "Do not use markdown code fences. Output each changed file as:\n"
             "@@@FILE relative/path\n<file content>\n@@@END\n"
             "Use real newline characters, not escaped \\n text.\n"
+            + ("Prose hygiene: follow the prose-hygiene rules (no banned AI tells, no em dashes, no tricolons, varied sentence lengths).\n" if kind == "docs" else "")
         )
-        ladder = cfg.get("model_ladder") or [cfg["model"], cfg.get("backup_model", cfg["model"])]
-        think_ladder = cfg.get("think_ladder") or ([("false" if i < len(ladder) - 1 else "high") for i in range(len(ladder))])
+        if kind == "docs":
+            ladder = [cfg.get("docs_model", cfg.get("model", "beam:cloud"))]
+            think_ladder = [cfg.get("docs_think", "high")]
+        else:
+            ladder = cfg.get("model_ladder") or [cfg["model"], cfg.get("backup_model", cfg["model"])]
+            think_ladder = cfg.get("think_ladder") or ([("false" if i < len(ladder) - 1 else "high") for i in range(len(ladder))])
         changed = []
         attempt = 0
         while attempt < len(ladder) + 1:
@@ -529,7 +540,10 @@ def dispatch(cfg, state, tasks, state_path):
             if not files:
                 attempt += 1
                 continue
-            allowed = cfg.get("allowed_paths")
+            if kind == "docs":
+                allowed = cfg.get("docs_allowed_paths", ["docs"])
+            else:
+                allowed = cfg.get("allowed_paths")
             for rel, content in files:
                 rel = rel.strip()
                 if not rel or rel.startswith("/") or ".." in Path(rel).parts:
@@ -933,6 +947,45 @@ def _maybe_heal_failed(cfg, state_path):
         _heal_task(cfg, state_path, title)
 
 
+def _run_release_gate(cfg, state_path, advance=False):
+    state = load_state(state_path)
+    phase = state.get("release_phase", cfg.get("release_phase", "internal-alpha"))
+    gates = (cfg.get("release_gates") or {}).get(phase, []) or []
+    print(f"release phase: {phase}")
+    print(f"gates: {len(gates)}")
+    failures = []
+    for cmd in gates:
+        ok, out = run_tests(cmd)
+        status = "PASS" if ok else "FAIL"
+        print(f"[{status}] {cmd}")
+        if not ok:
+            failures.append((cmd, out))
+    if not gates:
+        print("no gates configured for this phase")
+    if failures:
+        print("release gate: FAIL")
+        evidence_dir = Path(cfg.get("evidence_dir", ".dark-factory-evidence"))
+        evidence_dir.mkdir(exist_ok=True)
+        (evidence_dir / f"release-gate-{phase}-{int(time.time())}.md").write_text(
+            "# Release Gate Failure\n\n" + "\n\n".join(f"## {c}\n\n{o}" for c, o in failures)
+        )
+        return False
+    print("release gate: PASS")
+    if not advance:
+        print("run --advance-release-gate to promote phase")
+        return True
+    idx = RELEASE_PHASES.index(phase) if phase in RELEASE_PHASES else 0
+    if idx < len(RELEASE_PHASES) - 1:
+        nxt = RELEASE_PHASES[idx + 1]
+        state["release_phase"] = nxt
+        save_state(state_path, state)
+        print(f"advanced: {phase} -> {nxt}")
+    else:
+        print("already at final release phase")
+    return True
+
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default=str(DEFAULT_CONFIG))
@@ -945,6 +998,8 @@ def main():
     ap.add_argument("--triage", action="store_true")
     ap.add_argument("--reassess", action="store_true")
     ap.add_argument("--clear-failed", action="store_true")
+    ap.add_argument("--release-gate", action="store_true")
+    ap.add_argument("--advance-release-gate", action="store_true")
     ap.add_argument("--register-work-package", metavar="PATH")
     ap.add_argument("--watchdog", action="store_true")
     ap.add_argument("--checkpoint-dirty", action="store_true")
@@ -998,6 +1053,11 @@ def main():
         st["failed"] = {}
         save_state(state_path, st)
         print("cleared failed tasks:", ", ".join(quarantined) if quarantined else "(none)")
+        return
+    if args.release_gate or args.advance_release_gate:
+        ok = _run_release_gate(cfg, state_path, advance=args.advance_release_gate)
+        if not ok:
+            sys.exit(1)
         return
     if args.pause:
         st = load_state(state_path)
