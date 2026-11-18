@@ -373,6 +373,8 @@ def dispatch(cfg, state, tasks, state_path):
         if not work:
             print("scope frozen: no critical tasks remaining")
             return False
+    quarantined = set(state.get("auto_quarantined_failures", []))
+    work = [t for t in work if t not in quarantined]
     if not work:
         blocked = False
         if state.get("failed"):
@@ -380,6 +382,9 @@ def dispatch(cfg, state, tasks, state_path):
             if not retryable:
                 blocked = True
         if blocked:
+            if cfg.get("auto_clear_failed", False) and _auto_clear_exhausted_failures(cfg, state, state_path):
+                print("cleared exhausted task issues; continuing with the next pass")
+                return True
             print("blocked: no runnable tasks with retry budget remaining")
             state["paused"] = True
             save_state(state_path, state)
@@ -417,8 +422,11 @@ def dispatch(cfg, state, tasks, state_path):
     task_failure_meta = normalized_failed.get(task)
     orig_root = ROOT
     slug = re.sub(r"[^a-zA-Z0-9_-]", "_", task)[:40]
-    wt = orig_root / ".dark-factory" / "worktrees" / f"{slug}-{int(time.time())}"
+    slug = f"{slug}-{int(time.time() * 1000)}"
+    wt = orig_root / ".dark-factory" / "worktrees" / f"{slug}"
     branch = f"df-{slug}"
+    # Stale branches/worktree metadata must not block a restarted task.
+    subprocess.run(["git", "worktree", "prune"], cwd=str(orig_root), capture_output=True, text=True)
     if wt.exists():
         shutil.rmtree(wt, ignore_errors=True)
     subprocess.run(["git", "branch", "-D", branch], cwd=str(orig_root), capture_output=True, text=True)
@@ -672,11 +680,13 @@ def _heal_task(cfg, state_path, task):
         if not ok:
             print("tests still failing:", tail[-1000:])
             for _c in changed:
-                try:
-                    git("checkout", "--", _c)
-                    (ROOT / _c).unlink(missing_ok=True)
-                except Exception:
-                    pass
+                tracked = subprocess.run(["git", "ls-files", "--error-unmatch", _c], cwd=str(ROOT), capture_output=True, text=True).returncode == 0
+                git("checkout", "--", _c)
+                if not tracked:
+                    try:
+                        (ROOT / _c).unlink(missing_ok=True)
+                    except Exception:
+                        pass
             failure_tail = tail
             _append_lesson(cfg, task, "test failure persists")
             continue
@@ -686,11 +696,13 @@ def _heal_task(cfg, state_path, task):
         if not ok_rev:
             print("independent review failed:", review_out[:500])
             for _c in changed:
-                try:
-                    git("checkout", "--", _c)
-                    (ROOT / _c).unlink(missing_ok=True)
-                except Exception:
-                    pass
+                tracked = subprocess.run(["git", "ls-files", "--error-unmatch", _c], cwd=str(ROOT), capture_output=True, text=True).returncode == 0
+                git("checkout", "--", _c)
+                if not tracked:
+                    try:
+                        (ROOT / _c).unlink(missing_ok=True)
+                    except Exception:
+                        pass
             failure_tail = review_out
             _append_lesson(cfg, task, "independent review failed")
             continue
@@ -710,6 +722,19 @@ def _heal_task(cfg, state_path, task):
     _append_lesson(cfg, task, "heal exhausted")
     print("heal exhausted; task remains failed")
 
+
+def _auto_clear_exhausted_failures(cfg, state, state_path):
+    failed = state.get("failed", {}) or {}
+    max_retries = int(cfg.get("max_task_retries", 3))
+    retryable = [t for t in failed if ((failed.get(t, {}) or {}).get("attempts", 1) < max_retries)]
+    if not failed or retryable:
+        return False
+    cleared = [t for t in failed if t not in state.get("auto_quarantined_failures", [])]
+    state.setdefault("auto_quarantined_failures", []).extend(cleared)
+    state["failed"] = {}
+    save_state(state_path, state)
+    print("auto-cleared blocked tasks:", ", ".join(cleared))
+    return True
 
 def _append_lesson(cfg, task, note):
     path = Path(cfg.get("lessons_file", ".dark-factory-lessons.md"))
@@ -806,6 +831,45 @@ def _reassess(cfg, state_path):
     print(f"reassessment written: {path}")
 
 
+def _run_until_done(cfg, state_path, tasks_path):
+    max_iterations = int(cfg.get("until_done_max_iterations", 100))
+    for i in range(max_iterations):
+        state = load_state(state_path)
+        if state.get("paused"):
+            print("paused; stopping unattended loop")
+            return
+        tasks = load_all_tasks(cfg)
+        health = watchdog_state(cfg, state, tasks)
+        if health in ("blocked", "idle", "queue_empty"):
+            print(f"stopping: {health}")
+            if health == "blocked":
+                _triage(cfg, state_path)
+            return
+        try:
+            progressed = dispatch(cfg, state, tasks, state_path)
+        except Exception as e:
+            print("ERROR:", e)
+            progressed = False
+        if progressed:
+            _maybe_heal_failed(cfg, state_path)
+        state2 = load_state(state_path)
+        if state2.get("paused"):
+            print("paused after dispatch; stopping")
+            return
+        time.sleep(int(cfg.get("until_done_sleep_seconds", 2)))
+
+
+def _maybe_heal_failed(cfg, state_path):
+    state = load_state(state_path)
+    failed = state.get("failed", {})
+    if not failed:
+        return
+    title = next(iter(failed))
+    entry = state_failed_entry(state, title)
+    if entry.get("attempts", 1) < int(cfg.get("max_task_retries", 3)):
+        _heal_task(cfg, state_path, title)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default=str(DEFAULT_CONFIG))
@@ -817,16 +881,38 @@ def main():
     ap.add_argument("--propose-improvement", action="store_true")
     ap.add_argument("--triage", action="store_true")
     ap.add_argument("--reassess", action="store_true")
+    ap.add_argument("--clear-failed", action="store_true")
     ap.add_argument("--register-work-package", metavar="PATH")
     ap.add_argument("--watchdog", action="store_true")
+    ap.add_argument("--checkpoint-dirty", action="store_true")
+    ap.add_argument("--until-done", action="store_true")
     args = ap.parse_args()
     if args.rollback_last:
         print(git("revert", "--no-edit", "HEAD").stderr or "rolled back last commit")
+        return
+    if args.checkpoint_dirty:
+        st = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True, cwd=str(ROOT))
+        if st.stdout.strip():
+            subprocess.run(["git", "add", "-A"], cwd=str(ROOT), check=True)
+            cp = subprocess.run(["git", "commit", "-m", f"wip: auto checkpoint {datetime.datetime.now().isoformat()}"], cwd=str(ROOT), capture_output=True, text=True)
+            print(cp.stdout or cp.stderr)
+            if cp.returncode != 0:
+                raise SystemExit(f"checkpoint failed: {cp.stderr}")
+        else:
+            print("working tree already clean")
         return
     cfg_path = Path(args.config)
     cfg = load_config(cfg_path)
     state_path = Path(cfg.get("state_file", ".dark-factory-state.json"))
     tasks_path = Path(cfg["tasks_file"])
+    if cfg.get("auto_checkpoint_dirty", False):
+        st = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True, cwd=str(ROOT))
+        if st.stdout.strip():
+            subprocess.run(["git", "add", "-A"], cwd=str(ROOT), check=True)
+            cp = subprocess.run(["git", "commit", "-m", f"wip: auto checkpoint {datetime.datetime.now().isoformat()}"], cwd=str(ROOT), capture_output=True, text=True)
+            print("auto checkpoint:", (cp.stdout or cp.stderr).strip())
+            if cp.returncode != 0:
+                raise SystemExit(cp.stderr)
     if args.register_work_package:
         reg = register_work_package(cfg, args.register_work_package)
         print("registered work package; registry:", reg)
@@ -863,6 +949,20 @@ def main():
             return
         _heal_task(cfg, state_path, target)
         return
+    if args.checkpoint_dirty:
+        st = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True, cwd=str(ROOT))
+        if st.stdout.strip():
+            subprocess.run(["git", "add", "-A"], cwd=str(ROOT), check=True)
+            cp = subprocess.run(["git", "commit", "-m", f"wip: auto checkpoint {datetime.datetime.now().isoformat()}"], cwd=str(ROOT), capture_output=True, text=True)
+            print(cp.stdout or cp.stderr)
+            if cp.returncode != 0:
+                raise SystemExit(f"checkpoint failed: {cp.stderr}")
+        else:
+            print("working tree already clean")
+        return
+    if args.until_done:
+        _run_until_done(cfg, state_path, tasks_path)
+        return
     if args.propose_improvement:
         _propose_improvement(cfg, state_path)
         return
@@ -871,6 +971,9 @@ def main():
         return
     if args.reassess:
         _reassess(cfg, state_path)
+        return
+    if args.clear_failed:
+        _auto_clear_exhausted_failures(cfg, load_state(state_path), state_path)
         return
     if not cfg.get("started_at"):
         cfg["started_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()

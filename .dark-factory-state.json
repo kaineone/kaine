@@ -1,20 +1,22 @@
 {
   "completed": [
-    "1.3 Add tier metadata (`basic`, `standard`, `advanced`) to each key in the registry."
+    "1.3 Add tier metadata (`basic`, `standard`, `advanced`) to each key in the registry.",
+    "2.1 Generator script: reads `list_all_defaults()`, emits `config/kaine.reference.toml` with default values and structured comment placeholders (`# tier: ...  bounds: ...`).",
+    "1.2 Test: every key that `load_kaine_config()` resolves at runtime appears in `list_all_defaults()`."
   ],
   "failed": {
-    "1.2 Test: every key that `load_kaine_config()` resolves at runtime appears in `list_all_defaults()`.": {
-      "reason": "tests failed: ImportError while loading conftest '/var/home/erik/Projects/kaineone/kaine/.dark-factory/worktrees/1_2_Test__every_key_that__load_kaine_con-1794977410/tests/conftest.py'.\ntests/conftest.py:13: in <module>\n    from kaine.config import load_kaine_config\nE   ImportError: cannot import name 'load_kaine_config' from 'kaine.config' (/var/home/erik/Projects/kaineone/kaine/.dark-factory/worktrees/1_2_Test__every_key_that__load_kaine_con-1794977410/kaine/config.py)\n",
-      "attempts": 3,
-      "category": "implementation"
+    "2.2 Hand-write inline explanations for every key. Each explanation says what the key controls and when you would change it, in plain language.": {
+      "reason": "tests failed: ImportError while loading conftest '/var/home/erik/Projects/kaineone/kaine/.dark-factory/worktrees/2_2_Hand-write_inline_explanations_for_e-1794985094527/tests/conftest.py'.\ntests/conftest.py:11: in <module>\n    from kaine.bus import reset_bus_for_tests\nkaine/bus/__init__.py:4: in <module>\n    from kaine.bus.client import AsyncBus, get_bus, reset_bus_for_tests, tail_id\nkaine/bus/client.py:17: in <module>\n    from kaine.bus.config import BusConfig, load_bus_config, maxlen_for\nkaine/bus/config.py:15: in <module>\n    from kaine.config import OPERATOR_CONFIG_PATH, deep_merge\nE     File \"/var/home/erik/Projects/kaineone/kaine/.dark-factory/worktrees/2_2_Hand-write_inline_explanations_for_e-1794985094527/kaine/config.py\", line 1\nE       \"\"\"kaine.config\nE       ^\nE   SyntaxError: unterminated triple-quoted string literal (detected at line 113)\n",
+      "category": "implementation",
+      "attempts": 2
     }
   },
   "current": null,
   "usage": {
-    "tokens": 1811,
-    "usd": 0.000624155,
+    "tokens": 11160,
+    "usd": 0.00346004,
     "gpu_minutes": 0.0,
-    "attempts": 5
+    "attempts": 9
   },
   "started_at": "2026-11-18T04:44:53.422744+00:00",
   "deferred": [],

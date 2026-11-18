@@ -35,6 +35,11 @@ python3 dark-factory/controller.py --config config/dark-factory.json --register-
 python3 dark-factory/controller.py --config config/dark-factory.json --watchdog
 ```
 
+## Checkpoint a dirty repo before running
+```bash
+python3 dark-factory/controller.py --config config/dark-factory.json --checkpoint-dirty
+```
+
 ## Pause / resume
 ```bash
 python3 dark-factory/controller.py --config config/dark-factory.json --pause
