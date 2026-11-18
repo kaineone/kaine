@@ -2,9 +2,9 @@ Status: PARKED (roadmap item, not active work)
 
 ## 1. Defaults registry
 
-- [ ] 1.1 Add `list_all_defaults()` to `kaine/config.py` (or equivalent) that returns every recognized key, its section, default value, Python type, and optional bounds tuple.
+- [x] 1.1 Add `list_all_defaults()` to `kaine/config.py` (or equivalent) that returns every recognized key, its section, default value, Python type, and optional bounds tuple.
 - [ ] 1.2 Test: every key that `load_kaine_config()` resolves at runtime appears in `list_all_defaults()`.
-- [ ] 1.3 Add tier metadata (`basic`, `standard`, `advanced`) to each key in the registry.
+- [x] 1.3 Add tier metadata (`basic`, `standard`, `advanced`) to each key in the registry.
 
 ## 2. Reference file
 

@@ -1,0 +1,22 @@
+{
+  "completed": [
+    "1.3 Add tier metadata (`basic`, `standard`, `advanced`) to each key in the registry."
+  ],
+  "failed": {
+    "1.2 Test: every key that `load_kaine_config()` resolves at runtime appears in `list_all_defaults()`.": {
+      "reason": "tests failed: ImportError while loading conftest '/var/home/erik/Projects/kaineone/kaine/.dark-factory/worktrees/1_2_Test__every_key_that__load_kaine_con-1794977410/tests/conftest.py'.\ntests/conftest.py:13: in <module>\n    from kaine.config import load_kaine_config\nE   ImportError: cannot import name 'load_kaine_config' from 'kaine.config' (/var/home/erik/Projects/kaineone/kaine/.dark-factory/worktrees/1_2_Test__every_key_that__load_kaine_con-1794977410/kaine/config.py)\n",
+      "attempts": 3,
+      "category": "implementation"
+    }
+  },
+  "current": null,
+  "usage": {
+    "tokens": 1811,
+    "usd": 0.000624155,
+    "gpu_minutes": 0.0,
+    "attempts": 5
+  },
+  "started_at": "2026-11-18T04:44:53.422744+00:00",
+  "deferred": [],
+  "release_phase": "internal-alpha"
+}

@@ -1,0 +1,14 @@
+{
+  "time": 1794978045.331371,
+  "release_phase": "internal-alpha",
+  "completed": 1,
+  "failed": 1,
+  "retryable_failed": 0,
+  "remaining": 15,
+  "usage": {
+    "tokens": 1811,
+    "usd": 0.000624155,
+    "gpu_minutes": 0.0,
+    "attempts": 5
+  }
+}
