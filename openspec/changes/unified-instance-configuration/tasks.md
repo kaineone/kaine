@@ -17,7 +17,7 @@ Status: PARKED (roadmap item, not active work)
 
 - [x] 3.1 `python -m kaine.setup.validate_config`: reads operator override, reports unknown keys, out-of-bounds values, and missing required keys.
 - [x] 3.2 Tests: unknown key warning, out-of-bounds error, valid config passes, missing required key error.
-- [ ] 3.3 Add a `Config valid` row to `python -m kaine.preboot` that calls validate_config_shape on the merged config (preserve all existing checks; append only).
+- [x] 3.3 Append a ConfigValid check to `python -m kaine.preboot` that calls validate_config_shape on the merged config. Preserve all existing checks; append only (no whole-file rewrite).
 
 ## 4. Questionnaire mode
 

@@ -239,11 +239,11 @@ def task_kind(title: str) -> str:
     low = title.lower()
     if any(k in low for k in ("[code]", "implement", "add ", "fix ", "create ", "port ")):
         return "code"
-    if any(k in low for k in ("[docs]", "document", "docs ", "docs page", "hand-write", "hand write")):
+    if low.startswith("[docs]") or low.startswith("docs:") or low.startswith("document ") or low.startswith("hand-write") or low.startswith("hand write") or low.startswith("docs page"):
         return "docs"
     if any(k in low for k in ("[design]", "design ", "architecture", "docs page")):
         return "design"
-    if any(k in low for k in ("[validate]", "validate", "verify", "check ")):
+    if low.startswith("[validate]") or low.startswith("validate:") or low.startswith("verify:"):
         return "validate"
     if any(k in low for k in ("[operator]", "approve", "decide ", "sign off")):
         return "operator"
