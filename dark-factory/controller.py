@@ -12,9 +12,44 @@ class TaskFailed(Exception):
     pass
 
 
+DEFAULTS = {
+    "task_graph_file": None,
+    "coverage_matrix_file": None,
+    "integration_command": None,
+    "runtime_test_command": None,
+    "qa_command": None,
+    "audit_command": None,
+    "holdout_command": None,
+    "dependency_scan_command": None,
+    "evaluate_functional_command": None,
+    "evaluate_change_command": None,
+    "max_task_retries": 3,
+    "failed_retry_max": 3,
+    "release_phase": "internal-alpha",
+    "triage_file": ".dark-factory-triage.md",
+    "improvement_proposal_dir": ".dark-factory-improvements",
+    "lessons_file": ".dark-factory-lessons.md",
+    "reassessment_dir": ".dark-factory-reassessments",
+    "allowed_paths": None,
+    "work_package_registry_file": ".dark-factory-work-packages.json",
+    "tasks_files": None,
+    "auto_checkpoint_dirty": False,
+    "auto_clear_failed_on_blocked": False,
+    "until_done_max_iterations": 100,
+    "until_done_sleep_seconds": 2,
+}
+
+
+def migrate_config(cfg: dict) -> dict:
+    for k, v in DEFAULTS.items():
+        cfg.setdefault(k, v)
+    return cfg
+
+
 def load_config(path: Path) -> dict:
     with open(path) as f:
-        return json.load(f)
+        cfg = json.load(f)
+    return migrate_config(cfg)
 
 
 def check_disk(cfg):
@@ -348,11 +383,14 @@ def dispatch(cfg, state, tasks, state_path):
     work = []
     completed_set = set(state.get("completed", []))
     if graph is not None:
+        quarantined = set(state.get("auto_quarantined_failures", []))
         for item in graph:
             title = task_title(item)
             if title in completed_set:
                 continue
             if title in state.get("deferred", []):
+                continue
+            if title in quarantined:
                 continue
             if is_viewer_task(title) and viewer_defer:
                 continue
@@ -363,10 +401,13 @@ def dispatch(cfg, state, tasks, state_path):
             if all(dep in completed_set for dep in deps):
                 work.append(title)
     else:
+        quarantined = set(state.get("auto_quarantined_failures", []))
         for t in tasks:
             if t in completed_set:
                 continue
             if t in state.get("deferred", []):
+                continue
+            if t in quarantined:
                 continue
             entry = normalized_failed.get(t)
             if entry and entry.get("attempts", 1) >= max_failed_retries:
@@ -385,12 +426,14 @@ def dispatch(cfg, state, tasks, state_path):
             return False
     quarantined = set(state.get("auto_quarantined_failures", []))
     work = [t for t in work if t not in quarantined]
+    quarantined = set(state.get("auto_quarantined_failures", []))
     if not work:
+        remaining_failed = [(t, state.get("failed", {}).get(t, {})) for t in tasks if t in state.get("failed", {})]
+        retryable_failed = [t for t, _ in remaining_failed if (state.get("failed", {}).get(t, {}) or {}).get("attempts", 1) < int(cfg.get("max_task_retries", 3))]
+        quarantined_remaining = [t for t in tasks if t in quarantined]
         blocked = False
-        if state.get("failed"):
-            retryable = [t for t in state.get("failed", {}) if (state.get("failed", {}).get(t, {}) or {}).get("attempts", 1) < int(cfg.get("max_task_retries", 3))]
-            if not retryable:
-                blocked = True
+        if state.get("failed") and not retryable_failed and not quarantined_remaining:
+            blocked = True
         if blocked:
             if cfg.get("auto_clear_failed", False) and _auto_clear_exhausted_failures(cfg, state, state_path):
                 print("cleared exhausted task issues; continuing with the next pass")
@@ -399,6 +442,8 @@ def dispatch(cfg, state, tasks, state_path):
             state["paused"] = True
             save_state(state_path, state)
             _triage(cfg, state_path)
+        elif quarantined_remaining:
+            print("queue complete except quarantined items:", ", ".join(quarantined_remaining))
         else:
             print("queue empty")
         return False
@@ -437,6 +482,7 @@ def dispatch(cfg, state, tasks, state_path):
     branch = f"df-{slug}"
     # Stale branches/worktree metadata must not block a restarted task.
     subprocess.run(["git", "worktree", "prune"], cwd=str(orig_root), capture_output=True, text=True)
+    subprocess.run(["git", "worktree", "prune"], cwd=str(orig_root), capture_output=True, text=True)
     if wt.exists():
         shutil.rmtree(wt, ignore_errors=True)
     subprocess.run(["git", "branch", "-D", branch], cwd=str(orig_root), capture_output=True, text=True)
@@ -462,13 +508,15 @@ def dispatch(cfg, state, tasks, state_path):
             "@@@FILE relative/path\n<file content>\n@@@END\n"
             "Use real newline characters, not escaped \\n text.\n"
         )
-        model = cfg["model"]
-        backup = cfg["backup_model"]
+        ladder = cfg.get("model_ladder") or [cfg["model"], cfg.get("backup_model", cfg["model"])]
+        think_ladder = cfg.get("think_ladder") or ([("false" if i < len(ladder) - 1 else "high") for i in range(len(ladder))])
         changed = []
         attempt = 0
-        while attempt < 2:
-            used_model = choose_model(model, backup, attempt)
-            ok, out = run_ollama(used_model, prompt, cfg.get("timeout", 600))
+        while attempt < len(ladder) + 1:
+            idx = min(attempt, len(ladder) - 1)
+            used_model = ladder[idx]
+            used_think = think_ladder[idx] if idx < len(think_ladder) else "false"
+            ok, out = run_ollama(used_model, prompt, cfg.get("timeout", 600), think=used_think)
             if not ok:
                 attempt += 1
                 continue
@@ -481,10 +529,13 @@ def dispatch(cfg, state, tasks, state_path):
             if not files:
                 attempt += 1
                 continue
+            allowed = cfg.get("allowed_paths")
             for rel, content in files:
                 rel = rel.strip()
                 if not rel or rel.startswith("/") or ".." in Path(rel).parts:
                     raise TaskFailed(f"unsafe path from worker: {rel}")
+                if allowed is not None and (not rel.split("/") or rel.split("/")[0] not in allowed):
+                    raise TaskFailed(f"path outside allowed_paths: {rel}")
                 p = ROOT / rel
                 p.parent.mkdir(parents=True, exist_ok=True)
                 p.write_text(content)
@@ -666,7 +717,9 @@ def _heal_task(cfg, state_path, task):
             "Failure output:\n" + str(failure_tail)[-4000:] + "\n\n"
             "Output changed files as:\n@@@FILE relative/path\n<content>\n@@@END\n"
         )
-        ok, out = run_ollama(choose_model(model, backup, i), prompt, cfg.get("timeout", 600))
+        ladder = cfg.get("model_ladder") or [model, backup]
+        think_ladder = cfg.get("think_ladder") or [("high" if i == len(ladder) - 1 else "false") for i in range(len(ladder))]
+        ok, out = run_ollama(ladder[min(i, len(ladder) - 1)], prompt, cfg.get("timeout", 600), think=(think_ladder[min(i, len(think_ladder) - 1)] if think_ladder else "high"))
         if not ok:
             continue
         files = parse_files(out)
@@ -935,6 +988,17 @@ def main():
                           "failed": len(st.get("failed", {})), "deferred": len(st.get("deferred", [])),
                           "remaining": len(tasks) - len(st.get("completed", []))}, indent=2))
         sys.exit(0 if health in ("running", "queue_empty", "idle") else 1)
+    if args.clear_failed:
+        st = load_state(state_path)
+        failed = st.get("failed", {})
+        quarantined = st.setdefault("auto_quarantined_failures", [])
+        for task, meta in failed.items():
+            if task not in quarantined:
+                quarantined.append(task)
+        st["failed"] = {}
+        save_state(state_path, st)
+        print("cleared failed tasks:", ", ".join(quarantined) if quarantined else "(none)")
+        return
     if args.pause:
         st = load_state(state_path)
         st["paused"] = True

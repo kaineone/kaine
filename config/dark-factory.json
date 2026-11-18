@@ -8,7 +8,7 @@
   "min_free_gb": 20,
   "state_file": ".dark-factory-state.json",
   "heartbeat_file": ".dark-factory-heartbeat.json",
-  "worker_brief_prefix": "You are a coding worker for KAINE. Preserve all existing public types, fields, and APIs. Append-only edit for preboot: add one ConfigValid check without rewriting the module. Modify only the files required by the task. Output files with @@@FILE relative/path and @@@END only.",
+  "worker_brief_prefix": "You are a coding worker for KAINE. Modify only files required by the task. Preserve config compatibility, tests and OpenSpec conventions. Keep changes minimal. Output files with @@@FILE relative/path and @@@END only.",
   "started_at": null,
   "deadline": null,
   "budget_tokens": null,
