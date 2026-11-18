@@ -1,0 +1,1 @@
+Sam generation provenance records `generation_params` as `"model defaults (not exposed)"` or named constants.
