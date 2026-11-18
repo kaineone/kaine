@@ -34,7 +34,9 @@
   },
   "started_at": "2026-11-18T04:44:53.422744+00:00",
   "deferred": [
-    "6.1 Docs page explaining the config layers (shipped, operator override, secrets, env vars, tier profiles) and how to use the reference file and validation command."
+    "6.1 Docs page explaining the config layers (shipped, operator override, secrets, env vars, tier profiles) and how to use the reference file and validation command.",
+    "6.2 Docs page with a walkthrough of first-time setup using the questionnaire."
   ],
-  "release_phase": "internal-alpha"
+  "release_phase": "internal-alpha",
+  "paused": true
 }

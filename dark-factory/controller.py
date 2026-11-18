@@ -239,9 +239,9 @@ def task_kind(title: str) -> str:
     low = title.lower()
     if any(k in low for k in ("[code]", "implement", "add ", "fix ", "create ", "port ")):
         return "code"
-    if any(k in low for k in ("[docs]", "document", "docs ")):
+    if any(k in low for k in ("[docs]", "document", "docs ", "docs page", "hand-write", "hand write")):
         return "docs"
-    if any(k in low for k in ("[design]", "design ", "architecture")):
+    if any(k in low for k in ("[design]", "design ", "architecture", "docs page")):
         return "design"
     if any(k in low for k in ("[validate]", "validate", "verify", "check ")):
         return "validate"
@@ -341,6 +341,8 @@ def dispatch(cfg, state, tasks, state_path):
         _auto_clear_exhausted_failures(cfg, state, state_path)
     quarantined = set(state.get("auto_quarantined_failures", []))
     work = []
+    if cfg.get("auto_clear_failed_on_blocked", False):
+        _auto_clear_exhausted_failures(cfg, state, state_path)
     graph = load_task_graph(cfg)
     viewer_defer = not str(state.get("release_phase", "")).lower().startswith("candidate")
     work = []

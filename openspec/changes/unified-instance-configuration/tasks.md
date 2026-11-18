@@ -9,7 +9,7 @@ Status: PARKED (roadmap item, not active work)
 ## 2. Reference file
 
 - [x] 2.1 Generator script: reads `list_all_defaults()`, emits `config/kaine.reference.toml` with default values and structured comment placeholders (`# tier: ...  bounds: ...`).
-- [ ] 2.2 Hand-write inline explanations for every key. Each explanation says what the key controls and when you would change it, in plain language.
+- [ ] [docs] 2.2 Hand-write inline explanations for every key. Each explanation says what the key controls and when you would change it, in plain language.
 - [x] 2.3 CI check: the reference file's keys and defaults match `list_all_defaults()`. Fails on drift.
 - [x] 2.4 CI check: every reference entry has a non-placeholder explanation. Fails on `TODO` comments.
 
@@ -17,7 +17,7 @@ Status: PARKED (roadmap item, not active work)
 
 - [x] 3.1 `python -m kaine.setup.validate_config`: reads operator override, reports unknown keys, out-of-bounds values, and missing required keys.
 - [x] 3.2 Tests: unknown key warning, out-of-bounds error, valid config passes, missing required key error.
-- [ ] 3.3 Pre-boot integration: add a `Config valid` row to `python -m kaine.preboot` that runs the validator.
+- [ ] 3.3 Add a `Config valid` row to `python -m kaine.preboot` that calls validate_config_shape on the merged config (preserve all existing checks; append only).
 
 ## 4. Questionnaire mode
 
