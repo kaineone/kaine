@@ -4,9 +4,9 @@ import subprocess, time
 from typing import List, Optional, Tuple
 
 
-def run_ollama(model: str, prompt: str, timeout: int = 600) -> Tuple[bool, str]:
+def run_ollama(model: str, prompt: str, timeout: int = 600, think: str = "false") -> Tuple[bool, str]:
     """Run ollama non-interactively. Returns (ok, stdout). Retries empty responses."""
-    cmd = ["ollama", "run", model, prompt, "--think=false", "--hidethinking"]
+    cmd = ["ollama", "run", model, prompt, f"--think={think}", "--hidethinking"]
     for attempt in range(3):
         try:
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
