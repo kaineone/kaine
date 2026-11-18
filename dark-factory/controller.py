@@ -337,6 +337,10 @@ def dispatch(cfg, state, tasks, state_path):
         normalized_failed[task_name] = meta
     state["failed"] = normalized_failed
 
+    if cfg.get("auto_clear_failed_on_blocked", False):
+        _auto_clear_exhausted_failures(cfg, state, state_path)
+    quarantined = set(state.get("auto_quarantined_failures", []))
+    work = []
     graph = load_task_graph(cfg)
     viewer_defer = not str(state.get("release_phase", "")).lower().startswith("candidate")
     work = []
@@ -345,6 +349,8 @@ def dispatch(cfg, state, tasks, state_path):
         for item in graph:
             title = task_title(item)
             if title in completed_set:
+                continue
+            if title in state.get("deferred", []):
                 continue
             if is_viewer_task(title) and viewer_defer:
                 continue
@@ -357,6 +363,8 @@ def dispatch(cfg, state, tasks, state_path):
     else:
         for t in tasks:
             if t in completed_set:
+                continue
+            if t in state.get("deferred", []):
                 continue
             entry = normalized_failed.get(t)
             if entry and entry.get("attempts", 1) >= max_failed_retries:

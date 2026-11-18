@@ -2,23 +2,39 @@
   "completed": [
     "1.3 Add tier metadata (`basic`, `standard`, `advanced`) to each key in the registry.",
     "2.1 Generator script: reads `list_all_defaults()`, emits `config/kaine.reference.toml` with default values and structured comment placeholders (`# tier: ...  bounds: ...`).",
-    "1.2 Test: every key that `load_kaine_config()` resolves at runtime appears in `list_all_defaults()`."
+    "1.2 Test: every key that `load_kaine_config()` resolves at runtime appears in `list_all_defaults()`.",
+    "2.3 CI check: the reference file's keys and defaults match `list_all_defaults()`. Fails on drift.",
+    "2.4 CI check: every reference entry has a non-placeholder explanation. Fails on `TODO` comments.",
+    "3.1 `python -m kaine.setup.validate_config`: reads operator override, reports unknown keys, out-of-bounds values, and missing required keys.",
+    "3.2 Tests: unknown key warning, out-of-bounds error, valid config passes, missing required key error.",
+    "4.1 `python -m kaine.setup.configure`: walks through reference sections, shows current value and explanation, writes answers to `kaine.operator.toml`.",
+    "4.2 `--full` flag covers all tiers; default covers only `basic`.",
+    "4.3 Test: questionnaire presents exactly the `basic`-tier keys when run without `--full`.",
+    "5.1 Test: every `basic`-tier key in the reference has a corresponding wizard question.",
+    "5.2 Update the wizard to cover any `basic`-tier keys it currently skips."
   ],
   "failed": {
     "2.2 Hand-write inline explanations for every key. Each explanation says what the key controls and when you would change it, in plain language.": {
-      "reason": "tests failed: ImportError while loading conftest '/var/home/erik/Projects/kaineone/kaine/.dark-factory/worktrees/2_2_Hand-write_inline_explanations_for_e-1794985094527/tests/conftest.py'.\ntests/conftest.py:11: in <module>\n    from kaine.bus import reset_bus_for_tests\nkaine/bus/__init__.py:4: in <module>\n    from kaine.bus.client import AsyncBus, get_bus, reset_bus_for_tests, tail_id\nkaine/bus/client.py:17: in <module>\n    from kaine.bus.config import BusConfig, load_bus_config, maxlen_for\nkaine/bus/config.py:15: in <module>\n    from kaine.config import OPERATOR_CONFIG_PATH, deep_merge\nE     File \"/var/home/erik/Projects/kaineone/kaine/.dark-factory/worktrees/2_2_Hand-write_inline_explanations_for_e-1794985094527/kaine/config.py\", line 1\nE       \"\"\"kaine.config\nE       ^\nE   SyntaxError: unterminated triple-quoted string literal (detected at line 113)\n",
-      "category": "implementation",
-      "attempts": 2
+      "reason": "tests failed: ImportError while loading conftest '/var/home/erik/Projects/kaineone/kaine/.dark-factory/worktrees/2_2_Hand-write_inline_explanations_for_e-1794985232675/tests/conftest.py'.\ntests/conftest.py:11: in <module>\n    from kaine.bus import reset_bus_for_tests\nkaine/bus/__init__.py:4: in <module>\n    from kaine.bus.client import AsyncBus, get_bus, reset_bus_for_tests, tail_id\nkaine/bus/client.py:17: in <module>\n    from kaine.bus.config import BusConfig, load_bus_config, maxlen_for\nkaine/bus/config.py:15: in <module>\n    from kaine.config import OPERATOR_CONFIG_PATH, deep_merge\nE   ImportError: cannot import name 'OPERATOR_CONFIG_PATH' from 'kaine.config' (/var/home/erik/Projects/kaineone/kaine/.dark-factory/worktrees/2_2_Hand-write_inline_explanations_for_e-1794985232675/kaine/config.py)\n",
+      "attempts": 3,
+      "category": "implementation"
+    },
+    "3.3 Pre-boot integration: add a `Config valid` row to `python -m kaine.preboot` that runs the validator.": {
+      "reason": "independent review: FAIL\n\nThe recent patch stripped out the entire implementation of `kaine.preboot`, removing all checks, CLI handling, data classes, and supporting imports. The module now only contains a docstring and a trivial import, so any code that expects the original pre\u2011boot functionality (e.g., `python -m kaine.preboot`, health checks, configuration validation) will break at runtime. No tests were added to cover the new minimal stub, and existing functionality is clearly regressed. This change is not safe to merge.",
+      "attempts": 3,
+      "category": "implementation"
     }
   },
   "current": null,
   "usage": {
-    "tokens": 11160,
-    "usd": 0.00346004,
+    "tokens": 49453,
+    "usd": 0.014168435,
     "gpu_minutes": 0.0,
-    "attempts": 9
+    "attempts": 24
   },
   "started_at": "2026-11-18T04:44:53.422744+00:00",
-  "deferred": [],
+  "deferred": [
+    "6.1 Docs page explaining the config layers (shipped, operator override, secrets, env vars, tier profiles) and how to use the reference file and validation command."
+  ],
   "release_phase": "internal-alpha"
 }
