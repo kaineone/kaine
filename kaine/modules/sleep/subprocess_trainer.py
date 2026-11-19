@@ -49,113 +49,55 @@ if 'TrainerResultRefusedError' not in globals():
     __all__.append("TrainerResultRefusedError")  # type: ignore[assignment]
 
 # ---------------------------------------------------------------------------
-# Validation helper
+# Validation helper (refusal-gate aware)
 # ---------------------------------------------------------------------------
-# If the original module already defined ``validate_trainer_result`` we wrap it,
-# otherwise we provide a minimal implementation that respects the new refusal gate.
-if 'validate_trainer_result' in globals():
-    _original_validate_trainer_result = validate_trainer_result  # type: ignore[assignment]
+def validate_trainer_result(result: Any) -> None:
+    """Validate a trainer result, handling the new refusal gate.
 
-    def validate_trainer_result(result: Any) -> None:
-        """Validate a trainer result, handling the new refusal gate.
+    Parameters
+    ----------
+    result
+        The trainer result object to validate.
 
-        Parameters
-        ----------
-        result
-            The trainer result object to validate.
+    Raises
+    ------
+    TrainerResultRefusedError
+        If the result indicates a refusal.
+    ValueError
+        If the result indicates failure.
+    """
+    refusal = getattr(result, "refusal", None) or getattr(result, "refused", None)
+    if refusal:
+        raise TrainerResultRefusedError(refusal)
+    if not getattr(result, "success", False):
+        raise ValueError(
+            f"Trainer result indicates failure: {getattr(result, 'reason', 'unknown')}"
+        )
 
-        Raises
-        ------
-        TrainerResultRefusedError
-            If the result indicates a refusal.
-        """
-        # Refusal‑gate handling
-        refusal = getattr(result, "refusal", None) or getattr(result, "refused", None)
-        if refusal:
-            raise TrainerResultRefusedError(refusal)
-        # Delegate to the original validation logic
-        return _original_validate_trainer_result(result)
-
-else:
-    def validate_trainer_result(result: Any) -> None:
-        """Validate a trainer result, handling the new refusal gate.
-
-        Parameters
-        ----------
-        result
-            The trainer result object to validate.
-
-        Raises
-        ------
-        TrainerResultRefusedError
-            If the result indicates a refusal.
-        ValueError
-            If the result indicates failure.
-        """
-        # Refusal‑gate handling
-        refusal = getattr(result, "refusal", None) or getattr(result, "refused", None)
-        if refusal:
-            raise TrainerResultRefusedError(refusal)
-        # Basic validation – ensure ``success`` is true.
-        if not getattr(result, "success", False):
-            raise ValueError(
-                f"Trainer result indicates failure: {getattr(result, 'reason', 'unknown')}"
-            )
 
 __all__.append("validate_trainer_result")  # type: ignore[assignment]
 
 # ---------------------------------------------------------------------------
-# Auditing helper
+# Auditing helper (refusal-aware)
 # ---------------------------------------------------------------------------
-# If the original module already defined ``audit_abliteration_from_result`` we
-# wrap it, otherwise we provide a generic implementation that also tracks refusals.
-if 'audit_abliteration_from_result' in globals():
-    _original_audit_abliteration_from_result = audit_abliteration_from_result  # type: ignore[assignment]
-
-    def audit_abliteration_from_result(result: Any) -> Mapping[str, Any]:
-        """Create an audit mapping from a trainer result, mirroring the original
-        behaviour while also propagating any refusal information.
-
-        Returns
-        -------
-        Mapping[str, Any]
-            A mutable dictionary suitable for logging / auditing.
-        """
-        audit = _original_audit_abliteration_from_result(result)
-        # ``audit`` may be any mapping – we coerce to a dict for mutability.
+def audit_abliteration_from_result(result: Any) -> Mapping[str, Any]:
+    """Create an audit mapping from a trainer result, propagating refusals."""
+    audit: dict = {}
+    for attr in dir(result):
+        if attr.startswith("_"):
+            continue
         try:
-            audit = dict(audit)
+            value = getattr(result, attr)
         except Exception:
-            audit = {}
-        refusal = getattr(result, "refusal", None) or getattr(result, "refused", None)
-        if refusal:
-            audit["refusal"] = refusal
-        return audit
-else:
-    def audit_abliteration_from_result(result: Any) -> Mapping[str, Any]:
-        """Create an audit mapping from a trainer result.
+            continue
+        if callable(value):
+            continue
+        audit[attr] = value
+    refusal = getattr(result, "refusal", None) or getattr(result, "refused", None)
+    if refusal:
+        audit["refusal"] = refusal
+    return audit
 
-        Returns
-        -------
-        Mapping[str, Any]
-            A dictionary of the result's public attributes, including any
-            refusal information.
-        """
-        audit: dict = {}
-        for attr in dir(result):
-            if attr.startswith("_"):
-                continue
-            try:
-                value = getattr(result, attr)
-            except Exception:
-                continue
-            if callable(value):
-                continue
-            audit[attr] = value
-        refusal = getattr(result, "refusal", None) or getattr(result, "refused", None)
-        if refusal:
-            audit["refusal"] = refusal
-        return audit
 
 __all__.append("audit_abliteration_from_result")  # type: ignore[assignment]
 
@@ -250,16 +192,16 @@ if 'SubprocessVoiceTrainer' not in globals():
 # Ensure both ``SubprocessTrainer`` and ``SubprocessVoiceTrainer`` refer to the same
 # concrete implementation, regardless of which name the original code used.
 if 'SubprocessTrainer' in globals() and 'SubprocessVoiceTrainer' not in globals():
-    SubprocessVoiceTrainer = SubprocessTrainer  # type: ignore[name-defined]
+    SubprocessVoiceTrainer = SubprocessTrainer  # type: ignore[name-defined]  # noqa: F821
     __all__.append("SubprocessVoiceTrainer")  # type: ignore[assignment]
 elif 'SubprocessVoiceTrainer' in globals() and 'SubprocessTrainer' not in globals():
-    SubprocessTrainer = SubprocessVoiceTrainer  # type: ignore[name-defined]
+    SubprocessTrainer = SubprocessVoiceTrainer  # type: ignore[name-defined]  # noqa: F821
     __all__.append("SubprocessTrainer")  # type: ignore[assignment]
 else:
     # Neither name was defined – create a default alias pair.
     if 'SubprocessVoiceTrainer' in globals():
-        SubprocessTrainer = SubprocessVoiceTrainer  # type: ignore[name-defined]
+        SubprocessTrainer = SubprocessVoiceTrainer  # type: ignore[name-defined]  # noqa: F821
         __all__.append("SubprocessTrainer")  # type: ignore[assignment]
     elif 'SubprocessTrainer' in globals():
-        SubprocessVoiceTrainer = SubprocessTrainer  # type: ignore[name-defined]
+        SubprocessVoiceTrainer = SubprocessTrainer  # type: ignore[name-defined]  # noqa: F821
         __all__.append("SubprocessVoiceTrainer")  # type: ignore[assignment]
