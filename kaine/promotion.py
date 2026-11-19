@@ -27,7 +27,7 @@ except Exception:  # pragma: no cover
 class TrainerProtocol(Protocol):
     """Protocol that a trainer must implement."""
     def train(self, adapter: Any) -> Any:
-        ...
+        pass
 
 
 class PromotionError(Exception):
