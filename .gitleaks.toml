@@ -1,0 +1,13 @@
+# Gitleaks configuration: the public repo carries test vectors and run
+# evidence that trip generic heuristics, but no real secrets.
+title = "kaine secret-scan config"
+
+[allowlist]
+description = "Allow known false positives in run evidence, local env files (never committed), and vestiges in test helpers."
+paths = [
+    '''compose/\.env''',
+    '''openspec/changes/individuation-rebuild/validation/runs/power\.json''',
+]
+regexes = [
+    '''keys,\s*with_vectors\s*=\s*True''',
+]

@@ -36,3 +36,14 @@ repos:
         always_run: true
         # Only Python edits can change the import graph.
         files: \.py$
+
+      - id: gitleaks
+        name: gitleaks (secret scan)
+        description: >-
+          Fast secret scan on the whole working tree, using .gitleaks.toml.
+        entry: gitleaks detect --no-git --config .gitleaks.toml --source .
+        language: system
+        pass_filenames: false
+        always_run: true
+        # Any file change can hide a secret.
+        files: .*
