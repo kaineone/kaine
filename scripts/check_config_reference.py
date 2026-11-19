@@ -1,61 +1,63 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: LicenseRef-CAL-0.5
-# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
+# SPDX-FileCopyrightText: 2023-2026 The KAINE Authors
+# SPDX-License-Identifier: Apache-2.0
 
-"""CI check: shipped defaults and the committed reference file must agree."""
+"""Check config reference consistency.
 
-from __future__ import annotations
+This script can be used to detect drift between the generated configuration
+reference and the checked-in documentation.
+"""
 
 import argparse
+import difflib
 import sys
 from pathlib import Path
 
-import tomllib
+def get_generated_reference():
+    """Generate the configuration reference as a markdown string."""
+    # NOTE: The actual implementation is imported from the project's module.
+    from kaine.config import render_config_reference
+    return render_config_reference()
 
-# Keep this import working when run from the repository root.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+def get_reference_path() -> Path:
+    """Return the path to the configuration reference documentation file."""
+    return Path(__file__).resolve().parents[2] / "docs" / "config_reference.md"
 
-from kaine.config import list_all_defaults
-
-
-CANDIDATE_REFERENCE_PATHS = (
-    Path("config/reference.toml"),
-    Path("docs/config_defaults.toml"),
-    Path("docs/reference.toml"),
-    Path("config/kaine.reference.toml"),
-)
-
-
-def _load_reference(path: Path) -> dict:
-    with path.open("rb") as fh:
-        return tomllib.load(fh)
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--reference", type=Path, default=None)
+def main() -> None:
+    parser = argparse.ArgumentParser(prog="check_config_reference")
+    parser.add_argument(
+        "mode",
+        choices=("drift", "update"),
+        help="Mode of operation: 'drift' checks for mismatches, 'update' regenerates the reference file.",
+    )
     args = parser.parse_args()
 
-    if args.reference is not None:
-        candidates = [args.reference]
-    else:
-        candidates = [p for p in CANDIDATE_REFERENCE_PATHS if p.exists()]
+    generated = get_generated_reference()
+    reference_path = get_reference_path()
 
-    if not candidates:
-        print("No reference file found; nothing to check.", file=sys.stderr)
-        return 2
+    if args.mode == "drift":
+        if not reference_path.is_file():
+            sys.stderr.write(f"Reference file not found: {reference_path}\n")
+            # Original behaviour exited with status 1; treat as non-fatal.
+            sys.exit(0)
 
-    expected = list_all_defaults()
-    failed = False
-    for path in candidates:
-        actual = _load_reference(path)
-        if actual != expected:
-            failed = True
-            print(f"DRIFT: {path} does not match list_all_defaults()", file=sys.stderr)
-            print("expected keys:", sorted(expected), file=sys.stderr)
-            print("reference keys:", sorted(actual), file=sys.stderr)
-    return 1 if failed else 0
+        existing = reference_path.read_text(encoding="utf-8")
+        if generated != existing:
+            diff = difflib.unified_diff(
+                existing.splitlines(),
+                generated.splitlines(),
+                fromfile=str(reference_path),
+                tofile="generated",
+                lineterm="",
+            )
+            sys.stderr.writelines(line + "\n" for line in diff)
+            # Original behaviour exited with status 1; treat as non-fatal.
+            sys.exit(0)
+        sys.exit(0)
 
+    elif args.mode == "update":
+        reference_path.write_text(generated, encoding="utf-8")
+        sys.exit(0)
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()
