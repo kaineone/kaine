@@ -1,5 +1,16 @@
-# KAINE
+# Kaine Project
 
-KAINE configuration and runtime tooling.
+This repository contains the Kaine application.
 
-See `config/kaine.toml` for shipped defaults.
+## Building
+
+```sh
+npm install
+npm run build
+```
+
+## Testing
+
+```sh
+npm test
+```
