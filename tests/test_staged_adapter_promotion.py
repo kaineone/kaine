@@ -307,7 +307,7 @@ async def _run_job_queue(tmp_path: Path, config: VoiceAlignmentConfig, result_ov
     try:
         return await trainer.train([_pair()], config)
     finally:
-        await service
+        _ = await service
 
 
 @pytest.mark.asyncio

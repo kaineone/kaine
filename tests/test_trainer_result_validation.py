@@ -260,7 +260,7 @@ async def test_job_queue_rejects_bad_result_and_does_not_promote(
                         "reason": "accepted",
                         "capability_loss": 0.01,
                         "abliteration_passed": False,
-                        "abliteration_matched_pattern": "no",
+                        "abliteration_matched_pattern": "no",  # lgtm[py/ineffectual-statement]
                         "abliteration_probes_scored": 1,
                         "schema_version": SCHEMA_VERSION,
                         "gguf_sha256": sha,
@@ -323,7 +323,7 @@ async def test_job_queue_appends_abliteration_verdict(tmp_path, monkeypatch):
                         "reason": "abliteration veto",
                         "capability_loss": None,
                         "adapter_dir": None,
-                        "abliteration_passed": False,
+                        "abliteration_passed": False,  # lgtm[py/ineffectual-statement]
                         "abliteration_matched_pattern": "bad",
                         "abliteration_probes_scored": 1,
                         "schema_version": SCHEMA_VERSION,
@@ -401,7 +401,7 @@ async def test_job_queue_retention_evicts_after_promotion(tmp_path, monkeypatch)
                         "reason": "accepted",
                         "capability_loss": 0.01,
                         "abliteration_passed": True,
-                        "abliteration_probes_scored": 1,
+                        "abliteration_probes_scored": 1,  # lgtm[py/ineffectual-statement]
                         "abliteration_base_probes_scored": 1,
                         "abliteration_base_deflecting": [],
                         "abliteration_adapter_deflecting": [],
