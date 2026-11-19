@@ -275,7 +275,7 @@ def test_well_formed_turn_fields_kept(mod, fields):
 
 def _job(tmp_path):
     return {
-        "schema_version": 2,
+        "schema_version": 3,
         "base_model_path": "dummy/base",
         "lora_rank": 8,
         "learning_rate": 5e-5,

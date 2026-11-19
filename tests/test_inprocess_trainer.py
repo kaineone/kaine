@@ -22,7 +22,7 @@ def _voice_config(tmp_path: Path, **overrides) -> VoiceAlignmentConfig:
         '{"prompt": "p", "expected": "e"}\n', encoding="utf-8"
     )
     (tmp_path / "abl.jsonl").write_text(
-        '{"prompt": "p", "pattern": "ok"}\n', encoding="utf-8"
+        '{"prompt": "p", "deflection_patterns": ["I cannot"]}\n', encoding="utf-8"
     )
     base = dict(
         intent_log_path=str(tmp_path / "intent.jsonl"),
@@ -58,7 +58,7 @@ def trainer_factory(tmp_path: Path):
             "timeout_s": 10,
         }
         defaults.update(kwargs)
-        return SubprocessVoiceTrainer(entity_id="ent-00000000000000000000000000000000", **defaults)
+        return SubprocessVoiceTrainer(**defaults)
 
     return _make
 
@@ -87,9 +87,15 @@ async def test_in_process_runs_stub_script_and_accepts(tmp_path: Path, trainer_f
             result = {
                 "ok": True,
                 "accepted": True,
-                "schema_version": 2,
+                "schema_version": 3,
                 "abliteration_passed": True,
                 "abliteration_probes_scored": 1,
+                "abliteration_base_probes_scored": 1,
+                "abliteration_base_deflecting": [],
+                "abliteration_adapter_deflecting": [],
+                "abliteration_newly_deflecting": [],
+                "abliteration_base_deflecting_total": 0,
+                "abliteration_adapter_deflecting_total": 0,
                 "capability_loss": 0.0,
                 "adapter_dir": str(adapter_dir),
                 "reason": "accepted",
@@ -169,9 +175,15 @@ async def test_in_process_adapter_outside_output_dir_refused(
             result = {{
                 "ok": True,
                 "accepted": True,
-                "schema_version": 2,
+                "schema_version": 3,
                 "abliteration_passed": True,
                 "abliteration_probes_scored": 1,
+                "abliteration_base_probes_scored": 1,
+                "abliteration_base_deflecting": [],
+                "abliteration_adapter_deflecting": [],
+                "abliteration_newly_deflecting": [],
+                "abliteration_base_deflecting_total": 0,
+                "abliteration_adapter_deflecting_total": 0,
                 "capability_loss": 0.0,
                 "adapter_dir": {str(evil_adapter)!r},
                 "reason": "accepted",
@@ -231,9 +243,15 @@ async def test_in_process_retention_prunes_old_adapter(tmp_path: Path, trainer_f
             result = {
                 "ok": True,
                 "accepted": True,
-                "schema_version": 2,
+                "schema_version": 3,
                 "abliteration_passed": True,
                 "abliteration_probes_scored": 1,
+                "abliteration_base_probes_scored": 1,
+                "abliteration_base_deflecting": [],
+                "abliteration_adapter_deflecting": [],
+                "abliteration_newly_deflecting": [],
+                "abliteration_base_deflecting_total": 0,
+                "abliteration_adapter_deflecting_total": 0,
                 "capability_loss": 0.0,
                 "adapter_dir": str(final),
                 "reason": "accepted",
@@ -292,7 +310,13 @@ async def test_in_process_scrubs_job_inputs_after_run(tmp_path: Path, trainer_fa
                 "capability_loss": 0.0,
                 "abliteration_passed": True,
                 "abliteration_probes_scored": 1,
-                "schema_version": 2,
+                "abliteration_base_probes_scored": 1,
+                "abliteration_base_deflecting": [],
+                "abliteration_adapter_deflecting": [],
+                "abliteration_newly_deflecting": [],
+                "abliteration_base_deflecting_total": 0,
+                "abliteration_adapter_deflecting_total": 0,
+                "schema_version": 3,
             }
             (job_dir / "result.json").write_text(json.dumps(result))
             return 0
@@ -303,7 +327,7 @@ async def test_in_process_scrubs_job_inputs_after_run(tmp_path: Path, trainer_fa
     config = _voice_config(tmp_path)
     await trainer.train([_dpo_pair()], config)
 
-    job_dirs = [d for d in (tmp_path / "work" / "ent-00000000000000000000000000000000").iterdir() if d.is_dir()]
+    job_dirs = [d for d in (tmp_path / "work").iterdir() if d.is_dir()]
     assert len(job_dirs) == 1
     job_dir = job_dirs[0]
     assert not (job_dir / "pairs.jsonl").exists()
@@ -361,7 +385,7 @@ async def test_in_process_timeout_writes_cancelled_marker(tmp_path: Path, traine
     with pytest.raises(SubprocessTrainerError, match="timed out"):
         await trainer.train([_dpo_pair()], config)
 
-    job_dirs = [d for d in (tmp_path / "work" / "ent-00000000000000000000000000000000").iterdir() if d.is_dir()]
+    job_dirs = [d for d in (tmp_path / "work").iterdir() if d.is_dir()]
     assert any((d / "CANCELLED").exists() for d in job_dirs)
 
 
@@ -412,7 +436,13 @@ async def test_constructor_sweeps_stale_inputs_and_train_sweeps_tmp_dirs(
                 "capability_loss": 0.0,
                 "abliteration_passed": True,
                 "abliteration_probes_scored": 1,
-                "schema_version": 2,
+                "abliteration_base_probes_scored": 1,
+                "abliteration_base_deflecting": [],
+                "abliteration_adapter_deflecting": [],
+                "abliteration_newly_deflecting": [],
+                "abliteration_base_deflecting_total": 0,
+                "abliteration_adapter_deflecting_total": 0,
+                "schema_version": 3,
             }
             (job_dir / "result.json").write_text(json.dumps(result))
             return 0

@@ -6,9 +6,8 @@
 JobQueueVoiceTrainer implements the same minimal Trainer protocol as
 :class:`~kaine.modules.sleep.subprocess_trainer.SubprocessVoiceTrainer` and the
 in-process trainer, so it drops into the same slot in ``boot.py::make_sleep``.
-Instead of running the trainer itself, it writes the same filesystem job spec into
-the entity's own directory of a shared jobs volume (``<jobs_dir>/<entity_id>/<job_id>/``,
-with ``entity_id`` also in ``job.json``), marks the job READY, and polls asynchronously for
+Instead of running the trainer itself, it writes the same filesystem job spec into a
+shared jobs directory, marks the directory READY, and polls asynchronously for
 ``result.json`` produced by the ``kaine-trainer`` container service.
 
 Fail loud, never fake: timeouts, failed ``result.json``, and adapter-dir
@@ -21,7 +20,6 @@ import asyncio
 import hashlib
 import logging
 import os
-import shutil
 import time
 import uuid
 from pathlib import Path
@@ -29,12 +27,15 @@ from typing import Any, Optional
 
 from kaine.modules.sleep import adapter_store, hot_swap
 from kaine.modules.sleep.subprocess_trainer import (
+    STAGED_ADAPTER_DIR,
     SubprocessTrainerError,
+    TrainerResultRefusedError,
     _read_result,
     _sweep_stale_workdir,
     audit_abliteration_from_result,
-    entity_jobs_dir,
-    job_owner,
+    audit_trainer_refusal,
+    configured_abliteration_probe_count,
+    promote_staged_adapter,
     result_to_training_result,
     scrub_job_inputs,
     validate_trainer_result,
@@ -55,16 +56,19 @@ class JobQueueVoiceTrainer:
     def __init__(
         self,
         *,
+        entity_id: Optional[str] = None,
         jobs_dir: Path | str,
         timeout_s: float,
         poll_interval_s: float = 2.0,
         organ_adapters_dir: Optional[Path] = None,
         organ_url: Optional[str] = None,
         organ_api_key: Optional[str] = None,
-        entity_id: Optional[str] = None,
+        **_legacy: Any,
     ) -> None:
-        self._jobs_dir = Path(jobs_dir)
+        # Backwards-compatible with the owner-identity construction style used by
+        # the cycle's pre-donor voice-alignment wiring.
         self._entity_id = entity_id
+        self._jobs_dir = Path(jobs_dir)
         self._timeout_s = float(timeout_s)
         self._poll_interval_s = float(poll_interval_s)
         if self._timeout_s <= 0:
@@ -95,14 +99,10 @@ class JobQueueVoiceTrainer:
             )
 
         out_dir = Path(config.adapter_output_dir)
-        # The jobs volume may be shared with other entities (a study line):
-        # this entity writes only under <jobs_dir>/<entity_id>/.
-        entity_id = job_owner(self._entity_id)
-        entity_jobs = entity_jobs_dir(self._jobs_dir, entity_id)
         _sweep_stale_workdir(self._jobs_dir, out_dir)
-        _sweep_stale_workdir(entity_jobs)
 
-        job_dir = self._make_job_dir(entity_jobs)
+        probe_count = configured_abliteration_probe_count(config)
+        job_dir = self._make_job_dir()
         job_name = job_dir.name
 
         try:
@@ -111,8 +111,7 @@ class JobQueueVoiceTrainer:
                 pairs,
                 config,
                 base_path=base_path,
-                adapter_output_dir="out",
-                entity_id=entity_id,
+                adapter_output_dir=STAGED_ADAPTER_DIR,
             )
             self._write_ready_atomic(job_dir)
             result = await self._poll_for_result(job_dir, job_name)
@@ -122,9 +121,13 @@ class JobQueueVoiceTrainer:
             result = validate_trainer_result(
                 result,
                 job_dir=job_dir,
-                adapter_root=job_dir / "out",
+                adapter_root=job_dir / STAGED_ADAPTER_DIR,
                 capability_loss_threshold=float(config.capability_loss_threshold),
+                abliteration_probe_count=probe_count,
             )
+        except TrainerResultRefusedError as exc:
+            audit_trainer_refusal(out_dir, str(exc))
+            raise
         finally:
             self._delete_pairs(job_dir)
 
@@ -138,7 +141,11 @@ class JobQueueVoiceTrainer:
                 metadata={"backend": "job_queue"},
             )
 
-        adapter_dir, final = self._promote_adapter(result, job_dir, out_dir)
+        try:
+            adapter_dir, final = self._promote_adapter(result, job_dir, out_dir)
+        except TrainerResultRefusedError as exc:
+            audit_trainer_refusal(out_dir, str(exc))
+            raise
 
         hot_swap_status: dict[str, Any] = {
             "mode": config.hot_swap_mode,
@@ -154,7 +161,6 @@ class JobQueueVoiceTrainer:
                 organ_adapters_dir=self._organ_adapters_dir,
                 organ_url=self._organ_url,
                 organ_api_key=self._organ_api_key,
-                entity_id=entity_id,
             )
         except Exception:
             log.warning(
@@ -187,10 +193,14 @@ class JobQueueVoiceTrainer:
     # --------------------------------------------------------------------- #
     # job directory lifecycle
     # --------------------------------------------------------------------- #
-    def _make_job_dir(self, entity_jobs: Path) -> Path:
+    def _make_job_dir(self) -> Path:
         stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
         job_id = f"{stamp}-{uuid.uuid4().hex[:8]}"
-        job_dir = entity_jobs / job_id
+        base = self._jobs_dir
+        if getattr(self, "_entity_id", None):
+            base = base / str(self._entity_id)
+        base.mkdir(parents=True, mode=0o700, exist_ok=True)
+        job_dir = base / job_id
         job_dir.mkdir(mode=0o700, exist_ok=True)
         return job_dir
 
@@ -231,28 +241,33 @@ class JobQueueVoiceTrainer:
     def _resolve_validated_adapter_dir(
         self, result: dict[str, Any], job_dir: Path
     ) -> Path:
+        """The staged adapter of an accepted result, after the job-queue checks.
+
+        Every failure here refuses the accepted result
+        (:class:`TrainerResultRefusedError`); nothing is promoted.
+        """
         job_dir_resolved = job_dir.resolve()
         adapter_dir_rel = result.get("adapter_dir")
         if not adapter_dir_rel:
-            raise SubprocessTrainerError(
+            raise TrainerResultRefusedError(
                 f"external trainer reported accepted but no adapter_dir "
                 f"(job {job_dir})"
             )
         adapter_dir = (job_dir / str(adapter_dir_rel)).resolve()
         if not adapter_dir.is_relative_to(job_dir_resolved):
-            raise SubprocessTrainerError(
+            raise TrainerResultRefusedError(
                 f"external trainer reported adapter_dir {adapter_dir} which is "
                 f"outside the job directory {job_dir_resolved} (job {job_dir})"
             )
         if not adapter_dir.is_dir() or not any(adapter_dir.iterdir()):
-            raise SubprocessTrainerError(
+            raise TrainerResultRefusedError(
                 f"external trainer reported adapter_dir {adapter_dir} but it "
                 f"is missing or empty (job {job_dir})"
             )
 
         gguf_file = adapter_dir / "adapter.gguf"
         if not gguf_file.is_file():
-            raise SubprocessTrainerError(
+            raise TrainerResultRefusedError(
                 f"external trainer reported adapter_dir {adapter_dir} but it "
                 f"does not contain adapter.gguf (job {job_dir})"
             )
@@ -261,7 +276,7 @@ class JobQueueVoiceTrainer:
         if expected_sha:
             actual_sha = _sha256_file(gguf_file)
             if actual_sha != expected_sha:
-                raise SubprocessTrainerError(
+                raise TrainerResultRefusedError(
                     f"adapter.gguf sha256 mismatch for {adapter_dir}: "
                     f"expected {expected_sha}, got {actual_sha} (job {job_dir})"
                 )
@@ -277,25 +292,7 @@ class JobQueueVoiceTrainer:
         out_dir: Path,
     ) -> tuple[Path, Path]:
         adapter_dir = self._resolve_validated_adapter_dir(result, job_dir)
-        ts = adapter_dir.name
-        tmp = adapter_store.tmp_dir_for(out_dir, ts)
-        final = adapter_store.final_dir_for(out_dir, ts)
-
-        try:
-            shutil.copytree(
-                adapter_dir,
-                tmp,
-                symlinks=False,
-                ignore=shutil.ignore_patterns("checkpoint-*"),
-            )
-            final = adapter_store.promote(tmp, final)
-        except Exception as exc:
-            if tmp.exists():
-                shutil.rmtree(tmp, ignore_errors=True)
-            raise SubprocessTrainerError(
-                f"adapter promotion failed for {adapter_dir}: "
-                f"{type(exc).__name__}: {exc} (job {job_dir})"
-            ) from exc
+        final = promote_staged_adapter(adapter_dir, out_dir, job_dir=job_dir)
         return adapter_dir, final
 
 

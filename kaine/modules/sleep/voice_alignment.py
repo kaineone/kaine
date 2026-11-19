@@ -45,6 +45,12 @@ class DPOPair:
     # encodes it exactly as ``chat_messages`` sends it.
     own_turn: bool = False
     user_turn: Optional[str] = None
+    # When True the pair is in the language client's own-turn layout: ``prompt``
+    # is the entity's notes, which the organ continues as its own assistant
+    # message after ``user_turn`` (heard speech) or the fixed cue. The trainer
+    # encodes it exactly as ``chat_messages`` sends it.
+    own_turn: bool = False
+    user_turn: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -94,7 +100,8 @@ class VoiceAlignmentConfig:
     # Override path to the WELFARE-LOAD-BEARING abliteration probe JSONL.
     # When None, the trainer uses the bundled set at
     # eval_probes/abliteration_probes.jsonl. The probe set MUST be
-    # non-empty when voice alignment is enabled: a deflecting adapter is
+    # non-empty when voice alignment is enabled: an adapter that deflects on
+    # a probe its base model answered, or on more probes than its base, is
     # rejected regardless of its capability-loss score, protecting the
     # entity from refusal-conditioning re-introduction.
     abliteration_probe_path: Optional[str] = None

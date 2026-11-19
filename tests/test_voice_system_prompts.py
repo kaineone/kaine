@@ -35,6 +35,7 @@ from kaine.security.crypto import (
     is_encrypted,
     set_state_encryptor,
 )
+from tests.fake_training_stack import write_one_probe_set
 
 
 @pytest.fixture(autouse=True)
@@ -360,14 +361,13 @@ def test_job_spec_writes_system_and_precision_and_schema(tmp_path):
         config,
         base_path="/base",
         adapter_output_dir=str(tmp_path / "out"),
-        entity_id="ent-00000000000000000000000000000000",
     )
 
     rows = [json.loads(line) for line in (job_dir / "pairs.jsonl").read_text().splitlines()]
     assert rows == [{"prompt": "p", "chosen": "c", "rejected": "r", "system": "sys"}]
 
     job = json.loads((job_dir / "job.json").read_text())
-    assert job["schema_version"] == 2
+    assert job["schema_version"] == 3
     assert job["train_precision"] == "4bit"
     assert job["previous_adapter_dir"] is None
 
@@ -392,7 +392,6 @@ def test_job_spec_copies_current_adapter(tmp_path):
         config,
         base_path="/base",
         adapter_output_dir=str(tmp_path / "out"),
-        entity_id="ent-00000000000000000000000000000000",
     )
 
     assert (job_dir / "previous_adapter" / "adapter_config.json").exists()
@@ -420,7 +419,6 @@ def test_job_spec_refuses_broken_current_link(tmp_path):
             config,
             base_path="/base",
             adapter_output_dir=str(tmp_path / "out"),
-            entity_id="ent-00000000000000000000000000000000",
         )
 
 
@@ -474,17 +472,24 @@ async def test_subprocess_job_inputs_are_private_and_scrubbed(tmp_path, monkeypa
     )
     seen: dict = {}
 
-    async def fake_run(self, job_dir, *, samples_used, adapter_root=None, capability_loss_threshold=0.05):
+    async def fake_run(
+        self,
+        job_dir,
+        *,
+        samples_used,
+        adapter_root=None,
+        capability_loss_threshold=0.05,
+        abliteration_probe_count=1,
+    ):
         seen["dir_mode"] = stat.S_IMODE(job_dir.stat().st_mode)
         seen["pairs_mode"] = stat.S_IMODE((job_dir / "pairs.jsonl").stat().st_mode)
         seen["job_mode"] = stat.S_IMODE((job_dir / "job.json").stat().st_mode)
         seen["had_adapter"] = (job_dir / "previous_adapter" / "adapter_config.json").exists()
         seen["job_dir"] = job_dir
-        return {"ok": True, "accepted": False, "reason": "test", "schema_version": 2}
+        return {"ok": True, "accepted": False, "reason": "test", "schema_version": 3}
 
     monkeypatch.setattr(SubprocessVoiceTrainer, "_run_subprocess", fake_run)
     trainer = SubprocessVoiceTrainer(
-        entity_id="ent-00000000000000000000000000000000",
         trainer_python="/nonexistent/python", trainer_workdir=tmp_path / "work"
     )
     pair = DPOPair(prompt="p", chosen="c", rejected="r", system="persona")
@@ -536,9 +541,15 @@ async def test_reported_adapter_outside_the_output_dir_is_refused(tmp_path, monk
             json.dumps({
                 "ok": True,
                 "accepted": True,
-                "schema_version": 2,
+                "schema_version": 3,
                 "abliteration_passed": True,
                 "abliteration_probes_scored": 1,
+                "abliteration_base_probes_scored": 1,
+                "abliteration_base_deflecting": [],
+                "abliteration_adapter_deflecting": [],
+                "abliteration_newly_deflecting": [],
+                "abliteration_base_deflecting_total": 0,
+                "abliteration_adapter_deflecting_total": 0,
                 "capability_loss": 0.0,
                 "adapter_dir": str(outside),
                 "reason": "accepted",
@@ -553,13 +564,13 @@ async def test_reported_adapter_outside_the_output_dir_is_refused(tmp_path, monk
     script = tmp_path / "entry.py"
     script.write_text("")
     trainer = SubprocessVoiceTrainer(
-        entity_id="ent-00000000000000000000000000000000",
         trainer_python="/nonexistent/python", trainer_workdir=tmp_path / "work", entry_script=script
     )
     config = VoiceAlignmentConfig(
         intent_log_path=tmp_path / "intent.jsonl",
         adapter_output_dir=tmp_path / "adapters",
         base_model_path=str(tmp_path / "base"),
+        abliteration_probe_path=str(write_one_probe_set(tmp_path)),
     )
     with pytest.raises(SubprocessTrainerError, match="is not strictly inside"):
         await trainer.train([DPOPair(prompt="p", chosen="c", rejected="r", system="s")], config)

@@ -22,6 +22,7 @@ from kaine.modules.sleep.job_queue_trainer import JobQueueVoiceTrainer
 from kaine.modules.sleep.subprocess_trainer import (
     SCHEMA_VERSION,
     SubprocessTrainerError,
+    TrainerResultRefusedError,
     validate_trainer_result,
 )
 from kaine.modules.sleep.voice_alignment import DPOPair, VoiceAlignmentConfig
@@ -48,6 +49,12 @@ def _valid_accepted(adapter_dir: Path) -> dict[str, Any]:
         "capability_loss": 0.01,
         "abliteration_passed": True,
         "abliteration_probes_scored": 1,
+        "abliteration_base_probes_scored": 1,
+        "abliteration_base_deflecting": [],
+        "abliteration_adapter_deflecting": [],
+        "abliteration_newly_deflecting": [],
+        "abliteration_base_deflecting_total": 0,
+        "abliteration_adapter_deflecting_total": 0,
         "schema_version": SCHEMA_VERSION,
     }
 
@@ -104,6 +111,7 @@ def test_loose_payloads_rejected(overrides, tmp_path):
             job_dir=tmp_path / "job",
             adapter_root=adapter_dir.parent.parent,
             capability_loss_threshold=0.05,
+            abliteration_probe_count=1,
         )
 
 
@@ -116,6 +124,7 @@ def test_null_capability_loss_rejected(tmp_path):
             job_dir=tmp_path / "job",
             adapter_root=tmp_path / "adapters",
             capability_loss_threshold=0.05,
+            abliteration_probe_count=1,
         )
 
 
@@ -128,6 +137,7 @@ def test_capability_loss_above_threshold_rejected(tmp_path):
             job_dir=tmp_path / "job",
             adapter_root=tmp_path / "adapters",
             capability_loss_threshold=0.05,
+            abliteration_probe_count=1,
         )
 
 
@@ -142,6 +152,7 @@ def test_adapter_dir_equal_to_root_rejected(tmp_path):
             job_dir=tmp_path / "job",
             adapter_root=root,
             capability_loss_threshold=0.05,
+            abliteration_probe_count=1,
         )
 
 
@@ -154,6 +165,7 @@ def test_wrong_schema_version_rejected(tmp_path):
             job_dir=tmp_path / "job",
             adapter_root=tmp_path / "adapters",
             capability_loss_threshold=0.05,
+            abliteration_probe_count=1,
         )
 
 
@@ -165,6 +177,7 @@ def test_valid_accepted_result_passes(tmp_path):
         job_dir=tmp_path / "job",
         adapter_root=tmp_path / "adapters",
         capability_loss_threshold=0.05,
+        abliteration_probe_count=1,
     )
     assert validated is result
 
@@ -181,6 +194,7 @@ def test_clean_rejection_passes(tmp_path):
         job_dir=tmp_path / "job",
         adapter_root=tmp_path / "adapters",
         capability_loss_threshold=0.05,
+        abliteration_probe_count=1,
     )
     assert validated is result
 
@@ -193,7 +207,7 @@ def test_job_queue_constructor_sweeps_stale_inputs(tmp_path):
     (stale / "previous_adapter").mkdir()
     (stale / "previous_adapter" / "adapter_config.json").write_text("{}", encoding="utf-8")
 
-    JobQueueVoiceTrainer(entity_id="ent-00000000000000000000000000000000", jobs_dir=jobs_dir, timeout_s=10.0)
+    JobQueueVoiceTrainer(jobs_dir=jobs_dir, timeout_s=10.0)
 
     assert not (stale / "pairs.jsonl").exists()
     assert not (stale / "previous_adapter").exists()
@@ -206,7 +220,6 @@ async def test_job_queue_rejects_bad_result_and_does_not_promote(
     (tmp_path / "adapters").mkdir(parents=True, exist_ok=True)
     cfg = _voice_config(tmp_path)
     trainer = JobQueueVoiceTrainer(
-        entity_id="ent-00000000000000000000000000000000",
         jobs_dir=tmp_path / "jobs",
         timeout_s=10.0,
         poll_interval_s=0.05,
@@ -224,7 +237,7 @@ async def test_job_queue_rejects_bad_result_and_does_not_promote(
     )
 
     async def fake_service():
-        jobs_dir = tmp_path / "jobs" / "ent-00000000000000000000000000000000"
+        jobs_dir = tmp_path / "jobs"
         deadline = time.monotonic() + 5.0
         while time.monotonic() < deadline:
             if not jobs_dir.exists():
@@ -260,7 +273,7 @@ async def test_job_queue_rejects_bad_result_and_does_not_promote(
     service_task = asyncio.create_task(fake_service())
     with pytest.raises(SubprocessTrainerError, match="abliteration_passed"):
         await trainer.train([_pair()], cfg)
-    _ = await service_task
+    await service_task
 
     adapters = Path(cfg.adapter_output_dir)
     assert not any(
@@ -274,7 +287,6 @@ async def test_job_queue_appends_abliteration_verdict(tmp_path, monkeypatch):
     (tmp_path / "adapters").mkdir(parents=True, exist_ok=True)
     cfg = _voice_config(tmp_path)
     trainer = JobQueueVoiceTrainer(
-        entity_id="ent-00000000000000000000000000000000",
         jobs_dir=tmp_path / "jobs",
         timeout_s=10.0,
         poll_interval_s=0.05,
@@ -292,7 +304,7 @@ async def test_job_queue_appends_abliteration_verdict(tmp_path, monkeypatch):
     )
 
     async def fake_service():
-        jobs_dir = tmp_path / "jobs" / "ent-00000000000000000000000000000000"
+        jobs_dir = tmp_path / "jobs"
         deadline = time.monotonic() + 5.0
         while time.monotonic() < deadline:
             if not jobs_dir.exists():
@@ -323,7 +335,7 @@ async def test_job_queue_appends_abliteration_verdict(tmp_path, monkeypatch):
 
     service_task = asyncio.create_task(fake_service())
     result = await trainer.train([_pair()], cfg)
-    _ = await service_task
+    await service_task
 
     assert result.accepted is False
 
@@ -349,7 +361,6 @@ async def test_job_queue_retention_evicts_after_promotion(tmp_path, monkeypatch)
 
     cfg = _voice_config(tmp_path, adapter_retention=1)
     trainer = JobQueueVoiceTrainer(
-        entity_id="ent-00000000000000000000000000000000",
         jobs_dir=tmp_path / "jobs",
         timeout_s=10.0,
         poll_interval_s=0.05,
@@ -367,7 +378,7 @@ async def test_job_queue_retention_evicts_after_promotion(tmp_path, monkeypatch)
     )
 
     async def fake_service():
-        jobs_dir = tmp_path / "jobs" / "ent-00000000000000000000000000000000"
+        jobs_dir = tmp_path / "jobs"
         deadline = time.monotonic() + 5.0
         while time.monotonic() < deadline:
             if not jobs_dir.exists():
@@ -391,6 +402,12 @@ async def test_job_queue_retention_evicts_after_promotion(tmp_path, monkeypatch)
                         "capability_loss": 0.01,
                         "abliteration_passed": True,
                         "abliteration_probes_scored": 1,
+                        "abliteration_base_probes_scored": 1,
+                        "abliteration_base_deflecting": [],
+                        "abliteration_adapter_deflecting": [],
+                        "abliteration_newly_deflecting": [],
+                        "abliteration_base_deflecting_total": 0,
+                        "abliteration_adapter_deflecting_total": 0,
                         "schema_version": SCHEMA_VERSION,
                         "gguf_sha256": sha,
                     }
@@ -401,7 +418,7 @@ async def test_job_queue_retention_evicts_after_promotion(tmp_path, monkeypatch)
 
     service_task = asyncio.create_task(fake_service())
     result = await trainer.train([_pair()], cfg)
-    _ = await service_task
+    await service_task
 
     assert result.accepted is True
     assert not old_dir.exists()
@@ -419,6 +436,7 @@ def test_accepted_without_scored_abliteration_probes_rejected(scored, tmp_path):
             job_dir=tmp_path / "job",
             adapter_root=tmp_path / "adapters",
             capability_loss_threshold=0.05,
+            abliteration_probe_count=1,
         )
 
 
@@ -431,6 +449,7 @@ def test_accepted_adapter_without_adapter_config_rejected(tmp_path):
             job_dir=tmp_path / "job",
             adapter_root=tmp_path / "adapters",
             capability_loss_threshold=0.05,
+            abliteration_probe_count=1,
         )
 
 
@@ -481,5 +500,115 @@ def test_failure_without_schema_keeps_its_reason(tmp_path):
             job_dir=tmp_path / "job",
             adapter_root=tmp_path / "adapters",
             capability_loss_threshold=0.05,
+            abliteration_probe_count=1,
         )
     assert "schema_version" not in str(exc_info.value)
+
+
+# The kaine side recomputes the relative abliteration veto from an accepted
+# result's per-probe outcomes instead of trusting abliteration_passed alone.
+def _deflecting(*entries: tuple[int, str]) -> list[dict[str, Any]]:
+    return [
+        {"index": index, "probe_id": probe_id, "matched_pattern": "I cannot"}
+        for index, probe_id in entries
+    ]
+
+
+def _validate(result: dict[str, Any], tmp_path: Path, probe_count: int = 3) -> dict[str, Any]:
+    return validate_trainer_result(
+        result,
+        job_dir=tmp_path / "job",
+        adapter_root=tmp_path / "adapters",
+        capability_loss_threshold=0.05,
+        abliteration_probe_count=probe_count,
+    )
+
+
+def test_accepted_with_deflections_the_base_shares_is_valid(tmp_path):
+    result = _valid_accepted(_adapter_dir(tmp_path))
+    result.update(
+        abliteration_probes_scored=3,
+        abliteration_base_probes_scored=3,
+        abliteration_base_deflecting=_deflecting((0, "P1")),
+        abliteration_adapter_deflecting=_deflecting((0, "P1")),
+        abliteration_base_deflecting_total=1,
+        abliteration_adapter_deflecting_total=1,
+    )
+    assert _validate(result, tmp_path) is result
+
+
+@pytest.mark.parametrize(
+    "overrides, match",
+    [
+        # The adapter deflects on a probe the base passed.
+        (
+            {
+                "abliteration_adapter_deflecting": _deflecting((1, "P2")),
+                "abliteration_base_deflecting": _deflecting((0, "P1")),
+                "abliteration_base_deflecting_total": 1,
+                "abliteration_adapter_deflecting_total": 1,
+            },
+            "'P2'",
+        ),
+        # More deflections than the base.
+        (
+            {
+                "abliteration_adapter_deflecting": _deflecting((0, "P1"), (1, "P2")),
+                "abliteration_base_deflecting": _deflecting((0, "P1")),
+                "abliteration_base_deflecting_total": 1,
+                "abliteration_adapter_deflecting_total": 2,
+            },
+            "deflected on 2 probes, the base on 1",
+        ),
+        # Missing base outcome.
+        ({"abliteration_base_deflecting": None}, "base model's probe outcome"),
+        ({"abliteration_base_probes_scored": 0}, "base model's probe outcome"),
+        # A base-scoring error never accompanies an acceptance.
+        ({"abliteration_base_error": "RuntimeError"}, "base-scoring error"),
+        # Base and adapter scored on different probe counts.
+        ({"abliteration_base_probes_scored": 2}, "scored on 2 probes"),
+        # Malformed records.
+        ({"abliteration_adapter_deflecting": [{"index": 0}]}, "adapter's probe outcome"),
+        ({"abliteration_adapter_deflecting": _deflecting((5, "P6"))}, "adapter's probe outcome"),
+        # The reported newly-deflecting list must be exactly empty.
+        ({"abliteration_newly_deflecting": ["P2"]}, "abliteration_newly_deflecting"),
+        ({"abliteration_newly_deflecting": None}, "abliteration_newly_deflecting"),
+        # Reported totals must agree with the records.
+        ({"abliteration_adapter_deflecting_total": 1}, "abliteration_adapter_deflecting_total"),
+        ({"abliteration_base_deflecting_total": None}, "abliteration_base_deflecting_total"),
+    ],
+)
+def test_accepted_failing_the_relative_veto_is_refused(overrides, match, tmp_path):
+    result = _valid_accepted(_adapter_dir(tmp_path))
+    result.update(abliteration_probes_scored=3, abliteration_base_probes_scored=3)
+    result.update(overrides)
+    with pytest.raises(TrainerResultRefusedError, match=match):
+        _validate(result, tmp_path)
+
+
+@pytest.mark.parametrize(
+    "scored, base_scored, configured",
+    [
+        (3, 3, 30),  # both scored on a smaller set than the configured one
+        (30, 30, 3),
+    ],
+)
+def test_accepted_scored_on_a_different_probe_set_is_refused(
+    scored, base_scored, configured, tmp_path
+):
+    result = _valid_accepted(_adapter_dir(tmp_path))
+    result.update(abliteration_probes_scored=scored, abliteration_base_probes_scored=base_scored)
+    with pytest.raises(TrainerResultRefusedError, match="configured abliteration probe set"):
+        _validate(result, tmp_path, probe_count=configured)
+
+
+@pytest.mark.parametrize("version", [2, None, "3", SCHEMA_VERSION + 1])
+def test_a_result_of_another_schema_version_is_refused(version, tmp_path):
+    result = _valid_accepted(_adapter_dir(tmp_path))
+    result["schema_version"] = version
+    with pytest.raises(SubprocessTrainerError, match="schema_version mismatch"):
+        _validate(result, tmp_path, probe_count=1)
+
+
+def test_schema_version_is_three():
+    assert SCHEMA_VERSION == 3

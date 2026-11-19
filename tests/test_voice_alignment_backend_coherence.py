@@ -28,6 +28,7 @@ from kaine.modules.sleep.voice_alignment import (
     TrainingResult,
     VoiceAlignmentConfig,
 )
+from tests.fake_training_stack import write_one_probe_set
 
 VENV_PY = str(Path(sys.executable))
 
@@ -45,6 +46,7 @@ def _voice_cfg(tmp_path, **over) -> VoiceAlignmentConfig:
         trainer_python=VENV_PY,
         trainer_workdir=str(tmp_path / "jobs"),
         hot_swap_mode="manual",
+        abliteration_probe_path=str(write_one_probe_set(tmp_path)),
     )
     base.update(over)
     return VoiceAlignmentConfig(**base)
@@ -87,9 +89,15 @@ def _accepted_stub(tmp_path: Path) -> Path:
         result = {
             'ok': True,
             'accepted': True,
-            'schema_version': 2,
+            'schema_version': 3,
             'abliteration_passed': True,
             'abliteration_probes_scored': 1,
+            'abliteration_base_probes_scored': 1,
+            'abliteration_base_deflecting': [],
+            'abliteration_adapter_deflecting': [],
+            'abliteration_newly_deflecting': [],
+            'abliteration_base_deflecting_total': 0,
+            'abliteration_adapter_deflecting_total': 0,
             'adapter_dir': str(adapter),
             'steps': 3,
             'dpo_loss': 0.1,
@@ -109,7 +117,7 @@ def _rejected_stub(tmp_path: Path) -> Path:
         (job_dir / 'result.json').write_text(json.dumps({
             'ok': True,
             'accepted': False,
-            'schema_version': 2,
+            'schema_version': 3,
             'reason': 'rejected by gate',
             'capability_loss': None,
             'adapter_dir': None,
@@ -230,7 +238,6 @@ async def test_subprocess_dispatches_hot_swap_after_accepted_adapter(tmp_path, m
     )
 
     trainer = SubprocessVoiceTrainer(
-        entity_id="ent-00000000000000000000000000000000",
         trainer_python=VENV_PY,
         trainer_workdir=str(tmp_path / "jobs"),
         entry_script=stub,
@@ -275,7 +282,6 @@ async def test_subprocess_does_not_dispatch_when_rejected(tmp_path, monkeypatch)
     )
 
     trainer = SubprocessVoiceTrainer(
-        entity_id="ent-00000000000000000000000000000000",
         trainer_python=VENV_PY,
         trainer_workdir=str(tmp_path / "jobs"),
         entry_script=stub,
@@ -307,7 +313,6 @@ async def test_subprocess_hot_swap_failure_keeps_result_accepted(tmp_path, monke
     )
 
     trainer = SubprocessVoiceTrainer(
-        entity_id="ent-00000000000000000000000000000000",
         trainer_python=VENV_PY,
         trainer_workdir=str(tmp_path / "jobs"),
         entry_script=stub,
