@@ -95,7 +95,7 @@ audio = [
     "funasr>=1.4.16,<2",
     # In-memory prosody extraction for audition.prosody (ISC licence).
     # Required only if [audition].prosody_enabled = true. Lazy-imported.
-    "librosa>=0.10,<1",
+    "librosa>=0.11.0,<1",
     "av>=18.1.0,<19",  # PyAV — playlist-audio track decode for the perception feed (PlaylistAudioStream)
 ]
 # Temporally-native InternVideo-Next clip encoder for the vision module
