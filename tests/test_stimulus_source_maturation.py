@@ -87,7 +87,7 @@ def patched_video_signal(monkeypatch: pytest.MonkeyPatch):
     )
     monkeypatch.setattr(
         "kaine.modules.stimulus_source_signal.colour_saturation",
-        lambda stage: 0.0,
+        lambda stage, progress=0.0: 0.0,
     )
     monkeypatch.setattr(
         "kaine.modules.stimulus_source_signal.maternal_hue",
