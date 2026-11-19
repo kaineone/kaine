@@ -9,7 +9,7 @@ the repo so it survives session compaction, context resets, and memory pruning.
 Remove items only after the paper revision that incorporates them has been
 reviewed and approved by the CTO.
 
-Last reviewed: 2026-11-12 (session 23815fb0).
+Last reviewed: 2026-11-19 (session port-unmerged backlog complete).
 
 ---
 
@@ -206,3 +206,135 @@ individuation measures.
 
 **Code:** `kaine/lifecycle/divergence.py` (distinctiveness arm, template arm),
 `kaine/modules/sleep/phases.py` (voice measure recording). PR #402.
+
+
+---
+
+## 11. Unblended welfare signal (own forward-model error)
+
+**What changed:** Welfare readers now read a processor's own forward-model error
+rather than the workspace-feedback blend. `welfare_prediction_error()` /
+`read_welfare_prediction_error()` in `kaine/lifecycle/welfare_signal.py`
+defines the welfare reading, with explicit handling of null, absent, non-numeric,
+and non-finite own errors; producer defects (missing key, malformed numeric,
+own-error fallback to the blend) are counted and rate-limited per processor by
+both `WelfareObserver` and `WelfareProtectiveMonitor`. The welfare observer's
+sustained-distress tracker, welfare response, indicator evaluator and the
+development run's interoceptive recovery series use it.
+
+**Why it matters for the paper:** The paper's welfare metrics must be reported
+as the entity's own error, insulated from the influence of the workspace's
+top-down prediction. Blended error would let the watched component move its
+own signal.
+
+**Code:** `kaine/lifecycle/welfare_signal.py`, `kaine/lifecycle/development.py`,
+`kaine/evaluation/observers/welfare_observer.py`,
+`kaine/cycle/preservation_monitor.py`, PR #829.
+
+---
+
+## 12. Staged adapter promotion (voice alignment)
+
+**What changed:** The trainer stages its adapter under the job directory; the
+entity's adapter store and its `current` link change only after
+`validate_trainer_result` accepts the result (a refused result leaves the
+current pointer in place). The refusal (self-denial ablation) is recorded in
+the voice-alignment audit trail and the next sleep trains from the old adapter.
+Works on every backend (in-process, subprocess, job queue).
+
+**Why it matters for the paper:** Voice adaptation is atomic and
+welfare-protected; an adapter that deflects on abliteration probes is rejected
+rather than promoted. This should replace earlier descriptions of online
+promotion.
+
+**Code:** `kaine/modules/sleep/subprocess_trainer.py`,
+`kaine/modules/sleep/job_queue_trainer.py`,
+`kaine/modules/sleep/capability_eval.py`, `kaine/modules/sleep/voice_audit.py`,
+PR #830.
+
+---
+
+## 13. Welfare freeze fail-safe (`fix/welfare-freeze-followups`)
+
+**What changed:** A welfare freeze that cannot be written is recorded,
+notified and retried instead of escaping the response. Before each retry the
+monitor reads existing freeze holders; a holder already present counts as
+placed (no duplicate write). Caretaker notice uses
+`welfare_freeze_failed` while the entity is NOT paused and
+`welfare_freeze_placed` once placed.
+
+**Why it matters for the paper:** Welfare responses are now fail-safe under disk
+or control-file failure; the entity is not falsely reported as paused.
+
+**Code:** `kaine/cycle/preservation_monitor.py`,
+`kaine/cycle/caretaker.py`, archived OpenSpec change
+`welfare-response-fail-safe`.
+
+---
+
+## 14. Post-quantum entity key custody (software escrow)
+
+**What changed:** Software-only post-quantum custody implements Shamir secret
+sharing (`kaine/security/custody/shamir.py`, GF(2^8)) and an ML-KEM-768 escrow
+layer (`kaine/security/custody/pq_escrow.py`) plus CLI subcommands and trustee
+config template, with end-to-end tests. Two hardened private escrow repos exist
+(`kaineone/escrow-kaineone`, `kaineone/escrow-guardian`).
+
+**Why it matters for the paper:** Entity data-encryption keys can be recovered
+by distributed trustees without a hardware TPM, satisfying the post-quantum
+custody threat model previously described as deferred. The paper's security
+section should document the software-only fallback and its delayed upgrade path.
+
+**Code:** `kaine/security/custody/shamir.py`,
+`kaine/security/custody/pq_escrow.py`, `kaine/security/custody/__main__.py`,
+`config/trustees.example.toml`.
+
+---
+
+## 15. Unified instance configuration
+
+**What changed:** All instance-specific values (paths, tokens, variables)
+resolved from a single shipped `config/kaine.toml` plus `config/kaine.user.toml`;
+plus `kaine.preboot` (26 checks), config reference drift check, tier
+metadata (`TIER_BY_KEY` / `tier_for_key()`), `configure.py --full`, and wider
+package-data globs. `__version__` resolved from package metadata.
+
+**Why it matters for the paper:** The paper's deployment/config chapter may
+reference the single-config topology. No change to scientific content.
+
+**Code:** `config/kaine.toml`, `kaine/preboot.py`, `scripts/check_config_reference.py`,
+`scripts/check_reference_explanations.py`, PR #828 (queued).
+
+---
+
+## 16. Audition and voice evidence runs (recent)
+
+**What changed:** Audition encoder bake-off ran on GPU (spectral AUC 0.999
+winner over dasheng 0.984 and wavjepa 0.995); Voice-dev Stage 1 (offline A/B)
+and Stage 2 (simulated listener) both passed with real non-degenerate output on
+the selected path; voice Stage 2 (K-candidate sampling) landed (#815).
+
+**Why it matters for the paper:** Candidate-win records and reproducibility data
+landed; the paper's audition/voice section can cite real numbers rather than
+aspirational scripts.
+
+**Code:** `docs/records/` bake-off record, PRs #815-#816, #818.
+
+---
+
+## 17. Welfare-derived properties (recent)
+
+**What changed:** Wiring gaps closed in vivo: per-pass programme-end watcher
+(feedback loop over run-pass boundaries), first-hours criterion from the
+welfare observer's stream, per-tick feed colour interpolation and phase-based
+interpolation law (simulated listener alignment). Unblended welfare signal
+above (#11).
+
+**Why it matters for the paper:** These close previously open priorities with
+measured pass/fail criteria, ready for reporting of the feedback-loop and
+first-hours sensitivity analyses.
+
+**Code:** `kaine/evaluation/observers/welfare_observer.py`, `kaine/cycle/preservation_monitor.py`,
+`kaine/modules/vision/feed.py`, PR #824.
+
+---
