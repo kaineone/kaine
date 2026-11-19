@@ -1172,3 +1172,133 @@ def recommend_tier(
         )
 
     return _rec(1, "torch importable, adequate RAM, no accelerator (CPU agent)")
+
+
+# ---------------------------------------------------------------------------
+# Hardware budget helpers (cross-platform by design: torch/pynvml only, never
+# an external shell call or any assumption of GPU exclusivity).
+# ---------------------------------------------------------------------------
+
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class GpuSnapshot:
+    """A (read-only) view of one accelerator available for inference."""
+
+    index: int
+    backend: str  # "cuda" | "xpu" | "mps"
+    total_mb: int
+    free_mb: int
+
+
+def gpu_inventory() -> list[GpuSnapshot]:
+    """Return every accelerator free enough to be considered for new work.
+
+    Reads torch's own metadata and never calls out to a CLI, so it behaves
+    identically on Windows, macOS, Linux (including *BSD/Termux), and as a CPU
+    hit on hosts with no torch/accelerator.
+
+    The snapshot is informational and non-exclusive: ``free_mb`` is the value
+    the device reported *at that moment* and no device is claimed, reserved or
+    reset by this function. An OOM is still possible if another process claims
+    the memory between calls, which is expected.
+    """
+    out: list[GpuSnapshot] = []
+    torch = _try_torch()
+    if torch is None:
+        return out
+    # CUDA / ROCm (ROCm is reported as torch.cuda)
+    devices: list[tuple[str, int]] = []
+    try:
+        if bool(torch.cuda.is_available()):
+            devices.extend(("cuda", i) for i in range(int(torch.cuda.device_count())))
+    except Exception:
+        pass
+    xpu = getattr(torch, "xpu", None)
+    try:
+        if xpu is not None and xpu.is_available():
+            devices.extend(("xpu", i) for i in range(int(xpu.device_count())))
+    except Exception:
+        pass
+    if _mps_available():
+        out.append(
+            GpuSnapshot(
+                index=0,
+                backend="mps",
+                total_mb=0,  # MPS reclaims dynamically, no honest inventory
+                free_mb=0,
+            )
+        )
+    for backend, index in devices:
+        try:
+            if backend == "cuda":
+                total, free = torch.cuda.mem_get_info(index)
+                total_mb = int(total // (1024 * 1024))
+                free_mb = int(free // (1024 * 1024))
+            elif backend == "xpu":
+                total, free = xpu.mem_get_info(index)
+                total_mb = int(total // (1024 * 1024))
+                free_mb = int(free // (1024 * 1024))
+            else:
+                continue
+            out.append(
+                GpuSnapshot(
+                    index=index,
+                    backend=backend,
+                    total_mb=total_mb,
+                    free_mb=free_mb,
+                )
+            )
+        except Exception:
+            log.debug("hardware.gpu_inventory: could not query %s:%d", backend, index)
+    return out
+
+
+def best_accelerator_for(
+    min_free_mb: int, *, guard_mb: int = 1024, prefer: str = "most_free"
+) -> str:
+    """Pick a compute target without monopolising memory.
+
+    Returns a device string such as ``cuda:1`` or ``"cpu"``.  ``guard_mb`` is
+    the minimum free VRAM that must remain afterwards (so Ollama, a desktop,
+    etc. are not OOMed when KAINE starts using a large chunk).  Each module
+    quotes its realistic cost; this function does not allocate, it just advises.
+    """
+    best: GpuSnapshot | None = None
+    for snap in gpu_inventory():
+        if snap.backend == "mps":
+            continue
+        if snap.free_mb < min_free_mb + guard_mb:
+            continue
+        if best is None:
+            best = snap
+        elif prefer == "most_free" and snap.free_mb > best.free_mb:
+            best = snap
+        elif prefer == "smallest_sufficient" and snap.total_mb < best.total_mb:
+            best = snap
+    if best is None:
+        return "cpu"
+    return f"{best.backend}:{best.index}"
+
+
+def cpu_threads_budget() -> int:
+    """Suggest a torch / OpenMP thread count with headroom for other apps.
+
+    Defaults to roughly half of the online CPUs (or one on single-core hosts)
+    so KAINE leaves most of the machine responsive.
+    """
+    import os
+
+    try:
+        avail = os.cpu_count() or 1
+    except Exception:
+        avail = 1
+    try:
+        import psutil  # type: ignore[import-untyped]
+
+        logged = psutil.cpu_count(logical=False)
+        avail = min(avail, logged) if logged else avail
+    except Exception:
+        pass
+    return max(1, avail // 2)
