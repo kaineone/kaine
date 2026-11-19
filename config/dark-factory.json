@@ -1,6 +1,6 @@
 {
   "tasks_file": "openspec/changes/port-unmerged-work/tasks.md",
-  "test_command": "/var/home/erik/Projects/kaineone/kaine/.venv/bin/python -m pytest -q tests/test_license_headers.py tests/test_import_contract_coverage.py tests/test_package_manifest.py tests/test_config_defaults.py tests/test_config_shape.py tests/test_config_validation.py tests/test_config_reference_drift.py tests/test_wizard_basic_coverage.py",
+  "test_command": "/run/media/erik/2TBm2Store/kaine/.venv/bin/python -m pytest -q tests/test_license_headers.py tests/test_import_contract_coverage.py tests/test_package_manifest.py tests/test_config_defaults.py tests/test_config_shape.py tests/test_config_validation.py tests/test_config_reference_drift.py tests/test_wizard_basic_coverage.py",
   "model": "beam:cloud",
   "backup_model": "gpt-oss:120b-cloud",
   "model_ladder": [
@@ -67,8 +67,8 @@
     "beam:cloud": 0.00026,
     "gpt-oss:120b-cloud": 0.000375
   },
-  "git_workflow": "direct",
+  "git_workflow": "pr",
   "base_branch": "main",
-  "create_pr": false,
+  "create_pr": true,
   "push_pr": false
 }
