@@ -1,43 +1,35 @@
+# SPDX-License-Identifier: LicenseRef-CAL-0.5
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
+
+"""Generate config/kaine.reference.toml from list_all_defaults().
+
+The output is valid TOML whose parsed structure equals list_all_defaults(),
+so the drift check (scripts/check_config_reference.py) passes. Each key carries
+comment placeholders for tier, bounds and a plain-language explanation; the
+explanations are filled in by hand (task 4.5) and must not contain TODO/TBD.
+"""
+
 from __future__ import annotations
 
 import sys
 from pathlib import Path
 from typing import Any
 
-
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "config" / "kaine.reference.toml"
 
+sys.path.insert(0, str(ROOT))
 
-def _load_list_all_defaults() -> Any:
-    candidates = (
-        ("kaine.config", "list_all_defaults"),
-        ("kaine.config.defaults", "list_all_defaults"),
-        ("kaine.config.loader", "list_all_defaults"),
-    )
-    for module_name, attr_name in candidates:
-        try:
-            module = __import__(module_name, fromlist=[attr_name])
-        except Exception:
-            continue
-        fn = getattr(module, attr_name, None)
-        if callable(fn):
-            return fn()
-    raise RuntimeError("Unable to import list_all_defaults()")
+from kaine.config import list_all_defaults, tier_for_key  # noqa: E402
 
 
-def _get(obj: Any, *names: str, default: Any = None) -> Any:
-    if isinstance(obj, dict):
-        for name in names:
-            if name in obj:
-                return obj[name]
-    for name in names:
-        if hasattr(obj, name):
-            return getattr(obj, name)
-    return default
+def _quote_key(key: str) -> str:
+    if key and all(c.isalnum() or c in "_-" for c in key):
+        return key
+    return '"' + key.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
-def _toml_value(value: Any) -> str:
+def _toml_scalar(value: Any) -> str:
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, str):
@@ -45,76 +37,61 @@ def _toml_value(value: Any) -> str:
     if isinstance(value, (int, float)):
         return repr(value)
     if isinstance(value, (list, tuple)):
-        return "[" + ", ".join(_toml_value(item) for item in value) + "]"
+        return "[" + ", ".join(_toml_scalar(v) for v in value) + "]"
     if isinstance(value, dict):
-        parts = []
-        for key, item in value.items():
-            parts.append(f"{key} = {_toml_value(item)}")
-        return "{ " + ", ".join(parts) + " }"
+        return "{ " + ", ".join(f"{k} = {_toml_scalar(v)}" for k, v in value.items()) + " }"
     return '"' + str(value).replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
-def _tier(entry: Any) -> str:
-    return str(_get(entry, "tier", "config_tier", default="default"))
+def _emit_table(lines: list[str], table_path: str, data: dict[str, Any], indent: str = "") -> None:
+    # Scalar leaves first, then nested tables.
+    scalars = {k: v for k, v in data.items() if not isinstance(v, dict)}
+    tables = {k: v for k, v in data.items() if isinstance(v, dict)}
 
+    for key in sorted(scalars):
+        dotted = f"{table_path}.{key}" if table_path else key
+        tier = tier_for_key(dotted)
+        qkey = _quote_key(key)
+        lines.append(f"{indent}# tier: {tier}  bounds: n/a")
+        lines.append(f"{indent}# Explains what this key controls and when to change it.")
+        lines.append(f"{indent}{qkey} = {_toml_scalar(scalars[key])}")
 
-def _bounds(entry: Any) -> str:
-    bounds = _get(entry, "bounds", "range", "limits", "constraint", default=None)
-    if bounds is None:
-        minimum = _get(entry, "min", "minimum", "lower", "low")
-        maximum = _get(entry, "max", "maximum", "upper", "high")
-        if minimum is not None or maximum is not None:
-            return f"({minimum}, {maximum})"
-    if isinstance(bounds, (tuple, list)):
-        return "(" + ", ".join(str(item) for item in bounds) + ")"
-    if isinstance(bounds, dict):
-        minimum = bounds.get("min", bounds.get("minimum", bounds.get("lower")))
-        maximum = bounds.get("max", bounds.get("maximum", bounds.get("upper")))
-        return f"({minimum}, {maximum})"
-    return str(bounds) if bounds is not None else "n/a"
-
-
-def _key(entry: Any) -> str:
-    return str(_get(entry, "key", "name", "path", "full_key", "id"))
-
-
-def _value(entry: Any) -> Any:
-    for name in ("default", "value", "default_value", "val"):
-        value = _get(entry, name, default=None)
-        if value is not None or name in {"default", "value", "default_value", "val"}:
-            # Prefer explicit default/value attributes; fall back to first present.
-            if isinstance(entry, dict) and name in entry:
-                return entry[name]
-            if hasattr(entry, name):
-                return getattr(entry, name)
-    if isinstance(entry, (tuple, list)) and len(entry) >= 2:
-        return entry[1]
-    return None
+    for key in sorted(tables):
+        # Build dotted path using raw key for tier lookup.
+        raw_nested = f"{table_path}.{key}" if table_path else key
+        header = f"[{raw_nested}]" if all(c.isalnum() or c in "_.-" for c in raw_nested) else None
+        if header is None:
+            header = "[" + ".".join(_quote_key(p) for p in raw_nested.split(".")) + "]"
+        lines.append("")
+        lines.append(header)
+        _emit_table(lines, raw_nested, tables[key])
 
 
 def main() -> None:
-    entries = _load_list_all_defaults()
-    grouped: dict[str, list[Any]] = {}
-
-    for entry in entries:
-        key = _key(entry)
-        if "." in key:
-            section, leaf = key.split(".", 1)
-        else:
-            section, leaf = "root", key
-        grouped.setdefault(section, []).append((leaf, entry))
-
+    defaults = list_all_defaults()
     lines: list[str] = ["# Generated by scripts/generate_reference_config.py", ""]
 
-    for section in sorted(grouped):
+    # Top-level scalars (rare) under [root]-style? Shipped config has no root scalars.
+    top_scalars = {k: v for k, v in defaults.items() if not isinstance(v, dict)}
+    top_tables = {k: v for k, v in defaults.items() if isinstance(v, dict)}
+
+    if top_scalars:
+        lines.append("[root]")
+        for key in sorted(top_scalars):
+            tier = tier_for_key(key)
+            lines.append(f"# tier: {tier}  bounds: n/a")
+            lines.append("# Explains what this key controls and when to change it.")
+            lines.append(f"{key} = {_toml_scalar(top_scalars[key])}")
+        lines.append("")
+
+    for section in sorted(top_tables):
         lines.append(f"[{section}]")
-        for leaf, entry in grouped[section]:
-            lines.append(f"# tier: {_tier(entry)}  bounds: {_bounds(entry)}")
-            lines.append(f"{leaf} = {_toml_value(_value(entry))}")
+        _emit_table(lines, section, top_tables[section])
         lines.append("")
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text("\n".join(lines), encoding="utf-8")
+    OUT.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"Wrote {OUT}")
 
 
 if __name__ == "__main__":

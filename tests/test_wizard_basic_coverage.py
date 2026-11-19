@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: LicenseRef-CAL-0.5
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
+
 """Basic coverage test: every basic-tier key in the shipped reference has a prompt."""
 
 from kaine.config import list_all_defaults

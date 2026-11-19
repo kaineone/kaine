@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: LicenseRef-CAL-0.5
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
+
 """CI check: every reference entry must have a non-placeholder explanation.
 
 A reference entry is a non-empty bullet under docs/reference*. Fail when any
@@ -9,10 +12,14 @@ from __future__ import annotations
 
 import pathlib
 import re
-import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 BAD_TOKENS = re.compile(r"\b(TODO|TBD|XXX|FIXME|placeholder)\b", re.IGNORECASE)
+
+# Candidate reference files (shipped defaults mirror + legacy docs locations).
+CANDIDATE_REFERENCE_PATHS = (
+    ROOT / "config" / "kaine.reference.toml",
+)
 
 
 def main() -> int:
@@ -21,6 +28,10 @@ def main() -> int:
         if (base / "reference").is_dir():
             files.extend((base / "reference").rglob("*"))
     files = [p for p in files if p.is_file()]
+    # Also scan the generated reference TOML if present.
+    for cand in CANDIDATE_REFERENCE_PATHS:
+        if cand.is_file():
+            files.append(cand)
     if not files:
         print("no reference files found; nothing to check")
         return 0

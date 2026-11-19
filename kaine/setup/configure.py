@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: LicenseRef-CAL-0.5
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
+
 """Interactive configuration writer for KAINE's operator overlay."""
 
 from __future__ import annotations
@@ -12,7 +15,7 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - Python < 3.11
     import tomli as tomllib  # type: ignore[no-redef]
 
-from kaine.config import OPERATOR_CONFIG_PATH, list_all_defaults
+from kaine.config import OPERATOR_CONFIG_PATH, list_all_defaults, tier_for_key
 
 
 def _load_operator(path: str | os.PathLike[str]) -> dict[str, Any]:
@@ -89,8 +92,16 @@ def _prompt(label: str, current: Any) -> Any:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = argv if argv is not None else sys.argv[1:]
+    args = list(argv if argv is not None else sys.argv[1:])
     out_path = OPERATOR_CONFIG_PATH
+    full = False
+    filtered: list[str] = []
+    for arg in args:
+        if arg == "--full":
+            full = True
+        else:
+            filtered.append(arg)
+    args = filtered
     if args:
         out_path = args[0]
 
@@ -98,10 +109,14 @@ def main(argv: list[str] | None = None) -> int:
     current = _load_operator(out_path)
     merged: dict[str, Any] = dict(current)
 
+    covered_tiers = {"basic", "standard", "advanced"} if full else {"basic"}
+
     print("KAINE operator configuration")
     print("Press Enter to keep the shown current value.\n")
 
     for dotted, default_value in _flatten(shipped):
+        if tier_for_key(dotted) not in covered_tiers:
+            continue
         current_value = current
         for part in dotted.split("."):
             current_value = current_value.get(part) if isinstance(current_value, dict) else None

@@ -564,9 +564,15 @@ class StimulusSourceProceduralSource:
         # (Frontiers 2022), the heartbeat pulse fades, and colour saturation
         # rises to full.  The result is clipped to MATURATION_BLOOM_PEAK so the
         # bloom is bounded and cannot startle.
-        schedule_saturation = float(colour_saturation(self._hearing_stage())) * float(
-            p.maternal_state_hue_gain
+        # Feed-level interpolation cue: smooth hearing-stage transitions via
+        # maturation progress when available; fall back to the discrete step
+        # (progress=0.0) otherwise.
+        _saturation_progress = (
+            0.0 if maturation_progress is None else float(maturation_progress)
         )
+        schedule_saturation = float(
+            colour_saturation(self._hearing_stage(), _saturation_progress)
+        ) * float(p.maternal_state_hue_gain)
         if maturation_progress is None:
             mean = float(p.luminance_mean)
             pulse_depth = float(p.luminance_pulse_depth)

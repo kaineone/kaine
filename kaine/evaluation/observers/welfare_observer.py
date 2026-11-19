@@ -922,6 +922,35 @@ class WelfareObserver(StreamSubscriberObserver):
                 await self._sink.write({"ts": datetime.now(timezone.utc).isoformat(), **record})
             except Exception:
                 log.warning("welfare_observer supplementary record write failed", exc_info=True)
+        # First-hours stop criterion for stimulus control: evaluate each new
+        # record and write a verdict file if it fires, so the ignition-study
+        # runner can detect the breach (cwd is the step's line_dir during runs).
+        for record in records:
+            if not isinstance(record, dict):
+                continue
+            if "paused_share_last_awake_hour_max" not in record:
+                continue
+            try:
+                from kaine.research.ignition_study.first_hours_criterion import (
+                    VERDICT_RELPATH,
+                    check_first_hours,
+                    write_verdict,
+                )
+            except Exception:
+                continue
+            # Determine pass number from the record if available.
+            pass_number = int(record.get("pass_number", record.get("pass", 0)))
+            verdict = check_first_hours(record, pass_number=pass_number, readout_pause=record.get("readout_pause"))
+            if verdict is None:
+                continue
+            verdict_path = Path(VERDICT_RELPATH)
+            if verdict_path.exists():
+                continue  # already stopped; don't overwrite
+            try:
+                write_verdict(verdict, Path("."))
+                log.warning("stimulus_control_first_hours: verdict written")
+            except Exception:
+                log.warning("stimulus_control_first_hours write failed", exc_info=True)
 
     async def _emit_sustained_interoceptive_distress(self, seconds_sustained: float) -> None:
         self._sustained_interoceptive_distress_count += 1

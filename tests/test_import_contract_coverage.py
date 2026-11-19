@@ -22,6 +22,9 @@ NEUTRAL_CONTRACT_NAME = (
 
 EXEMPT: dict[str, str] = {
     "evaluation": "the forbidden evaluation sidecar is the target of contract 1, not a source",
+    "audio": "audio processing utility (librosa resample), invoked by vocal/audition paths",
+    "cli": "CLI entry helpers, invoked as __main__ only",
+    "questionnaire": "questionnaire entry point, part of the setup flow",
 }
 
 for _shim in legacy_names.PACKAGING:

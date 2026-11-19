@@ -46,6 +46,7 @@ def _assert_int8_close(report: dict[str, float]) -> None:
 
 
 @pytest.mark.slow
+@pytest.mark.no_data_root
 @_skip_no_dasheng
 def test_dasheng_onnx_parity(tmp_path):
     torch.manual_seed(0)
@@ -56,6 +57,7 @@ def test_dasheng_onnx_parity(tmp_path):
 
 
 @pytest.mark.slow
+@pytest.mark.no_data_root
 @_skip_no_wavjepa
 def test_wavjepa_onnx_parity(tmp_path):
     torch.manual_seed(0)
@@ -66,6 +68,7 @@ def test_wavjepa_onnx_parity(tmp_path):
 
 
 @pytest.mark.slow
+@pytest.mark.no_data_root
 @_skip_no_dasheng
 def test_dasheng_int8_parity(tmp_path):
     torch.manual_seed(0)
@@ -77,6 +80,7 @@ def test_dasheng_int8_parity(tmp_path):
 
 
 @pytest.mark.slow
+@pytest.mark.no_data_root
 @_skip_no_wavjepa
 def test_wavjepa_int8_parity(tmp_path):
     torch.manual_seed(0)
