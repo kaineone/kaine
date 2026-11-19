@@ -878,7 +878,7 @@ async def test_welfare_response_poll_error_path_logs_every_unreadable_poll(caplo
             if any("poll crashed" in r.getMessage() for r in caplog.records):
                 break
         stop.set()
-        await task
+        _ = await task
         crashed = [r for r in caplog.records if "poll crashed" in r.getMessage()]
         assert crashed and crashed[0].exc_info[0] is WelfareSignalUnreadable
     finally:
@@ -950,7 +950,7 @@ async def test_welfare_response_run_writes_the_final_defect_record_at_stop() -> 
                 break
         assert len(_defect_records(mon)) == 1
         stop.set()
-        await task
+        _ = await task
         assert [r["own_error_fallbacks"] for r in _defect_records(mon)] == [1, 2]
     finally:
         await bus.close()

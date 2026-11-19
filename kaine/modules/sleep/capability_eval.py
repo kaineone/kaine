@@ -82,6 +82,7 @@ class CapabilityEval(Protocol):
 
     async def eval(self, model: Any, tokenizer: Any) -> float:
         """Protocol method."""
+        pass
 
 
 DEFAULT_PROBE_PATH = Path(__file__).parent / "eval_probes" / "default.jsonl"
