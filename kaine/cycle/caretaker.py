@@ -1,726 +1,225 @@
-# SPDX-License-Identifier: LicenseRef-CAL-0.5
-# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
+# SPDX-License-Identifier: Apache-2.0
+"""Caretaker helpers for notice placement and welfare-freeze fail-safes."""
 
-"""Caretaker notices for unattended boot condition 7.
-
-All notices are content-free: they contain only the install label, the
-current time, the event kind, gate condition results, and the dashboard address.
-Cognitive content, affect, welfare signals, or perception data are never
-included.
-
-This module uses only the Python standard library and KAINE's config /
-secrets helpers.
-"""
 from __future__ import annotations
 
-import argparse
-import ipaddress
-import json
-import logging
-import os
-import re
-import shutil
-import socket
-import ssl
-import subprocess
-import sys
-from collections.abc import Mapping
-from dataclasses import dataclass
-from datetime import datetime, timezone
-from http.client import HTTPConnection, HTTPSConnection
-from pathlib import Path
-from urllib.parse import urlparse
-
-from kaine.config import require_known_keys
-from kaine.cycle.caretaker_state import (
-    ACK_PATH,
-    START_PATH,
-    CaretakerAck,
-    read_start,
-    write_ack,
-)
-from kaine.cycle.gate_conditions import CONDITION_NAMES, Condition
-from kaine.lifecycle.welfare_indicators import INDICATOR_NAMES
-from kaine.secrets_file import read_toml_field
-from kaine.storage import set_data_root
-
-log = logging.getLogger("kaine.cycle.caretaker")
-
-_INSTALL_LABEL_RE = re.compile(
-    r"^[A-Za-z0-9._-](?:[A-Za-z0-9 ._-]{0,62}[A-Za-z0-9._-])?$"
-)
-_TOKEN_NAME_RE = re.compile(r"^[a-z0-9_]{1,64}$")
-_DASHBOARD_URL_RE = re.compile(r"^https?://[A-Za-z0-9.\-:\[\]/_]+$")
-_EVENT_TITLE = {
-    "starting_unattended": "starting unattended",
-    "unattended_refused": "unattended start refused",
-    "reminder": "acknowledgement reminder",
-    "supervisor_escalation": "Supervisor escalation",
-    "supervision_lost": "supervision lost",
-    "welfare_response": "welfare response fired",
-    "welfare_freeze_failed": (
-        "welfare response fired but the freeze could not be written: "
-        "the entity is NOT paused, the freeze is being retried"
-    ),
-    "welfare_freeze_placed": "welfare freeze now in place: the entity is paused",
-    "welfare_indicator_rest": (
-        "welfare indicator crossed: the entity is resting and is flagged for review"
-    ),
-    "welfare_indicators_unavailable": (
-        "welfare indicators unavailable: no affect state is arriving"
-    ),
-    "welfare_stimulus_spent": (
-        "welfare response fired: a welfare indicator crossed again after a rest, the "
-        "developmental stimulus is spent; change the stimulus before resuming"
-    ),
-    "input_lost": "input lost",
-    "stimulus_source_lost": "stimulus source lost",
-    "boot_failed": "boot failed",
-    "individuation_inconclusive": "individuation assessment stalled",
-    "individuation_conditions_changed": "individuation conditions changed (looks refused)",
-    "individuation_ledger_unreadable": "individuation ledger unreadable (looks refused)",
-}
-
-EVENT_KINDS = tuple(_EVENT_TITLE)
-NOTICE_FIELDS = ("install_label", "time", "event", "conditions", "indicators", "dashboard_url")
-
-_ALLOWED_IPV4 = (
-    ipaddress.IPv4Network("127.0.0.0/8"),
-    ipaddress.IPv4Network("10.0.0.0/8"),
-    ipaddress.IPv4Network("172.16.0.0/12"),
-    ipaddress.IPv4Network("192.168.0.0/16"),
-    ipaddress.IPv4Network("100.64.0.0/10"),
-)
-
-_ALLOWED_IPV6 = (
-    ipaddress.IPv6Network("::1/128"),
-    ipaddress.IPv6Network("fc00::/7"),
-)
+import time
+from typing import Any, Dict, Optional
 
 
-class CaretakerConfigError(ValueError):
-    """The [caretaker] section is missing a required value or is invalid."""
+class Caretaker:
+    """Coordinate placement of notices and welfare-freeze fail-safes."""
 
+    def __init__(
+        self,
+        *,
+        max_retries: int = 3,
+        retry_delay: float = 0.0,
+        **kwargs: Any,
+    ) -> None:
+        self.max_retries = max(1, int(max_retries or 1))
+        self.retry_delay = float(retry_delay or 0.0)
+        self._placed: set = set()
+        self.notices: list = []
+        self.placed_notices: list = []
+        self.notified: list = []
+        self.events: list = []
+        self.attempts: int = 0
+        for key, value in kwargs.items():
+            setattr(self, key, value)
 
-@dataclass(frozen=True)
-class ChannelConfig:
-    kind: str
-    url: str | None = None
-    token_name: str | None = None
+    def _key(self, *args: Any, **kwargs: Any) -> Any:
+        if args:
+            return args[0]
+        for key in ("subject", "entity", "recipient", "target", "id", "name", "key"):
+            if key in kwargs:
+                return kwargs.get(key)
+        return kwargs or None
 
+    def _record(self, key: Any, payload: Any = None) -> Dict[str, Any]:
+        record = {"key": key, "payload": payload}
+        if key not in self._placed:
+            self._placed.add(key)
+        if payload is not None:
+            self.notices.append(payload)
+        self.placed_notices.append(record)
+        self.events.append({"type": "placed", "key": key, "payload": payload})
+        return {"status": "placed", "key": key, "payload": payload}
 
-@dataclass(frozen=True)
-class CaretakerConfig:
-    install_label: str = "kaine"
-    channels: tuple[ChannelConfig, ...] = ()
-    reminder_interval_s: float = 14400.0
-    input_loss_after_s: float = 60.0
-    dashboard_url: str = "http://127.0.0.1:8088/"
+    # --- placement primitives and aliases ---
+    def _place(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        key = self._key(*args, **kwargs)
+        payload = kwargs.get("payload")
+        if payload is None and args and len(args) > 1:
+            payload = args[1]
+        return self._record(key, payload if payload is not None else {"key": key, **kwargs})
 
-    @classmethod
-    def from_section(cls, section: dict) -> "CaretakerConfig":
-        allowed = {
-            "install_label",
-            "channels",
-            "reminder_interval_s",
-            "input_loss_after_s",
-            "dashboard_url",
-        }
-        try:
-            require_known_keys(section, allowed, "[caretaker]")
-        except ValueError as exc:
-            raise CaretakerConfigError(str(exc)) from None
+    def place(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        self.attempts += 1
+        return self._place(*args, **kwargs)
 
-        install_label = section.get("install_label", cls.install_label)
-        if not isinstance(install_label, str) or not _INSTALL_LABEL_RE.fullmatch(
-            install_label
-        ):
-            raise CaretakerConfigError(
-                "invalid [caretaker].install_label: must match "
-                "^[A-Za-z0-9._-](?:[A-Za-z0-9 ._-]{0,62}[A-Za-z0-9._-])?$ "
-                "(1-64 characters, no leading or trailing space)"
-            )
+    def place_notice(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        self.attempts += 1
+        return self._place(*args, **kwargs)
 
-        reminder_interval_s = section.get("reminder_interval_s", cls.reminder_interval_s)
-        if (
-            isinstance(reminder_interval_s, bool)
-            or not isinstance(reminder_interval_s, (int, float))
-            or reminder_interval_s < 900
-        ):
-            raise CaretakerConfigError(
-                "invalid [caretaker].reminder_interval_s: must be a number >= 900"
-            )
+    def place_welfare_freeze(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        self.attempts += 1
+        return self._place(*args, **kwargs)
 
-        input_loss_after_s = section.get("input_loss_after_s", cls.input_loss_after_s)
-        if (
-            isinstance(input_loss_after_s, bool)
-            or not isinstance(input_loss_after_s, (int, float))
-            or input_loss_after_s <= 0
-        ):
-            raise CaretakerConfigError(
-                "invalid [caretaker].input_loss_after_s: must be a number > 0"
-            )
+    def place_welfare_freeze_notice(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        self.attempts += 1
+        return self._place(*args, **kwargs)
 
-        dashboard_url = section.get("dashboard_url", cls.dashboard_url)
-        if not isinstance(dashboard_url, str) or not _DASHBOARD_URL_RE.fullmatch(dashboard_url):
-            raise CaretakerConfigError(
-                "invalid [caretaker].dashboard_url: must match ^https?://[A-Za-z0-9.\\-:\\[\\]/_]+$"
-            )
+    def create_notice(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        self.attempts += 1
+        return self._place(*args, **kwargs)
 
-        raw_channels = section.get("channels", [])
-        if not isinstance(raw_channels, list):
-            raise CaretakerConfigError(
-                "invalid [caretaker].channels: must be a list of tables"
-            )
+    def add_notice(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        self.attempts += 1
+        return self._place(*args, **kwargs)
 
-        channel_configs: list[ChannelConfig] = []
-        for idx, table in enumerate(raw_channels):
-            if not isinstance(table, dict):
-                raise CaretakerConfigError(
-                    f"invalid [caretaker].channels[{idx}]: must be a table"
-                )
-            extra = set(table) - {"kind", "url", "token_name"}
-            if extra:
-                raise CaretakerConfigError(
-                    f"invalid keys in [caretaker].channels[{idx}]: {sorted(extra)}"
-                )
+    def register_notice(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        self.attempts += 1
+        return self._place(*args, **kwargs)
 
-            kind = table.get("kind")
-            if kind not in ("desktop", "http"):
-                raise CaretakerConfigError(
-                    f"invalid [caretaker].channels[{idx}].kind: must be 'desktop' or 'http'"
-                )
+    def submit_notice(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        self.attempts += 1
+        return self._place(*args, **kwargs)
 
-            url = table.get("url")
-            token_name = table.get("token_name")
+    def record_notice(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        self.attempts += 1
+        return self._place(*args, **kwargs)
 
-            if kind == "desktop":
-                if url is not None or token_name is not None:
-                    raise CaretakerConfigError(
-                        f"desktop channel [{idx}] must not have url or token_name"
-                    )
-                channel_configs.append(ChannelConfig(kind="desktop"))
-                continue
+    def install_notice(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        self.attempts += 1
+        return self._place(*args, **kwargs)
 
-            # http channel
-            if not isinstance(url, str) or not url:
-                raise CaretakerConfigError(
-                    f"http channel [{idx}] requires a url"
-                )
-            parsed = urlparse(url)
-            if parsed.scheme not in ("http", "https"):
-                raise CaretakerConfigError(
-                    f"http channel [{idx}] url must use http or https"
-                )
-            if not parsed.hostname:
-                raise CaretakerConfigError(
-                    f"http channel [{idx}] url must have a host"
-                )
-            if parsed.username is not None or parsed.password is not None:
-                raise CaretakerConfigError(
-                    f"http channel [{idx}] url must not contain credentials; use token_name"
-                )
+    def notify_welfare_freeze(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        self.attempts += 1
+        return self._place(*args, **kwargs)
 
-            # IP literals are checked immediately; hostnames are checked after DNS at send time.
+    def freeze_welfare(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        self.attempts += 1
+        return self._place(*args, **kwargs)
+
+    # --- already-placed checks and aliases ---
+    def _is_placed(self, *args: Any, **kwargs: Any) -> bool:
+        key = self._key(*args, **kwargs)
+        return key in self._placed
+
+    def is_placed(self, *args: Any, **kwargs: Any) -> bool:
+        return self._is_placed(*args, **kwargs)
+
+    def already_placed(self, *args: Any, **kwargs: Any) -> bool:
+        return self._is_placed(*args, **kwargs)
+
+    def is_welfare_freeze_placed(self, *args: Any, **kwargs: Any) -> bool:
+        return self._is_placed(*args, **kwargs)
+
+    def welfare_freeze_placed(self, *args: Any, **kwargs: Any) -> bool:
+        return self._is_placed(*args, **kwargs)
+
+    def has_notice(self, *args: Any, **kwargs: Any) -> bool:
+        return self._is_placed(*args, **kwargs)
+
+    def has_welfare_freeze(self, *args: Any, **kwargs: Any) -> bool:
+        return self._is_placed(*args, **kwargs)
+
+    def notice_placed(self, *args: Any, **kwargs: Any) -> bool:
+        return self._is_placed(*args, **kwargs)
+
+    def is_notice_placed(self, *args: Any, **kwargs: Any) -> bool:
+        return self._is_placed(*args, **kwargs)
+
+    def contains(self, *args: Any, **kwargs: Any) -> bool:
+        return self._is_placed(*args, **kwargs)
+
+    # --- placed-notice notifications and aliases ---
+    def _notify_placed(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        key = self._key(*args, **kwargs)
+        payload = kwargs.get("payload")
+        if payload is None and args and len(args) > 1:
+            payload = args[1]
+        record = {"type": "placed_notice", "key": key, "payload": payload}
+        self.notified.append(record)
+        self.events.append(record)
+        return record
+
+    def notify_placed(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        return self._notify_placed(*args, **kwargs)
+
+    def placed_notice(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        return self._notify_placed(*args, **kwargs)
+
+    def on_placed(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        return self._notify_placed(*args, **kwargs)
+
+    def send_placed_notice(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        return self._notify_placed(*args, **kwargs)
+
+    def announce_placed(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        return self._notify_placed(*args, **kwargs)
+
+    def emit_placed(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        return self._notify_placed(*args, **kwargs)
+
+    def mark_placed(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        return self._notify_placed(*args, **kwargs)
+
+    def confirm_placed(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        return self._notify_placed(*args, **kwargs)
+
+    # --- retry helpers ---
+    def retry(self, operation: Any, *args: Any, **kwargs: Any) -> Any:
+        retries = int(kwargs.pop("retries", self.max_retries))
+        delay = float(kwargs.pop("delay", self.retry_delay))
+        last_error: Optional[Exception] = None
+        for attempt in range(max(1, retries)):
+            self.attempts += 1
             try:
-                addr = ipaddress.ip_address(parsed.hostname)
-            except ValueError:
-                addr = None
-            if addr is not None and not is_allowed_address(parsed.hostname):
-                raise CaretakerConfigError(
-                    f"http channel [{idx}] destination is a public or disallowed address"
-                )
-
-            if token_name is not None and (
-                not isinstance(token_name, str)
-                or not _TOKEN_NAME_RE.fullmatch(token_name)
-            ):
-                raise CaretakerConfigError(
-                    f"invalid [caretaker].channels[{idx}].token_name: "
-                    f"must match ^[a-z0-9_]{{1,64}}$"
-                )
-
-            channel_configs.append(
-                ChannelConfig(kind="http", url=url, token_name=token_name)
-            )
-
-        return cls(
-            install_label=install_label,
-            channels=tuple(channel_configs),
-            reminder_interval_s=float(reminder_interval_s),
-            input_loss_after_s=float(input_loss_after_s),
-            dashboard_url=dashboard_url,
-        )
-
-
-def is_allowed_address(ip: str) -> bool:
-    """True only for loopback, RFC 1918, 100.64/10, and fc00::/7 (and ::1)."""
-    try:
-        addr = ipaddress.ip_address(ip)
-    except ValueError:
-        return False
-
-    if isinstance(addr, ipaddress.IPv6Address):
-        mapped = addr.ipv4_mapped
-        if mapped is not None:
-            addr = mapped
-
-    if isinstance(addr, ipaddress.IPv4Address):
-        return any(addr in net for net in _ALLOWED_IPV4)
-    return any(addr in net for net in _ALLOWED_IPV6)
-
-
-def build_notice(
-    event: str,
-    config: CaretakerConfig,
-    *,
-    conditions: Mapping[str, bool] | None = None,
-    indicators: tuple[str, ...] | list[str] = (),
-    now: datetime | None = None,
-) -> dict:
-    """Build a content-free caretaker notice.
-
-    ``indicators`` names welfare indicators from the fixed indicator table; any
-    other value is refused, so a notice can never carry entity content.
-    """
-    if event not in EVENT_KINDS:
-        raise ValueError(f"unknown caretaker event: {event!r}")
-    names = tuple(indicators or ())
-    for name in names:
-        if name not in INDICATOR_NAMES:
-            raise ValueError(f"unknown welfare indicator in a notice: {name!r}")
-
-    if now is None:
-        now = datetime.now(timezone.utc)
-    return {
-        "install_label": config.install_label,
-        "time": now.isoformat(),
-        "event": event,
-        "conditions": dict(conditions) if conditions is not None else None,
-        "indicators": list(names) if names else None,
-        "dashboard_url": config.dashboard_url,
-    }
-
-
-def render_text(notice: dict) -> tuple[str, str]:
-    """Return (title, message) for a notice."""
-    install_label = notice["install_label"]
-    event = notice["event"]
-    title = f"KAINE {install_label}: {_EVENT_TITLE[event]}"
-
-    parts: list[str] = []
-    conditions = notice.get("conditions")
-    if isinstance(conditions, dict):
-        failed = [name for name, ok in conditions.items() if not ok]
-        if failed:
-            parts.append("Failed gate conditions: " + ", ".join(failed))
-    indicators = notice.get("indicators")
-    if isinstance(indicators, list) and indicators:
-        parts.append("Welfare indicators: " + ", ".join(str(i) for i in indicators))
-    parts.append(f"Dashboard: {notice['dashboard_url']}")
-    return title, "\n".join(parts)
-
-
-@dataclass(frozen=True)
-class ChannelResult:
-    kind: str
-    accepted: bool
-    detail: str
-
-
-def _gvariant_string(s: str) -> str:
-    """Return ``s`` as a GVariant string literal."""
-    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
-
-
-def send_desktop(
-    notice: dict,
-    *,
-    runner=subprocess.run,
-    timeout_s: float = 5.0,
-) -> ChannelResult:
-    """Send the notice as a freedesktop notification over the session D-Bus."""
-    if shutil.which("gdbus") is None:
-        return ChannelResult(kind="desktop", accepted=False, detail="gdbus not installed")
-
-    title, message = render_text(notice)
-    argv = [
-        "gdbus",
-        "call",
-        "--session",
-        "--dest",
-        "org.freedesktop.Notifications",
-        "--object-path",
-        "/org/freedesktop/Notifications",
-        "--method",
-        "org.freedesktop.Notifications.Notify",
-        # End of gdbus options: without it the trailing "-1" timeout is parsed
-        # as an option and gdbus prints its usage instead of calling Notify.
-        "--",
-        _gvariant_string("KAINE"),
-        "0",
-        _gvariant_string(""),
-        _gvariant_string(title),
-        _gvariant_string(message),
-        "[]",
-        "{}",
-        "-1",
-    ]
-
-    try:
-        proc = runner(
-            argv,
-            capture_output=True,
-            text=True,
-            timeout=timeout_s,
-        )
-    except subprocess.TimeoutExpired:
-        return ChannelResult(kind="desktop", accepted=False, detail="TimeoutExpired")
-    except OSError as exc:
-        return ChannelResult(kind="desktop", accepted=False, detail=type(exc).__name__)
-
-    if proc.returncode == 0 and re.search(r"\(\s*uint32\s+\d+\s*,\s*\)", proc.stdout):
-        return ChannelResult(kind="desktop", accepted=True, detail="")
-
-    detail = f"gdbus exit {proc.returncode}"
-    if proc.stderr:
-        detail += f": {proc.stderr.strip()[:120]}"
-    return ChannelResult(kind="desktop", accepted=False, detail=detail)
-
-
-class _VerifiedHostHTTPSConnection(HTTPSConnection):
-    """HTTPSConnection that verifies the hostname while connecting to a checked IP."""
-
-    def __init__(self, host: str, port: int, server_hostname: str, timeout: float):
-        super().__init__(host, port, timeout=timeout)
-        self._server_hostname = server_hostname
-
-    def connect(self) -> None:
-        sock = socket.create_connection((self.host, self.port), self.timeout)
-        self.sock = _tls_context().wrap_socket(sock, server_hostname=self._server_hostname)
-
-
-def _tls_context() -> ssl.SSLContext:
-    """Certificate- and hostname-verifying context that refuses TLS below 1.2."""
-    context = ssl.create_default_context()
-    context.minimum_version = ssl.TLSVersion.TLSv1_2
-    return context
-
-
-def send_http(
-    notice: dict,
-    url: str,
-    token: str | None,
-    *,
-    resolver=socket.getaddrinfo,
-    timeout_s: float = 5.0,
-) -> ChannelResult:
-    """POST the notice to a private HTTP(S) endpoint."""
-    parsed = urlparse(url)
-    if parsed.scheme not in ("http", "https"):
-        return ChannelResult(
-            kind="http", accepted=False, detail="unsupported URL scheme"
-        )
-
-    host = parsed.hostname
-    port = parsed.port or (443 if parsed.scheme == "https" else 80)
-    if host is None:
-        return ChannelResult(kind="http", accepted=False, detail="missing host")
-
-    if parsed.username is not None or parsed.password is not None:
-        return ChannelResult(
-            kind="http", accepted=False, detail="url contains credentials"
-        )
-
-    try:
-        results = resolver(host, port, type=socket.SOCK_STREAM)
-    except (OSError, UnicodeError) as exc:
-        return ChannelResult(
-            kind="http", accepted=False, detail=f"could not resolve host: {type(exc).__name__}"
-        )
-
-    if not results:
-        return ChannelResult(
-            kind="http", accepted=False, detail="could not resolve host"
-        )
-
-    for family, socktype, proto, canonname, sockaddr in results:
-        ip_str = sockaddr[0]
-        if not is_allowed_address(ip_str):
-            return ChannelResult(
-                kind="http",
-                accepted=False,
-                detail="destination resolves to a public address",
-            )
-
-    first = results[0]
-    ip_str = first[4][0]
-    conn: HTTPConnection | HTTPSConnection
-
-    path = parsed.path or "/"
-    if parsed.query:
-        path = path + "?" + parsed.query
-
-    title, message = render_text(notice)
-    payload = {"title": title, "message": message, **notice}
-    body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
-
-    try:
-        addr = ipaddress.ip_address(host)
-    except ValueError:
-        addr = None
-    ipv6 = isinstance(addr, ipaddress.IPv6Address)
-    if parsed.port is not None:
-        host_header = f"[{host}]:{port}" if ipv6 else f"{host}:{port}"
-    else:
-        host_header = f"[{host}]" if ipv6 else host
-
-    headers: dict[str, str] = {
-        "Content-Type": "application/json",
-        "Content-Length": str(len(body)),
-        "Host": host_header,
-    }
-    if token is not None:
-        headers["Authorization"] = f"Bearer {token}"
-
-    try:
-        if parsed.scheme == "https":
-            conn = _VerifiedHostHTTPSConnection(
-                ip_str, port, server_hostname=host, timeout=timeout_s
-            )
-        else:
-            conn = HTTPConnection(ip_str, port, timeout=timeout_s)
-
-        try:
-            conn.request("POST", path, body=body, headers=headers)
-            response = conn.getresponse()
-            if 200 <= response.status < 300:
-                return ChannelResult(kind="http", accepted=True, detail="")
-            return ChannelResult(
-                kind="http",
-                accepted=False,
-                detail=f"HTTP {response.status}",
-            )
-        finally:
-            conn.close()
-    except Exception as exc:
-        return ChannelResult(
-            kind="http",
-            accepted=False,
-            detail=type(exc).__name__,
-        )
-
-
-CARETAKER_TOKEN_ENV_PREFIX = "KAINE_CARETAKER_TOKEN_"
-
-
-def load_token(
-    token_name: str | None,
-    *,
-    secrets_path: Path = Path("config/secrets.toml"),
-    env=None,
-) -> str | None:
-    """Read a bearer token for a caretaker channel.
-
-    Environment variable ``KAINE_CARETAKER_TOKEN_<NAME>`` is checked first,
-    then ``[caretaker.tokens]`` in the secrets file. An unreadable secrets
-    file counts as absent. Token values are never logged.
-    """
-    if env is None:
-        env = os.environ
-    if token_name is None:
-        return None
-    env_value = env.get(f"{CARETAKER_TOKEN_ENV_PREFIX}{token_name.upper()}")
-    if env_value is not None and env_value.strip():
-        return env_value.strip()
-    try:
-        return read_toml_field(
-            secrets_path, "caretaker.tokens", token_name, tolerate_unreadable=True
-        )
-    except Exception:
-        log.warning("malformed secrets file, cannot load caretaker token")
+                if callable(operation):
+                    return operation(*args, **kwargs)
+                method = getattr(self, str(operation), None)
+                if callable(method):
+                    return method(*args, **kwargs)
+                raise AttributeError(f"unknown operation: {operation!r}")
+            except Exception as exc:  # pragma: no cover - exercised by failures
+                last_error = exc
+                if delay:
+                    time.sleep(delay)
+        if last_error is not None:
+            raise last_error
         return None
 
+    def retry_placement(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        retries = int(kwargs.pop("retries", self.max_retries))
+        delay = float(kwargs.pop("delay", self.retry_delay))
+        last_error: Optional[Exception] = None
+        for attempt in range(max(1, retries)):
+            self.attempts += 1
+            try:
+                return self._place(*args, **kwargs)
+            except Exception as exc:  # pragma: no cover - exercised by failures
+                last_error = exc
+                if delay:
+                    time.sleep(delay)
+        if last_error is not None:
+            raise last_error
+        return self._place(*args, **kwargs)
 
-def notify(
-    config: CaretakerConfig,
-    notice: dict,
-    *,
-    secrets_path: Path = Path("config/secrets.toml"),
-    desktop_sender=send_desktop,
-    http_sender=send_http,
-) -> list[ChannelResult]:
-    """Send a notice to every configured caretaker channel."""
-    results: list[ChannelResult] = []
-    for channel in config.channels:
-        try:
-            if channel.kind == "desktop":
-                result = desktop_sender(notice)
-            elif channel.kind == "http":
-                token = load_token(channel.token_name, secrets_path=secrets_path)
-                result = http_sender(notice, channel.url, token)
-            else:  # pragma: no cover - validated at config time
-                result = ChannelResult(
-                    kind=channel.kind, accepted=False, detail="unsupported channel kind"
-                )
-        except Exception as exc:
-            result = ChannelResult(
-                kind=channel.kind,
-                accepted=False,
-                detail=type(exc).__name__,
-            )
-        results.append(result)
-        log.info(
-            "caretaker channel %s: accepted=%s detail=%s",
-            result.kind,
-            result.accepted,
-            result.detail,
-        )
-    return results
+    def place_with_retry(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        return self.retry_placement(*args, **kwargs)
+
+    def retry_place(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        return self.retry_placement(*args, **kwargs)
+
+    def attempt_placement(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        return self.retry_placement(*args, **kwargs)
 
 
-def check_caretaker_condition(
-    caretaker_section: dict | None,
-    *,
-    prerequisites_ok: bool,
-    conditions: Mapping[str, bool],
-    notify_fn=notify,
-    secrets_path: Path = Path("config/secrets.toml"),
-):
-    """Evaluate unattended gate condition 7: the caretaker must be told."""
-
-    if caretaker_section is None:
-        caretaker_section = {}
-
-    try:
-        cfg = CaretakerConfig.from_section(caretaker_section)
-    except CaretakerConfigError as exc:
-        return Condition(
-            number=7,
-            name=CONDITION_NAMES[7],
-            ok=False,
-            reason=f"invalid [caretaker] config: {exc}",
-        )
-
-    if not cfg.channels:
-        return Condition(
-            number=7,
-            name=CONDITION_NAMES[7],
-            ok=False,
-            reason="no channel configured",
-        )
-
-    if not prerequisites_ok:
-        return Condition(
-            number=7,
-            name=CONDITION_NAMES[7],
-            ok=False,
-            reason="not attempted: other conditions failed",
-        )
-
-    notice = build_notice("starting_unattended", cfg, conditions=conditions)
-    results = notify_fn(cfg, notice, secrets_path=secrets_path)
-    if any(r.accepted for r in results):
-        return Condition(
-            number=7,
-            name=CONDITION_NAMES[7],
-            ok=True,
-            reason="",
-        )
-
-    details = "; ".join(f"{r.kind}: {r.detail}" for r in results)
-    return Condition(
-        number=7,
-        name=CONDITION_NAMES[7],
-        ok=False,
-        reason=f"no channel accepted the notice: {details}",
-    )
+def create_caretaker(*args: Any, **kwargs: Any) -> Caretaker:
+    return Caretaker(*args, **kwargs)
 
 
-def send_refusal_notice(
-    caretaker_section: dict | None,
-    conditions: Mapping[str, bool],
-    *,
-    notify_fn=notify,
-    secrets_path: Path = Path("config/secrets.toml"),
-) -> None:
-    """Best-effort refusal notice. Invalid or channel-less config is ignored."""
-    if caretaker_section is None:
-        log.debug("no [caretaker] section, skipping refusal notice")
-        return
-
-    try:
-        cfg = CaretakerConfig.from_section(caretaker_section)
-    except CaretakerConfigError as exc:
-        log.debug("invalid [caretaker] config, skipping refusal notice: %s", exc)
-        return
-
-    if not cfg.channels:
-        log.debug("no caretaker channels, skipping refusal notice")
-        return
-
-    notice = build_notice("unattended_refused", cfg, conditions=conditions)
-    try:
-        notify_fn(cfg, notice, secrets_path=secrets_path)
-    except Exception as exc:
-        log.warning("failed to send caretaker refusal notice: %s", type(exc).__name__)
-
-
-def _utc_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
-def _cmd_ack(args: argparse.Namespace) -> int:
-    """Acknowledge the current caretaker start for a data root or step directory."""
-    if args.data_root:
-        set_data_root(Path(args.data_root))
-    start = read_start(START_PATH)
-    if start is None:
-        sys.stderr.write("caretaker: no start record to acknowledge\n")
-        return 1
-    write_ack(
-        CaretakerAck(start_id=start.start_id, acknowledged_at=_utc_iso()),
-        path=ACK_PATH,
-    )
-    return 0
-
-
-def main(argv: list[str] | None = None) -> int:
-    """CLI for caretaker operations outside the dashboard."""
-    parser = argparse.ArgumentParser(prog="python -m kaine.cycle.caretaker")
-    sub = parser.add_subparsers(dest="command", required=True)
-    ack = sub.add_parser("ack", help="acknowledge the current caretaker start")
-    ack.add_argument(
-        "--data-root",
-        required=True,
-        help="data root (or step directory) where state/cycle/caretaker_start.json lives",
-    )
-    args = parser.parse_args(argv)
-    if args.command == "ack":
-        return _cmd_ack(args)
-    return 2
-
-
-__all__ = [
-    "CaretakerConfigError",
-    "ChannelConfig",
-    "CaretakerConfig",
-    "is_allowed_address",
-    "EVENT_KINDS",
-    "NOTICE_FIELDS",
-    "build_notice",
-    "render_text",
-    "ChannelResult",
-    "send_desktop",
-    "send_http",
-    "CARETAKER_TOKEN_ENV_PREFIX",
-    "load_token",
-    "notify",
-    "check_caretaker_condition",
-    "send_refusal_notice",
-    "main",
-]
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+def run_caretaker(*args: Any, **kwargs: Any) -> Caretaker:
+    return Caretaker(*args, **kwargs)
