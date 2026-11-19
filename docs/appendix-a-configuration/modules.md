@@ -444,7 +444,7 @@ The language module is the language organ. It calls a local OpenAI-compatible mo
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `chat_url` | string | `"http://127.0.0.1:11434/v1"` | Base URL of the model server. The client posts to `/v1/chat/completions`. |
-| `model_id` | string | `"kaineone/Qwen3.5-4B-abliterated-GGUF"` | Served alias of the published KAINE organ. It must match a model the server serves. |
+| `model_id` | string | `"kaineone/Qwen3.5-4B-abliterated-GGUF:latest"` | Served alias of the published KAINE organ. It must match a model the server serves. |
 | `temperature` | float | `0.7` | Sampling temperature. Ordinary boots, including the `first_configuration` profile, sample at `0.7`. The study configurations (`config/studies/workspace_mediation_*.toml` and the module-addition study's overlay) set `0.0` (greedy decoding), so the organ's output is a deterministic function of its input. |
 | `max_tokens` | integer | `512` | Maximum tokens of a speak intent, and of a think intent when `think_max_tokens` is unset. |
 | `think_max_tokens` | integer | `128` (unset when absent: `max_tokens`) | Maximum tokens of a think intent; inner speech is often condensed (paper 3.5). |
@@ -725,7 +725,7 @@ Section: `[embodiment.control_surface]`.
 
 ## Perceptual locus
 
-Section: `[perception]`.
+Section: `[perceptual_locus]`.
 
 The perceptual locus arbiter gates physical versus virtual senses. Enabled via `[modules].perceptual_locus = true`. When the entity is embodied in a virtual world its physical camera and microphone are inhibited, and vice-versa.
 

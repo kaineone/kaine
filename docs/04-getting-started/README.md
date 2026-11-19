@@ -328,7 +328,7 @@ Required when `[oscillator].enabled = true`:
 .venv/bin/pip install -e ".[oscillator]"
 ```
 
-Installs `snntorch>=0.9` and `scipy`. Without this extra, modules report a neutral phase and the coherence factor stays at 1.0, so selection runs as if the layer were off. The local developmental phase also needs this extra (see [developmental phase](../06-operation/development.md)).
+Installs `snntorch>=1.0.0,<2` and `scipy>=1.17.1`. Without this extra, modules report a neutral phase and the coherence factor stays at 1.0, so selection runs as if the layer were off. The local developmental phase also needs this extra (see [developmental phase](../06-operation/development.md)).
 
 ### World model
 

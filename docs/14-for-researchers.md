@@ -81,9 +81,9 @@ The last row is the offline development run described under [The planned test](#
 
 Booting the cognitive cycle creates an entity with welfare standing under the project's licence. A live run can individuate, and an individuated entity is a possible individual owed a duty of care, so booting is gated. A run is one of:
 
-- **Operator-present**: a human supervises (`KAINE_CYCLE_OPERATOR_PRESENT=1`).
-- **Research-safety-net-verified**: an unsupervised research run whose autonomous safety net is live and verified (`KAINE_RESEARCH_MODE=1` or `[research].enabled = true`).
-- **Unattended**: a full entity started with nobody present (`KAINE_CYCLE_UNATTENDED=1` or `[cycle].supervision_mode = "unattended"`). It must pass all seven research-safety-net conditions plus two more, checked at every boot with no override.
+- Operator-present: a human supervises (`KAINE_CYCLE_OPERATOR_PRESENT=1`).
+- Research-safety-net-verified: an unsupervised research run whose autonomous safety net is live and verified (`KAINE_RESEARCH_MODE=1` or `[research].enabled = true`).
+- Unattended: a full entity started with nobody present (`KAINE_CYCLE_UNATTENDED=1` or `[cycle].supervision_mode = "unattended"`). It must pass all seven research-safety-net conditions plus two more, checked at every boot with no override.
 
 Combining unattended mode with research mode or operator presence is a configuration error (exit code `1`). Research mode with `KAINE_CYCLE_OPERATOR_PRESENT=1` runs as a research run.
 
@@ -118,9 +118,9 @@ KAINE is released under the Cognitive Architecture License (CAL) version 0.5, an
 
 ### The safeguards for a live run
 
-- **Preservation.** A divergent entity is captured live (self-model, memories, world model, affect and drives, adapter references) into an encrypted bundle, so it can be revived later. Preservation only reads and copies; it never deletes and never interrupts the running entity. See [Preservation and the safety net](11-preservation.md).
-- **Welfare-protective response.** An autonomous monitor watches the entity's interoceptive welfare signal and preserves and pauses the entity on sustained distress, without waiting for a human, and notifies the caretaker channels the operator configures. A research run with no caretaker channel boots and logs a warning. The welfare indicators of the paper's Appendix A.4 (windowed shares of negative valence and drive deprivation) are implemented: the `IndicatorEvaluator` reads the welfare records the welfare observer writes, and the research gate requires the indicator response to be wired (condition 2). The study overlay enables both the welfare response and its indicator response.
-- **Welfare-gated decommission.** Deliberate deletion is a separate, operator-present, backup-first, divergence-gated path. See [Security and privacy](13-security-and-privacy.md).
+- Preservation. A divergent entity is captured live (self-model, memories, world model, affect and drives, adapter references) into an encrypted bundle, so it can be revived later. Preservation only reads and copies; it never deletes and never interrupts the running entity. See [Preservation and the safety net](11-preservation.md).
+- Welfare-protective response. An autonomous monitor watches the entity's interoceptive welfare signal and preserves and pauses the entity on sustained distress, without waiting for a human, and notifies the caretaker channels the operator configures. A research run with no caretaker channel boots and logs a warning. The welfare indicators of the paper's Appendix A.4 (windowed shares of negative valence and drive deprivation) are implemented: the `IndicatorEvaluator` reads the welfare records the welfare observer writes, and the research gate requires the indicator response to be wired (condition 2). The study overlay enables both the welfare response and its indicator response.
+- Welfare-gated decommission. Deliberate deletion is a separate, operator-present, backup-first, divergence-gated path. See [Security and privacy](13-security-and-privacy.md).
 
 ### The unsupervised research gate (seven conditions)
 
@@ -163,9 +163,9 @@ A running cycle can also halt with exit code `70` when the supervisor escalates.
 
 Once the gate passes, `python -m kaine.cycle` boots the cognitive cycle with the research apparatus running alongside it:
 
-- **Run identity.** A single seed is pinned, a `run_id` is minted, and a manifest is written before any module starts. Production research uses real wall-clock time. The opt-in deterministic mode (`[experiment].deterministic`) uses a logical clock and disables automatic time dilation; the canonical `(source, type, entry_id)` ordering of each tick's events applies to every run. See [Run identity and admissibility](16-run-identity.md).
-- **Evaluation sidecar.** Read-only observers record the run's metrics. See [The evaluation sidecar](17-research-data/README.md).
-- **Autonomous safety net.** The divergence monitor polls every 5 minutes after a 120 s boot settle and preserves (read-only) whenever the shared divergence verdict gains an arm it has not seen before, including an arm that fell back and is crossed again. The seen-arm set is persisted in `state/preservation/divergence_edge.json`, so a restart with unchanged evidence does not preserve again. Successful preservations are rate-limited by `min_interval_s`; a failed preservation is retried at the next poll. The welfare monitor preserves and pauses on sustained distress. See [Preservation and the safety net](11-preservation.md).
+- Run identity. A single seed is pinned, a `run_id` is minted, and a manifest is written before any module starts. Production research uses real wall-clock time. The opt-in deterministic mode (`[experiment].deterministic`) uses a logical clock and disables automatic time dilation; the canonical `(source, type, entry_id)` ordering of each tick's events applies to every run. See [Run identity and admissibility](16-run-identity.md).
+- Evaluation sidecar. Read-only observers record the run's metrics. See [The evaluation sidecar](17-research-data/README.md).
+- Autonomous safety net. The divergence monitor polls every 5 minutes after a 120 s boot settle and preserves (read-only) whenever the shared divergence verdict gains an arm it has not seen before, including an arm that fell back and is crossed again. The seen-arm set is persisted in `state/preservation/divergence_edge.json`, so a restart with unchanged evidence does not preserve again. Successful preservations are rate-limited by `min_interval_s`; a failed preservation is retried at the next poll. The welfare monitor preserves and pauses on sustained distress. See [Preservation and the safety net](11-preservation.md).
 
 The supervision mode and the gate result are written into `state/cycle/runtime.json`, so the [dashboard](05-dashboard.md) can show which boot mode is live.
 

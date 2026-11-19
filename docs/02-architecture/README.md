@@ -250,9 +250,9 @@ Every module is disabled in the committed `config/kaine.toml` (`[modules]` secti
 
 A run is operator-supervised, research-safety-net-verified, or an opt-in unattended start:
 
-- **Operator-supervised.** The entrypoint requires `KAINE_CYCLE_OPERATOR_PRESENT=1` before starting the cycle.
-- **Research mode.** A research run is unsupervised by design, because a human watching would make it non-reproducible. Selecting it (`KAINE_RESEARCH_MODE=1` or `[research].enabled`) replaces the operator-present requirement with a gate that refuses to start unless seven conditions hold: preservation enabled, the welfare and indicator responses wired (sustained-distress response and the A.4 welfare indicators), logging active, a passing preflight dry preserve-and-revive self-check, encryption satisfied (either `[preservation].require_encryption` is false or `[security.state_encryption].enabled` is true), the module supervisor armed and self-tested, and the individuation producer enabled (which needs the `language` module). When encryption is enabled, `install_state_encryption` separately enforces that a key of the right length is present. The study overlay enables the supervisor, the welfare response and the indicator response, so every study step satisfies those conditions regardless of the operator's settings.
-- **Unattended (opt-in).** `KAINE_CYCLE_UNATTENDED=1` or `[cycle].supervision_mode = "unattended"` starts a full entity with nobody present. It must pass all seven research-net conditions plus a content-free caretaker notice accepted by a local channel, and a continuous-input probe (`kaine/cycle/unattended_gate.py`) at every start, with no override (exit code `6` otherwise). An opt-in quadlet unit can start it at boot.
+- Operator-supervised. The entrypoint requires `KAINE_CYCLE_OPERATOR_PRESENT=1` before starting the cycle.
+- Research mode. A research run is unsupervised by design, because a human watching would make it non-reproducible. Selecting it (`KAINE_RESEARCH_MODE=1` or `[research].enabled`) replaces the operator-present requirement with a gate that refuses to start unless seven conditions hold: preservation enabled, the welfare and indicator responses wired (sustained-distress response and the A.4 welfare indicators), logging active, a passing preflight dry preserve-and-revive self-check, encryption satisfied (either `[preservation].require_encryption` is false or `[security.state_encryption].enabled` is true), the module supervisor armed and self-tested, and the individuation producer enabled (which needs the `language` module). When encryption is enabled, `install_state_encryption` separately enforces that a key of the right length is present. The study overlay enables the supervisor, the welfare response and the indicator response, so every study step satisfies those conditions regardless of the operator's settings.
+- Unattended (opt-in). `KAINE_CYCLE_UNATTENDED=1` or `[cycle].supervision_mode = "unattended"` starts a full entity with nobody present. It must pass all seven research-net conditions plus a content-free caretaker notice accepted by a local channel, and a continuous-input probe (`kaine/cycle/unattended_gate.py`) at every start, with no override (exit code `6` otherwise). An opt-in quadlet unit can start it at boot.
 
 See [Day-to-day operation](../06-operation/README.md), [Preservation and the safety net](../11-preservation.md) and [For researchers](../14-for-researchers.md).
 
@@ -260,8 +260,8 @@ See [Day-to-day operation](../06-operation/README.md), [Preservation and the saf
 
 Two held modules can use JAX, and each has a NumPy engine for hosts without it:
 
-- **Planning** (`kaine/modules/planning/`): pymdp under `[planning].backend = "pymdp"`, or a pure-NumPy engine under `"numpy"`.
-- **World model** (`kaine/modules/world_model/`): the DreamerV3 RSSM world model; `[world_model].engine` selects `"jax"` or `"numpy"`.
+- Planning (`kaine/modules/planning/`): pymdp under `[planning].backend = "pymdp"`, or a pure-NumPy engine under `"numpy"`.
+- World model (`kaine/modules/world_model/`): the DreamerV3 RSSM world model; `[world_model].engine` selects `"jax"` or `"numpy"`.
 
 Both use CPU-only JAX when JAX is selected. GPU acceleration is operator-configured.
 

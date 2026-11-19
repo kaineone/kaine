@@ -76,9 +76,9 @@ Some observers populate on a schedule instead of every tick. `memory_probes` run
 
 ### `CoherenceObserver`
 
-- **Stream:** `workspace.broadcast`
-- **Toggle:** `[evaluation.observers].coherence`
-- **Output:** `data/evaluation/coherence/coherence-<YYYY-MM-DD>.jsonl`
+- Stream: `workspace.broadcast`
+- Toggle: `[evaluation.observers].coherence`
+- Output: `data/evaluation/coherence/coherence-<YYYY-MM-DD>.jsonl`
 
 Reads `payload.metadata['coherence']` from each broadcast. Writes one entry per broadcast when the oscillatory layer is enabled:
 
@@ -95,26 +95,26 @@ When the oscillatory layer is disabled or `metadata['coherence']` is absent the 
 
 ### `ReplayObserver`
 
-- **Streams:** `episodic_memory.out` (event type `episodic_memory.replay`) and `world_model.out` (event type `world_model.scenario`)
-- **Toggle:** `[evaluation.observers].replay`
-- **Privacy:** `[evaluation.observers].replay_redact_content` (default `true`)
-- **Output:** `data/evaluation/replay/replay-<YYYY-MM-DD>.jsonl`
+- Streams: `episodic_memory.out` (event type `episodic_memory.replay`) and `world_model.out` (event type `world_model.scenario`)
+- Toggle: `[evaluation.observers].replay`
+- Privacy: `[evaluation.observers].replay_redact_content` (default `true`)
+- Output: `data/evaluation/replay/replay-<YYYY-MM-DD>.jsonl`
 
 A composite observer running one sub-observer per stream. It logs memory IDs from `episodic_memory.replay` events and scenario descriptors from `world_model.scenario` events. When `replay_redact_content = true` (the default), the `text` field is dropped and the memory IDs and metadata (affect, timestamps, scenario descriptors) are kept. When it is `false`, the memory text is logged too, so content logging needs an explicit opt-in by the operator or Guardian.
 
 ### `SocialCognitionObserver`
 
-- **Streams:** `social_cognition.out` (`social_cognition.agent_model` predictions) and `audition.out` (`audition.emotion` / `audition.transcription` for agent-model pairing)
-- **Toggle:** `[evaluation.observers].social_cognition`
-- **Output:** `data/evaluation/social_cognition/social-cognition-<YYYY-MM-DD>.jsonl`
+- Streams: `social_cognition.out` (`social_cognition.agent_model` predictions) and `audition.out` (`audition.emotion` / `audition.transcription` for agent-model pairing)
+- Toggle: `[evaluation.observers].social_cognition`
+- Output: `data/evaluation/social_cognition/social-cognition-<YYYY-MM-DD>.jsonl`
 
 Logs agent-model accuracy events from the social cognition module: how well the entity's model of another agent predicted that agent's behavior. It pairs each `social_cognition.agent_model` prediction (keyed by `agent_id`) with the next `audition.out` emotion event and scores `accuracy = 1.0 - |predicted_reliability - observed_confidence|`.
 
 ### `VoiceAlignmentDivergenceObserver`
 
-- **Stream:** `sleep.out` (filters `sleep.sleep.completed`)
-- **Toggle:** `[evaluation.observers].voice_alignment_divergence`
-- **Output:** `data/evaluation/voice_alignment_divergence/voice_alignment_divergence-<YYYY-MM-DD>.jsonl`
+- Stream: `sleep.out` (filters `sleep.sleep.completed`)
+- Toggle: `[evaluation.observers].voice_alignment_divergence`
+- Output: `data/evaluation/voice_alignment_divergence/voice_alignment_divergence-<YYYY-MM-DD>.jsonl`
 
 Writes one record per sleep in which the voice-alignment phase ran. The outcome comes from the event's `voice_alignment` sub-dict: `adapter_accepted`, `capability_loss`, `samples_used`, and `outcome`, one of `accepted`, `no_pairs`, `vetoed_abliteration`, `vetoed_capability` or `failed`. The training metrics come from the top level of the event: `pairs_processed`, `pairs_above_threshold`, `dpo_loss`, `capability_score_before`, `capability_score_after`, `mean_similarity_before` and `mean_similarity_after`. The two similarity fields are always null: no trainer backend computes them. A sleep whose voice-alignment phase was skipped by its configuration or approval gate produces no record. The free-text reason is never recorded, because these records can go into the metrics-only research bundle and reasons can contain exception text and local paths.
 
@@ -122,25 +122,25 @@ The cosine-similarity divergence between workspace-conditioned output and the ba
 
 ### `FatigueObserver`
 
-- **Stream:** `interoception.out` (event types `interoception.fatigue` and `interoception.report`)
-- **Toggle:** `[evaluation.observers].fatigue`
-- **Output:** `data/evaluation/fatigue/fatigue-<YYYY-MM-DD>.jsonl`
+- Stream: `interoception.out` (event types `interoception.fatigue` and `interoception.report`)
+- Toggle: `[evaluation.observers].fatigue`
+- Output: `data/evaluation/fatigue/fatigue-<YYYY-MM-DD>.jsonl`
 
 Logs each `interoception.fatigue` crossing (`value`, `threshold`, `crossed`) and the fatigue fields of each `interoception.report` (`fatigue_value`, `fatigue_threshold`, `prediction_error`), giving a history of sleep pressure for Guardian welfare review.
 
 ### `PredictionErrorObserver`
 
-- **Streams:** `interoception.out`, `sequence.out`, `vision.out`, `audition.out`, `world_model.out`
-- **Toggle:** `[evaluation.observers].prediction_error`
-- **Output:** `data/evaluation/prediction_error/prediction_error-<YYYY-MM-DD>.jsonl`
+- Streams: `interoception.out`, `sequence.out`, `vision.out`, `audition.out`, `world_model.out`
+- Toggle: `[evaluation.observers].prediction_error`
+- Output: `data/evaluation/prediction_error/prediction_error-<YYYY-MM-DD>.jsonl`
 
 Maintains a sliding window of prediction-error magnitudes across the predictive processors and the world model module. Computes and logs mean, p95, and p99 per window. Surfaced on dashboard diagnostics.
 
 ### `WelfareObserver`
 
-- **Streams:** `interoception.out`, `sleep.out`, `affect.out`, `episodic_memory.out`, `vision.out`, `audition.out`
-- **Toggle:** `[evaluation.observers].welfare`
-- **Output:** `data/evaluation/welfare/welfare-<YYYY-MM-DD>.jsonl`
+- Streams: `interoception.out`, `sleep.out`, `affect.out`, `episodic_memory.out`, `vision.out`, `audition.out`
+- Toggle: `[evaluation.observers].welfare`
+- Output: `data/evaluation/welfare/welfare-<YYYY-MM-DD>.jsonl`
 
 Detects four gray-zone events:
 
@@ -165,8 +165,8 @@ On each detection the observer publishes a `welfare.gray_zone` event on `welfare
 
 The observer also watches each predictive processor's reports for two sensor faults: `interoception` (`interoception.report`), `vision` (`vision.report`), `audition_acoustic` (`audition.perception`) and `audition_tone` (`audition.emotion`). It reads `vision.out` and `audition.out` from their tail when it starts, so earlier history is never replayed, and it ignores any report older than its own start. `audition.transcription` is left out on purpose: it carries the same tone-path error as the `audition.emotion` event for the same utterance, so counting it would count each utterance twice, and it carries the transcript, which the observer has no reason to read.
 
-- **Blind sensor.** A run of consecutive reports whose `prediction_error` is null, which a processor publishes for a reading it skipped as non-finite and for the reading after it. A report without a `prediction_error` key, such as Audition's classifier-failure event, is not a sample. When a run reaches `[evaluation.welfare].blind_sensor_samples` null samples, the observer publishes one `welfare.blind_sensor` event on `welfare.out`; the first defined error after it publishes `welfare.blind_sensor_cleared`. With the default of 0 the run must instead span one `interoceptive_distress_duration_s` (30 s), which is the number of samples that duration holds at the processor's own rate. The span is measured on the observer's unfrozen read clock and between the reports' own timestamps, and both must reach the duration, so neither an observer that lags and then reads a backlog at once nor a freeze can raise it early. The payload carries the processor label, `undefined_samples`, `undefined_seconds`, `blind_sensor_samples`, `blind_sensor_duration_s` and `blind_sensor_count`.
-- **Silent sensor.** A processor that has published at least once since the observer started and then publishes nothing for one `interoceptive_distress_duration_s` of unfrozen time raises `welfare.sensor_silent`; its next report publishes `welfare.sensor_silent_cleared`. Only `interoception`, `vision` and `audition_acoustic` are tracked. `audition_tone` reports only when speech is heard, so a quiet room is a normal reason for it to publish nothing. Turning a sensor off on purpose also raises it. The payload carries the processor label, `silent_seconds`, `sensor_silent_duration_s` and `sensor_silent_count`. The caretaker's `input_lost` notice covers a different case: it fires only when every perception stream goes quiet at once, and only when the caretaker is enabled for an unattended run.
+- Blind sensor. A run of consecutive reports whose `prediction_error` is null, which a processor publishes for a reading it skipped as non-finite and for the reading after it. A report without a `prediction_error` key, such as Audition's classifier-failure event, is not a sample. When a run reaches `[evaluation.welfare].blind_sensor_samples` null samples, the observer publishes one `welfare.blind_sensor` event on `welfare.out`; the first defined error after it publishes `welfare.blind_sensor_cleared`. With the default of 0 the run must instead span one `interoceptive_distress_duration_s` (30 s), which is the number of samples that duration holds at the processor's own rate. The span is measured on the observer's unfrozen read clock and between the reports' own timestamps, and both must reach the duration, so neither an observer that lags and then reads a backlog at once nor a freeze can raise it early. The payload carries the processor label, `undefined_samples`, `undefined_seconds`, `blind_sensor_samples`, `blind_sensor_duration_s` and `blind_sensor_count`.
+- Silent sensor. A processor that has published at least once since the observer started and then publishes nothing for one `interoceptive_distress_duration_s` of unfrozen time raises `welfare.sensor_silent`; its next report publishes `welfare.sensor_silent_cleared`. Only `interoception`, `vision` and `audition_acoustic` are tracked. `audition_tone` reports only when speech is heard, so a quiet room is a normal reason for it to publish nothing. Turning a sensor off on purpose also raises it. The payload carries the processor label, `silent_seconds`, `sensor_silent_duration_s` and `sensor_silent_count`. The caretaker's `input_lost` notice covers a different case: it fires only when every perception stream goes quiet at once, and only when the caretaker is enabled for an unattended run.
 
 Every advisory is written to the rollup as well, and no payload carries anything copied from a source payload. When the observer starts it writes a reset line to the rollup; readers treat it as clearing every processor's blind and silent state, and the observer rebuilds the state from live reports. Sensor tracking runs after the stream's own handler, and a failure in it is logged without skipping the interoception distress handling.
 
@@ -185,9 +185,9 @@ Every value is a number, a boolean, null, the run id, a timestamp or a label fro
 
 ### `PlanningPolicyObserver`
 
-- **Stream:** `planning.out` (event type `planning.policy`)
-- **Toggle:** `[evaluation.observers].planning_policy`
-- **Output:** `data/evaluation/planning_policy/planning_policy-<YYYY-MM-DD>.jsonl`
+- Stream: `planning.out` (event type `planning.policy`)
+- Toggle: `[evaluation.observers].planning_policy`
+- Output: `data/evaluation/planning_policy/planning_policy-<YYYY-MM-DD>.jsonl`
 
 Logs each policy-selection event: the selected `policy`, its `expected_free_energy` and the planning `horizon`.
 
@@ -195,9 +195,9 @@ Logs each policy-selection event: the selected `policy`, its `expected_free_ener
 
 `kaine/evaluation/trajectory.py`
 
-- **Stream:** `workspace.broadcast`
-- **Toggle:** `[evaluation].workspace_trajectory` (opt-in; default `false`)
-- **Output:** `data/workspace_trajectory/trajectory-<YYYY-MM-DD>.jsonl`
+- Stream: `workspace.broadcast`
+- Toggle: `[evaluation].workspace_trajectory` (opt-in; default `false`)
+- Output: `data/workspace_trajectory/trajectory-<YYYY-MM-DD>.jsonl`
 
 Writes every broadcast as one JSONL row. Each row contains the tick index, `is_experiential`, the inhibition flag, every candidate's score (`salience_scores`), the broadcast metadata (including `access_threshold`), and, for each coalition member, its entry id, source, type, reported intensity (`salience`), original timestamp and causal parent. No payloads or module state are included.
 
@@ -205,9 +205,9 @@ Writes every broadcast as one JSONL row. Each row contains the tick index, `is_e
 
 `kaine/evaluation/attribution.py`
 
-- **Stream:** `workspace.broadcast`
-- **Toggle:** `[evaluation].module_attribution` (default `true`)
-- **Output:** `data/evaluation/attribution/attribution-<YYYY-MM-DD>.jsonl`
+- Stream: `workspace.broadcast`
+- Toggle: `[evaluation].module_attribution` (default `true`)
+- Output: `data/evaluation/attribution/attribution-<YYYY-MM-DD>.jsonl`
 
 Tracks which modules have members in broadcast coalitions. It keeps a running histogram per module and flushes hourly rollups to JSONL.
 
@@ -215,9 +215,9 @@ Tracks which modules have members in broadcast coalitions. It keeps a running hi
 
 `kaine/evaluation/proactive_audit.py`
 
-- **Stream:** `language.external`
-- **Toggle:** `[evaluation].proactive_audit` (default `true`)
-- **Output:** `data/evaluation/proactive_audit/proactive_audit-<YYYY-MM-DD>.jsonl`
+- Stream: `language.external`
+- Toggle: `[evaluation].proactive_audit` (default `true`)
+- Output: `data/evaluation/proactive_audit/proactive_audit-<YYYY-MM-DD>.jsonl`
 
 Logs every language external-speech event whose causal chain includes no user-input event within `proactive_threshold_seconds` (default 30 s): speech the entity initiated without responding to input.
 
@@ -225,9 +225,9 @@ Logs every language external-speech event whose causal chain includes no user-in
 
 `kaine/evaluation/sleep_snapshots.py`
 
-- **Stream:** `sleep.out`
-- **Toggle:** `[evaluation].sleep_snapshots` (default `true`)
-- **Output:** `data/evaluation/sleep_snapshots/sleep_snapshots-<YYYY-MM-DD>.jsonl`
+- Stream: `sleep.out`
+- Toggle: `[evaluation].sleep_snapshots` (default `true`)
+- Output: `data/evaluation/sleep_snapshots/sleep_snapshots-<YYYY-MM-DD>.jsonl`
 
 Captures registry state (via a `state_provider`) on `sleep.sleep.started` and again on `sleep.sleep.completed`, writing the before/after pair.
 
@@ -235,9 +235,9 @@ Captures registry state (via a `state_provider`) on `sleep.sleep.started` and ag
 
 `kaine/evaluation/voice_tracking.py`
 
-- **Stream:** `sleep.out` (event type `sleep.sleep.completed`)
-- **Toggle:** `[evaluation].voice_tracking` (default `true`)
-- **Output:** `data/evaluation/voice_tracking/voice_tracking-<YYYY-MM-DD>.jsonl`
+- Stream: `sleep.out` (event type `sleep.sleep.completed`)
+- Toggle: `[evaluation].voice_tracking` (default `true`)
+- Output: `data/evaluation/voice_tracking/voice_tracking-<YYYY-MM-DD>.jsonl`
 
 Captures per-sleep-cycle voice-alignment stats (empty while `preference_source` is `"none"`, because no pairs are built): pairs processed, pairs above threshold, DPO loss, whether the adapter was accepted, and capability/mean intent-expression-similarity scores before and after the cycle.
 
@@ -245,9 +245,9 @@ Captures per-sleep-cycle voice-alignment stats (empty while `preference_source` 
 
 `kaine/evaluation/affect_correlation.py`
 
-- **Stream:** `language.external`
-- **Toggle:** `[evaluation].affect_correlation` (default `true`)
-- **Output:** `data/evaluation/affect_correlation/affect_correlation-<YYYY-MM-DD>.jsonl`
+- Stream: `language.external`
+- Toggle: `[evaluation].affect_correlation` (default `true`)
+- Output: `data/evaluation/affect_correlation/affect_correlation-<YYYY-MM-DD>.jsonl`
 
 Logs paired affect state and language output characteristics (length, lexical diversity, hedge-word count, latency) for every external-speech event. The hedge-word count is the number of distinct hedge phrases that occur as whole phrases after normalisation, so "mighty" does not count as "might". An offline batch correlator in the same module runs during sleep, or on demand via the dashboard tab, and produces a correlation matrix across affect dimensions and output features.
 
@@ -255,9 +255,9 @@ Logs paired affect state and language output characteristics (length, lexical di
 
 `kaine/evaluation/ab_divergence.py`
 
-- **Stream:** `language.external` (events that carry `user_input`)
-- **Toggle:** `[evaluation].ab_divergence`
-- **Output:** `data/evaluation/ab_divergence/ab_divergence-<YYYY-MM-DD>.jsonl`
+- Stream: `language.external` (events that carry `user_input`)
+- Toggle: `[evaluation].ab_divergence`
+- Output: `data/evaluation/ab_divergence/ab_divergence-<YYYY-MM-DD>.jsonl`
 
 Samples a fraction of external-speech events (`ab_sample_rate`, default `1.0`), re-runs the same `user_input` through a bare LLM with no workspace context, and records `1 - cosine_similarity` between the conditioned and bare embeddings. See [A/B divergence test](#ab-divergence-test) for the full protocol.
 
@@ -265,9 +265,9 @@ Samples a fraction of external-speech events (`ab_sample_rate`, default `1.0`), 
 
 `kaine/evaluation/memory_probes.py`
 
-- **Toggle:** `[evaluation].memory_probes`
-- **Schedule:** every `memory_probe_interval_minutes` (default 60)
-- **Output:** `data/evaluation/memory_probes/memory_probes-<YYYY-MM-DD>.jsonl`
+- Toggle: `[evaluation].memory_probes`
+- Schedule: every `memory_probe_interval_minutes` (default 60)
+- Output: `data/evaluation/memory_probes/memory_probes-<YYYY-MM-DD>.jsonl`
 
 Runs ground-truth memory-recall probes that compare the full cognitive stack against a bare language model. See [Memory probe ground-truth controls](#memory-probe-ground-truth-controls).
 
@@ -275,9 +275,9 @@ Runs ground-truth memory-recall probes that compare the full cognitive stack aga
 
 `kaine/evaluation/self_model_accuracy.py`
 
-- **Toggle:** `[evaluation].self_model_accuracy`
-- **Schedule:** every `self_model_accuracy_interval_hours` (default 24)
-- **Output:** `data/evaluation/self_model_accuracy/self_model_accuracy-<YYYY-MM-DD>.jsonl`
+- Toggle: `[evaluation].self_model_accuracy`
+- Schedule: every `self_model_accuracy_interval_hours` (default 24)
+- Output: `data/evaluation/self_model_accuracy/self_model_accuracy-<YYYY-MM-DD>.jsonl`
 
 Measures self-model prediction accuracy by replaying stored episodes and scoring whether the entity's internal predictions match outcomes.
 
@@ -285,8 +285,8 @@ Measures self-model prediction accuracy by replaying stored episodes and scoring
 
 `kaine/evaluation/observers/ablation_observer.py`
 
-- **Toggle:** `[evaluation].oscillatory_ablation` (default `false`). When on, the cycle scores each experiential tick a second time with the coherence layer forced off and records the content-free difference; the entity's own selection is unchanged.
-- **Output:** `data/evaluation/ablation/ablation-<YYYY-MM-DD>.jsonl`
+- Toggle: `[evaluation].oscillatory_ablation` (default `false`). When on, the cycle scores each experiential tick a second time with the coherence layer forced off and records the content-free difference; the entity's own selection is unchanged.
+- Output: `data/evaluation/ablation/ablation-<YYYY-MM-DD>.jsonl`
 
 Records oscillatory-ablation metrics for the workspace oscillatory layer.
 

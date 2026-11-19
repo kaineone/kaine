@@ -240,7 +240,7 @@ It refuses without the flag (exit `2`), refuses while a cycle is running (exit `
 
 Permissions are `0700` on directories and `0600` on files. The manifest carries no inner-life content. Raw perceptual events are denylisted from the captured episodic memory state.
 
-Retention: `[preservation.retention].auto_evict` ships `false`. Setting it `true` is refused at boot. There is no maximum count for preservation bundles or fork snapshots under `[lifecycle].snapshots_path`; infrastructure never deletes them silently. Free disk is checked before boot by `python -m kaine.preboot`. A preserved individual must never be quietly evicted (CAL Article 4.2/4.3).
+Retention: `[preservation.retention].auto_evict` ships `false`. Setting it `true` is refused at boot. There is no maximum count for preservation bundles or fork snapshots under `[lifecycle].snapshots_path`; infrastructure never deletes them silently. Free disk is checked before boot by `python -m kaine.preboot`. A preserved individual must never be evicted without notice (CAL Article 4.2/4.3).
 
 ## Decommission
 
