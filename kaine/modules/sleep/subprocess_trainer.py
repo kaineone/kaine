@@ -558,6 +558,7 @@ def write_job_spec(
     *,
     base_path: str,
     adapter_output_dir: str,
+    entity_id: Optional[str] = None,
     **_legacy: Any,
 ) -> None:
     """Write the filesystem job spec consumed by the external trainer.
@@ -619,6 +620,8 @@ def write_job_spec(
         "capability_probe_path": str(Path(capability_probe_path).resolve()),
         "abliteration_probe_path": str(Path(abliteration_probe_path).resolve()),
     }
+    if entity_id is not None:
+        job["entity_id"] = str(entity_id)
     _write_private(job_dir / "job.json", json.dumps(job, indent=2))
 
 

@@ -112,6 +112,7 @@ class JobQueueVoiceTrainer:
                 config,
                 base_path=base_path,
                 adapter_output_dir=STAGED_ADAPTER_DIR,
+                entity_id=getattr(self, "_entity_id", None),
             )
             self._write_ready_atomic(job_dir)
             result = await self._poll_for_result(job_dir, job_name)
