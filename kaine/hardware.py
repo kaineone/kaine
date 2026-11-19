@@ -1214,13 +1214,13 @@ def gpu_inventory() -> list[GpuSnapshot]:
         if bool(torch.cuda.is_available()):
             devices.extend(("cuda", i) for i in range(int(torch.cuda.device_count())))
     except Exception:
-        pass
+        log.debug("hardware.gpu_inventory: cuda discovery failed", exc_info=True)
     xpu = getattr(torch, "xpu", None)
     try:
         if xpu is not None and xpu.is_available():
             devices.extend(("xpu", i) for i in range(int(xpu.device_count())))
     except Exception:
-        pass
+        log.debug("hardware.gpu_inventory: xpu discovery failed", exc_info=True)
     if _mps_available():
         out.append(
             GpuSnapshot(
@@ -1300,5 +1300,5 @@ def cpu_threads_budget() -> int:
         logged = psutil.cpu_count(logical=False)
         avail = min(avail, logged) if logged else avail
     except Exception:
-        pass
+        log.debug("hardware.cpu_threads_budget: psutil unavailable", exc_info=True)
     return max(1, avail // 2)
