@@ -18,7 +18,6 @@ from kaine.modules.effectors.stimulus.controller import StimulusController
 from kaine.modules.effectors.stimulus.programme import Programme, ProgrammeClock
 from kaine.modules.effectors.stimulus.records import StimulusTally
 
-pytestmark = pytest.mark.asyncio
 
 
 class _Mono:
@@ -112,6 +111,7 @@ class _FakeClock:
         self._t += dt
 
 
+@pytest.mark.asyncio
 async def test_continue_mode_calls_on_pass_end():
     clock = _FakeClock(started=True, paused=False, index=0)
     passes_completed: list[int] = []
@@ -142,6 +142,7 @@ async def test_continue_mode_calls_on_pass_end():
     assert passes_completed == [0, 1]
 
 
+@pytest.mark.asyncio
 async def test_continue_mode_never_finishes():
     clock = _FakeClock(started=True, paused=False, index=5)
 
@@ -179,6 +180,7 @@ def test_continue_mode_requires_callback():
         )
 
 
+@pytest.mark.asyncio
 async def test_stop_mode_unchanged():
     clock = _FakeClock(started=True, paused=False, index=0)
     writes = []
