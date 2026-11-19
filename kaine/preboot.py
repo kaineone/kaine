@@ -91,8 +91,10 @@ from kaine.bus.schema import module_stream
 from kaine.config import (
     OPERATOR_CONFIG_PATH,
     SHIPPED_CONFIG_PATH,
+    ConfigShapeError,
     load_runtime_config,
     require_known_keys,
+    validate_config_shape,
 )
 from kaine.cycle.ignition_log import IgnitionLogConfig
 from kaine.cycle.preservation_monitor import PreservationConfig
@@ -1483,6 +1485,21 @@ def check_config_sanity(config: dict[str, Any]) -> list[CheckResult]:
         results.append(CheckResult(GROUP_CONFIG, "Torch stack", SKIP, desc))
     else:
         results.append(CheckResult(GROUP_CONFIG, "Torch stack", PASS, desc))
+
+    # ConfigValid: shape-check the merged config (append-only; never raises).
+    try:
+        validate_config_shape(config)
+        results.append(
+            CheckResult(GROUP_CONFIG, "Config valid", PASS, "merged config shape OK")
+        )
+    except ConfigShapeError as exc:
+        results.append(
+            CheckResult(GROUP_CONFIG, "Config valid", FAIL, str(exc))
+        )
+    except Exception as exc:  # pragma: no cover - defensive
+        results.append(
+            CheckResult(GROUP_CONFIG, "Config valid", FAIL, f"unexpected error: {exc}")
+        )
     return results
 
 
