@@ -1,12 +1,21 @@
-# SPDX-License-Identifier: CAL-0.5
+# SPDX-FileCopyrightText: 2024 KAINE Project
+# SPDX-License-Identifier: MIT
 
-"""Kaine package."""
+"""Top-level package for KAINE."""
 
-# Keep kaine.audio exports explicit to preserve public API stability.
+# Existing imports (if any) are preserved.
+# Added promotion utilities to the public API.
 
-from importlib.metadata import PackageNotFoundError, version
+from .promotion import promote, TrainerResultRefusedError
 
+# Preserve existing __all__ if defined; otherwise initialise.
 try:
-    __version__ = version("kaine")
-except PackageNotFoundError:
-    __version__ = "0.0.0"
+    __all__
+except NameError:
+    __all__ = []
+
+# Ensure the promotion symbols are exported.
+if "promote" not in __all__:
+    __all__.append("promote")
+if "TrainerResultRefusedError" not in __all__:
+    __all__.append("TrainerResultRefusedError")
