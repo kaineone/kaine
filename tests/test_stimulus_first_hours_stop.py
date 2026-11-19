@@ -28,7 +28,6 @@ from kaine.research.ignition_study.runner import (
 )
 
 
-
 def _record(
     awake_s: float = 3600.0,
     paused_share_max: float = 0.0,

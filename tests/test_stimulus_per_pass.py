@@ -19,7 +19,6 @@ from kaine.modules.effectors.stimulus.programme import Programme, ProgrammeClock
 from kaine.modules.effectors.stimulus.records import StimulusTally
 
 
-
 class _Mono:
     def __init__(self) -> None:
         self.t = 100.0
