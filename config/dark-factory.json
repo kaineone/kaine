@@ -1,6 +1,6 @@
 {
-  "tasks_file": "openspec/changes/port-unmerged-work/tasks.md",
-  "test_command": "/run/media/erik/2TBm2Store/kaine/.venv/bin/python -m pytest -q tests/test_license_headers.py tests/test_import_contract_coverage.py tests/test_package_manifest.py tests/test_config_defaults.py tests/test_config_shape.py tests/test_config_validation.py tests/test_config_reference_drift.py tests/test_wizard_basic_coverage.py",
+  "tasks_file": "openspec/changes/cross-platform-hardware-budget/tasks.md",
+  "test_command": "/run/media/erik/2TBm2Store/kaine/.venv/bin/python -m pytest -q tests/test_hardware.py tests/test_config_defaults.py tests/test_preboot_smoke.py tests/test_wizard_basic_coverage.py tests/test_config_validation.py",
   "model": "beam:cloud",
   "backup_model": "gpt-oss:120b-cloud",
   "model_ladder": [
@@ -45,9 +45,9 @@
     "docs"
   ],
   "coverage_matrix_file": null,
-  "integration_command": null,
+  "integration_command": "/run/media/erik/2TBm2Store/kaine/.venv/bin/python -m openspec validate cross-platform-hardware-budget --strict",
   "runtime_test_command": null,
-  "qa_command": null,
+  "qa_command": "/run/media/erik/2TBm2Store/kaine/.venv/bin/python -m kaine.preboot",
   "max_task_retries": 3,
   "release_phase": "internal-alpha",
   "evaluate_functional_command": null,
