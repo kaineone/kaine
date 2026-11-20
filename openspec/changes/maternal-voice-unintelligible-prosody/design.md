@@ -1,9 +1,3 @@
-# Design: maternal-voice-unintelligible-prosody
-
-## Context
-
-`generate_maternal_voice.py` owns the render; `render_maternal_voice_sam.py` is the claimed contract owner but emits only a dry-run plan. Sam produces an unintelligible (prosody-only) stimulus via a 300 Hz ceiling and nonlexical (syllable) content, distinct from Chatterbox's licensed authoring path. For the two to be interchangeable by flag, Sam must be drift-free against its contract, honest about generation params it does not expose, and validated at the checkpoint boundary instead of silently falling through.
-
 ## Separation of concerns
 
 - Generator (`generate_maternal_voice.py`): render, resample, lowpass, manifest `generator` block.
