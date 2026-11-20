@@ -93,6 +93,7 @@ Per-stream overrides. The key is the full stream name (`<module>.out` or `worksp
 "workspace.broadcast" = 100000
 "vision.out" = 12000
 "audition.out" = 12000
+"perception_feed.out" = 1000
 ```
 
 | Key | Type | Default | Description |
@@ -100,6 +101,7 @@ Per-stream overrides. The key is the full stream name (`<module>.out` or `worksp
 | `"workspace.broadcast"` | integer | `100000` | Cap for the broadcast stream (about 6.6 KB per entry). |
 | `"vision.out"` | integer | `12000` | About 20 minutes at ten entries per second. Each entry carries a latent vector (about 40 KB), so this is the largest stream in memory. |
 | `"audition.out"` | integer | `12000` | About 20 minutes at ten entries per second. |
+| `"perception_feed.out"` | integer | `1000` | Cap for the perception-feed stream. |
 
 The memory these caps imply must fit in Redis `maxmemory`, set per host with `KAINE_REDIS_MAXMEMORY` (default `4gb`; see [Containers](../07-deployment/containers.md)). The pre-boot `python -m kaine.preboot` reports it as the "Bus budget" row: for every stream the enabled modules produce, it multiplies the cap by a per-entry size, doubles the result for AOF-rewrite headroom, and compares it with `maxmemory`. The per-entry size is sampled from the running bus when possible, otherwise taken from the measured table in `kaine/bus/config.py`, otherwise estimated at 2 KB. The row FAILS only when the measured streams alone exceed `maxmemory`; when the overage depends on the 2 KB estimate it WARNS and names the estimated streams. It also WARNS above 70% of `maxmemory`. A full study with every module enabled needs `KAINE_REDIS_MAXMEMORY=12gb` or more on hosts with the RAM.
 
@@ -333,7 +335,7 @@ Security: clients must present `token` as `Authorization: Bearer <token>`; query
 | `sleep` | boolean | `false` | Sleep: fatigue-triggered offline periods and consolidation. |
 | `social_cognition` | boolean | `false` | Social cognition. |
 | `world_model` | boolean | `false` | World model. |
-| `perception` | boolean | `false` | Perceptual locus arbiter (physical-XOR-virtual sense gating). |
+| `perceptual_locus` | boolean | `false` | Perceptual locus arbiter (physical-XOR-virtual sense gating). |
 | `embodiment` | boolean | `false` | Embodiment control plane. The continuous control surface is built but inert at runtime; nothing drives its per-tick loop yet. Also requires `KAINE_EMBODIMENT_OPERATOR_APPROVED=1`. |
 
 The guard test that enforces the all-off invariant is `tests/test_boot_wiring.py::test_committed_config_ships_all_modules_disabled`.
