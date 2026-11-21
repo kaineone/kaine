@@ -1,0 +1,48 @@
+# PR scope guard
+#
+# Blocks stale or bundled branches: a long commit list on a PR usually means the
+# branch was built on top of unmerged work, and squash merges would carry that
+# history into main. The guard also caps the number of changed files so a PR
+# stays reviewable. Add the `large-change` label to override it for intentional
+# large changes such as codemods.
+name: pr-scope
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+    branches: ["main"]
+  merge_group:
+
+permissions:
+  contents: read
+
+jobs:
+  scope:
+    name: pr-scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Report on merge queue
+        if: github.event_name == 'merge_group'
+        run: |
+          echo "scope is checked on the pull request"
+          exit 0
+
+      - name: Checkout
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        if: github.event_name == 'pull_request'
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Check PR scope
+        if: github.event_name == 'pull_request'
+        env:
+          ALLOW_LARGE: ${{ contains(github.event.pull_request.labels.*.name, 'large-change') && '--allow-large' || '' }}
+        run: |
+          python tools/maintainer/check_pr_scope.py "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" $ALLOW_LARGE
