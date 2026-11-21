@@ -126,6 +126,7 @@ from kaine.lifecycle.welfare_signal import (  # noqa: F401  (re-export)
     SustainedThresholdTracker,
     UndefinedRunTracker,
     WelfareSignalAccount,
+    WindowedEventCounter,
     read_welfare_prediction_error,
 )
 
