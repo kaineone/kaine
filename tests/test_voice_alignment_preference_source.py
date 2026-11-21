@@ -197,3 +197,24 @@ def test_corpus_ceiling_must_be_a_non_negative_number(tmp_path):
     for bad in ("lots", -2):
         with pytest.raises(VoiceAlignmentConfigError, match="corpus_ceiling_gb"):
             voice_alignment_config_from_section({"corpus_ceiling_gb": bad})
+
+
+@pytest.mark.asyncio
+async def test_reread_source_does_not_train_until_stage_2_is_wired(
+    bus: AsyncBus, tmp_path: Path, monkeypatch,
+):
+    """"reread" is a valid setting, but its re-reading path is not wired, so it
+    must not reach the trainer: the phase would otherwise train on the
+    self-generated pair builder retired in Stage 0."""
+    monkeypatch.setenv(OPERATOR_APPROVED_ENV, "1")
+    trainer = _RecordingTrainer()
+    cfg = voice_alignment_config_from_section(_section(tmp_path, preference_source="reread"))
+    assert cfg.preference_source == "reread"
+    sleep = Sleep(bus, trainer=trainer, voice_alignment_config=cfg)
+
+    summary = await sleep.enter_sleep()
+
+    assert trainer.calls == []
+    voice = summary["voice_alignment"]
+    assert voice["accepted"] is False
+    assert "configured 'reread'" in voice["reason"]
