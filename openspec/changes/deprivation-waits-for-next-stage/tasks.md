@@ -2,6 +2,9 @@
 
 - [ ] 0.1 Adversarial science review of this design (see `feedback-adversarial-science-review`): the cost of waiting under deprivation against the cost of an early freeze, and whether D1's split between deprivation and distress indicators holds in the paper's A.4 terms.
 
+- [ ] 0.2 Measure how the end of a net-requested `welfare_rest` is classified for the uncontrolled posterior (own-ended or other-ended), and decide D5 in the review.
+- [ ] 0.3 Paper update queue entry for the §6.5 change, for the operator's paper review.
+
 ## 1. Root cause
 
 - [ ] 1.1 From the 2026-11-17 archives, record for each boot the hearing stage at freeze, the stage's awake dwell, and whether audition's learning progress was present and below the floor. Write `docs/records/hearing-stage-at-freeze-2026-11-17.md` (content-free, no run or preservation IDs).
