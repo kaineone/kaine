@@ -18,9 +18,10 @@
 
 ## 2. Stage 2: learning to say what it means (off by default)
 
-- [x] 2.1 K-candidate sampling at sleep from the entity's own organ.
-- [x] 2.2 Ranking by the internal re-reading signal; listener uptake weighted by the social cognition module only in full-entity configurations with conversation (V3).
-- [x] 2.3 KTO or DPO from the previous adapter, on the accumulated corpus, with a fixed real-data anchor and the D3(e) monitors.
+- [ ] 2.1 K-candidate sampling at sleep from the entity's own organ.
+- [ ] 2.2 Ranking by the internal re-reading signal; listener uptake weighted by the social cognition module only in full-entity configurations with conversation (V3).
+- [ ] 2.3 KTO or DPO from the previous adapter, on the accumulated corpus, with a fixed real-data anchor and the D3(e) monitors.
+  - Status 2026-11-20: `voice_candidates.py`, `mix_with_anchor()` and `check_collapse_monitors()` exist (PR #815) but nothing calls them, and they have no tests; 2.1 to 2.3 were marked done in #817 without that wiring. `TRAINING_SOURCES` is empty until they are wired and tested.
 - [x] 2.4 Offline simulated-listener validation (D9); recorded under `docs/records/`.
 
 ## 3. Validation

@@ -29,7 +29,12 @@ log = logging.getLogger(__name__)
 PREFERENCE_SOURCES: frozenset[str] = frozenset({"none", "reread"})
 # The sources allowed to reach the trainer. Empty until Stage 2: the phase
 # checks membership here, so an unlisted value can never train (fail closed).
-TRAINING_SOURCES: frozenset[str] = frozenset({"reread"})
+# "reread" is a valid setting but not yet a training source: its K-candidate
+# re-reading (voice_candidates.py), real-data anchor (mix_with_anchor) and
+# collapse monitors (check_collapse_monitors) are not called from the sleep
+# phase, which would train on the self-generated pair builder retired in
+# Stage 0. Add it here only together with that wiring and its tests.
+TRAINING_SOURCES: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
