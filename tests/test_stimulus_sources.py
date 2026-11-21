@@ -213,8 +213,8 @@ def test_video_schedule_saturation_is_stage_over_five_times_hue_gain(monkeypatch
     seen: list[float] = []
     real = sig.colour_saturation
 
-    def spy(stage, progress=0.0):
-        value = real(stage, progress)
+    def spy(stage):
+        value = real(stage)
         seen.append(value)
         return value
 

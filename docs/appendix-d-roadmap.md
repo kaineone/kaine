@@ -31,7 +31,7 @@ This page shows the engineering work in flight, the operator and on-device steps
 | organ-self-denial-ablation | 15/19 (79%) | Ablate the organ's self-denial direction on top of the refusal ablation and publish a new weight revision. |
 | sam-voice-training | 0/16 (0%) | Dataset pipeline, zero-shot cloning, evaluation harness and optional fine-tune for a nonbinary "Sam" narration voice. |
 | stimulus-control-act | 24/26 (92%) | Entity-held stimulus control: pause, seek, gain and channel acts through the signed-intent path (stage M now, stage L later). |
-| unified-instance-configuration | 17/17 (100%) | Single documented configuration reference plus validator and CLI questionnaire over every module knob. Repaired (ci-hygiene-and-config-repair). |
+| unified-instance-configuration | 0/17 (0%) | Single documented configuration reference plus validator and CLI questionnaire over every module knob. Parked. |
 | welfare-indicator-response | 23/24 (96%) | Live paper A.4 welfare indicators on the monitor: rest on first crossing, preserve on a crossing over the fresh span.
 
 ## Designed in the paper, not built

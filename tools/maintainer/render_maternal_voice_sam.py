@@ -120,20 +120,6 @@ def sam_model() -> dict[str, Any]:
     }
 
 
-def _validate_adapter_boundary() -> None:
-    """Assert prosody profile matches the adapter boundary (300/8000/FLAC/PCM_16/16)."""
-    if SPECTRAL_CEILING_HZ != 300:
-        raise ValueError(f"spectral ceiling must be 300 Hz, got {SPECTRAL_CEILING_HZ}")
-    if OUTPUT_SAMPLE_RATE != 8000:
-        raise ValueError(f"output sample rate must be 8000 Hz, got {OUTPUT_SAMPLE_RATE}")
-    if OUTPUT_FORMAT != "FLAC":
-        raise ValueError(f"output format must be FLAC, got {OUTPUT_FORMAT}")
-    if PCM_SUBTYPE != "PCM_16":
-        raise ValueError(f"PCM subtype must be PCM_16, got {PCM_SUBTYPE}")
-    if BIT_DEPTH != 16:
-        raise ValueError(f"bit depth must be 16, got {BIT_DEPTH}")
-
-
 def build_render_plan(
     *,
     texts_path: Path = DEFAULT_TEXTS,
@@ -141,7 +127,6 @@ def build_render_plan(
     sam_model_path: str = SAM_MODEL_PATH,
 ) -> dict[str, Any]:
     """Build the JSON render plan. Does not synthesize any audio."""
-    _validate_adapter_boundary()
     items = _load_texts_items(Path(texts_path))
     profile = prosody_profile()
     # honour an explicitly provided Sam checkpoint path

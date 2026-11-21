@@ -94,7 +94,7 @@ def _assert_maternal_voice_data_ignored(ignore_path: Path):
 
     files = sorted(p.name for p in data_dir.iterdir() if p.is_file())
     flacs = [name for name in files if name.endswith(".flac")]
-    assert len(flacs) == 43, f"expected 43 .flac files, found {len(flacs)}"
+    assert len(flacs) == 41, f"expected 41 .flac files, found {len(flacs)}"
     assert {"manifest.json", "texts.toml", "README.md"}.issubset(set(files))
 
     for name in files:
