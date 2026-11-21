@@ -341,9 +341,10 @@ class IndividuationRuntime:
         history, which is not yet wired.  For now, the operator approval flag
         alone controls reconstruction.
         """
-        # TODO: implement full evidence checks (no adapter older than born_at,
-        # empty identity clause at maturation) once the adapter store and
-        # self-model history APIs are available.
+        # NOTE: full evidence checks (no adapter older than born_at, empty
+        # identity clause at maturation) are not yet implemented; they require
+        # the adapter-store and self-model history APIs. Operator approval
+        # alone controls reconstruction until then.
         try:
             ref = load_reference(self.paths)
         except ReferenceUnreadable:

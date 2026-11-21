@@ -27,8 +27,6 @@ from kaine.research.ignition_study.runner import (
     VIABILITY_MTIME_SLACK_S,
 )
 
-pytestmark = pytest.mark.asyncio
-
 
 def _record(
     awake_s: float = 3600.0,
@@ -133,6 +131,7 @@ class _FakeClock:
         self._t += dt
 
 
+@pytest.mark.asyncio
 async def test_callback_returns_true_preserves_and_stops():
     clock = _FakeClock(started=True, paused=False, index=0)
     writes = []
@@ -163,6 +162,7 @@ async def test_callback_returns_true_preserves_and_stops():
     assert len(writes) == 1
 
 
+@pytest.mark.asyncio
 async def test_callback_returns_false_continues():
     clock = _FakeClock(started=True, paused=False, index=0)
     passes_completed: list[int] = []
@@ -194,6 +194,7 @@ async def test_callback_returns_false_continues():
     assert passes_completed == [0, 1]
 
 
+@pytest.mark.asyncio
 async def test_callback_returns_none_continues():
     clock = _FakeClock(started=True, paused=False, index=0)
 
@@ -217,6 +218,7 @@ async def test_callback_returns_none_continues():
     assert result is False
 
 
+@pytest.mark.asyncio
 async def test_callback_true_then_handled():
     clock = _FakeClock(started=True, paused=False, index=0)
     writes = []

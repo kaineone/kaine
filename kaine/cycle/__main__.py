@@ -1701,9 +1701,13 @@ def _start_preserve_watcher(
 
 
 def _start_programme_end_watcher(
-    kaine_config, *, notify, stop_event
+    kaine_config, *, notify, stop_event, stimulus_control=None
 ) -> asyncio.Task | None:
-    """Start the end-of-programme watcher when a shared playlist clock exists."""
+    """Start the end-of-programme watcher when a shared playlist clock exists.
+
+    When stimulus control is active the watcher runs in 'continue' (per-pass)
+    mode so the first-hours stop criterion is evaluated at each pass boundary.
+    """
     clock = (kaine_config.get("perception_feed") or {}).get("_shared_playlist_clock")
     if clock is None:
         return None
@@ -1731,9 +1735,43 @@ def _start_programme_end_watcher(
         )
         return None
 
+    mode = "stop"
+    on_pass_end = None
+    if stimulus_control is not None:
+        async def _on_pass_end(pass_number: int) -> bool:
+            try:
+                rec = stimulus_control.tally.record()
+            except Exception:
+                log.warning("programme_end: could not read stimulus tally", exc_info=True)
+                return False
+            try:
+                from pathlib import Path
+
+                from kaine.research.ignition_study.first_hours_criterion import (
+                    VERDICT_RELPATH,
+                    check_first_hours,
+                    write_verdict,
+                )
+
+                verdict = check_first_hours(rec, pass_number=pass_number, readout_pause=None)
+                if verdict is None:
+                    return False
+                if not Path(VERDICT_RELPATH).exists():
+                    write_verdict(verdict, Path("."))
+                log.warning("stimulus_control_first_hours: stopped at pass %s", pass_number)
+                return True
+            except Exception:
+                log.warning("programme_end: first-hours check failed", exc_info=True)
+                return False
+
+        mode = "continue"
+        on_pass_end = _on_pass_end
+
     watcher = ProgrammeEndWatcher(
         clock=clock,
         item_count=len(manifest.items),
+        mode=mode,
+        on_pass_end=on_pass_end,
         notify=notify,
     )
     return asyncio.create_task(watcher.run(stop_event), name="cycle.programme_end")
@@ -3264,6 +3302,7 @@ async def _phase_watchers(ctx: BootContext) -> int | None:
         ctx.kaine_config,
         notify=ctx.caretaker.send_event if ctx.caretaker is not None else None,
         stop_event=ctx.stop_event,
+        stimulus_control=getattr(ctx, "stimulus_control", None),
     )
     await _start_utterance_outcome(ctx)
 

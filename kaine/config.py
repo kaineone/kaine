@@ -859,6 +859,33 @@ def _sort_defaults(value: Any) -> Any:
     return value
 
 
+# Deployment-tier metadata for configuration keys. Keys absent from this map
+# default to "standard". "basic" keys are the ones the first-time questionnaire
+# asks by default; "advanced" keys are only shown with --full.
+TIER_BY_KEY: dict[str, str] = {
+    "modules.affect": "basic",
+    "modules.audition": "basic",
+    "modules.interoception": "basic",
+    "modules.language": "basic",
+    "modules.sequence": "basic",
+    "modules.sleep": "basic",
+    "modules.vision": "basic",
+    "storage.data_root": "basic",
+    "storage.min_free_gb": "basic",
+    "vocal.backend": "basic",
+    "vocal.voice_mode": "basic",
+    "language.chat_url": "basic",
+    "language.model": "basic",
+    "security.state_encryption.enabled": "basic",
+    "preservation.require_encryption": "basic",
+}
+
+
+def tier_for_key(key: str) -> str:
+    """Return the deployment tier (basic/standard/advanced) for a config key."""
+    return TIER_BY_KEY.get(key, "standard")
+
+
 def list_all_defaults() -> dict[str, Any]:
     """Return every default value from the shipped configuration as a sorted dict.
 
