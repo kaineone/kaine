@@ -18,7 +18,9 @@ fail=0
 step() { echo "== $1"; shift; if "$@"; then echo "   ok"; else echo "   FAILED"; fail=1; fi; }
 git fetch -q origin main
 # SCOPE_ALLOW_LARGE=1 passes --allow-large, the local match for the large-change label.
-step "pr-scope" "$PY" "$HERE/check_pr_scope.py" origin/main HEAD ${SCOPE_ALLOW_LARGE:+--allow-large}
+scope_args=(origin/main HEAD)
+[ "${SCOPE_ALLOW_LARGE:-0}" = 1 ] && scope_args+=(--allow-large)
+step "pr-scope" "$PY" "$HERE/check_pr_scope.py" "${scope_args[@]}"
 step "ruff" "$BIN/ruff" check kaine tests plugins
 step "lint-imports" env PYTHONPATH="$WT" "$BIN/lint-imports"
 step "redteam" env PYTHONPATH="$WT" "$PY" -m pytest -q -p no:cacheprovider tests/test_evaluation_redteam.py \
