@@ -17,13 +17,13 @@ Non-goals: changing any bar or `T_lp`; changing the matured phase; bringing back
 
 Boredom is relieved by learning progress. A stage whose progress saturates should step within `min_dwell + W_sat` (1 h 40 min of awake time), long before a second crossing at eight hours. Task 1 reads the 2026-11-17 archives (boot logs, `state/lifecycle/hearing_stage.json`, audition's published learning progress) to find which held: no saturation, a missing reading counted as unsaturated, or a step that came but was not seen. If a missing reading held the stage, fix that first. This change still follows, because a stage can legitimately run to `max_dwell_seconds`.
 
-### D1 Deprivation in the developmental phase waits for the next step
+### D1 Boredom in the developmental phase waits for the next step
 
-In the developmental phase, while the hearing schedule has a step to come, a deprivation crossing over the fresh span does not escalate. The monitor requests another rest (the same `welfare_rest` path and bounds) and stays in `fresh`. Negative valence and the uncontrolled indicators escalate as today, in every phase.
+In the developmental phase, while the hearing schedule has a step to come, a `boredom_deprived` crossing over the fresh span does not escalate. Only boredom is relieved by what a step brings (learning progress); the social drive and restlessness are not (review R1), so their deprivation indicators keep today's response. The monitor requests another rest (the same `welfare_rest` path and bounds) and stays in `fresh`. Negative valence, the uncontrolled indicators, and social-drive and restlessness deprivation escalate as today, in every phase.
 
 Alternative rejected: raising `share_bar` in development. It would weaken the indicator for real deprivation too, and a bar change needs the Table A1 calibration it does not have.
 
-Alternative rejected: stepping the band early on a deprivation crossing. That would make the safety net drive the developmental schedule, which the entity's own learning progress is meant to set.
+Alternative rejected: stepping the band early on a boredom crossing. That would make the safety net drive the developmental schedule, which the entity's own learning progress is meant to set.
 
 ### D2 A hearing step restarts the spans
 
@@ -31,21 +31,25 @@ On each published hearing step the evaluator restarts every span and resets ever
 
 ### D3 The wait is bounded
 
-The monitor tracks the stage's awake dwell from the step events. If a deprivation indicator is over its bar when the dwell passes `max_dwell_seconds` plus one developmental awake stretch (2996 s) with no step, the monitor escalates with reason `indicator_stage_overdue`. A schedule that should have stepped and did not is a fault, and the protection fails closed.
+The monitor tracks the stage's awake dwell from the step events. If boredom deprivation is over its bar when the dwell passes `max_dwell_seconds` plus one developmental awake stretch (2996 s) with no step, the monitor escalates with reason `indicator_stage_overdue`. A schedule that should have stepped and did not is a fault, and the protection fails closed.
 
 ### D4 Complete schedule
 
 Once the band is open (stage 4), there is no step to wait for, and the response is today's: a crossing over the fresh span preserves and freezes.
 
-### D5 Open: the interaction with uncontrolled boredom (decide in review)
+### D5 The uncontrolled indicator does not interact (resolved in review R2)
 
-A rest the safety net requests ends boredom from outside the entity. If that end counts as other-ended, four such rests with no own-ended crossing put boredom's uncontrolled posterior at 31/32, over `q_wf` (0.95), and the entity freezes after about four rest cycles, roughly two hours, with reason `indicator_boredom_uncontrolled`. Either this is the intended backstop (an entity that cannot end its own boredom across several rests is losing control, which A.4 treats as distress) or it undoes D1. Task 0.2 measures how a net rest's end is classified today; the review then picks one and records why.
+A span restart clears the end records and re-baselines the end counters, so a rest's end is never counted and boredom's uncontrolled posterior stays at 1/2 under a spent stimulus. D3 is therefore the only bound on the wait.
+
+### D6 Notices are aggregated (review R3)
+
+Every crossing is still recorded and flagged for review. The caretaker gets one notice when the wait starts, one at each hearing step, and one on escalation, not one per crossing.
 
 ## Risks / Trade-offs
 
 - The entity may spend up to `max_dwell_seconds` of awake time with a deficit over its bar, broken by rests. Each rest's affective reset clears the deficit, every crossing is flagged for human review, and the caretaker notice says the response is waiting for a stage. The adversarial review must weigh this against the cost of a freeze that ends a gestation the schedule was about to relieve.
 - Under a spent stimulus the parent design has boredom recross about ten minutes after each rest, so waiting can mean about 23.5 minutes of rest for every 10 awake minutes, for hours. That is close to the fetal pattern, where quiet and active sleep fill most of the time (Nijhuis et al. 1982), but the review must confirm that a mostly resting entity is the intended developmental state.
-- The deficit drives raise arousal (`drive_arousal_gain`), not valence directly, so negative valence is not a proven backstop for an entity that is bored without feeling bad. D1's split rests on D5 and on the uncontrolled indicator, not on valence.
+- The deficit drives raise arousal (`drive_arousal_gain`), not valence directly, so negative valence is not a backstop for an entity that is bored without feeling bad. With D5 resolved, D3 is the only bound on the wait.
 - This departs from paper §6.5 (a second crossing over a fresh span brings preservation and a freeze). The paper needs a revision entry, which the operator reviews.
 - A stage-event outage would hold the response in waiting. D3's bound and the existing silent-stream escalation cover it.
 

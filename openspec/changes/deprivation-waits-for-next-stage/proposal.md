@@ -6,18 +6,19 @@ The 2026-11-17 freeze evidence (`docs/records/freeze-evidence-summary-2026-11-17
 
 ## What Changes
 
-- In the developmental phase, a deprivation indicator (`boredom_deprived`, `social_drive_deprived`, `restlessness_deprived`) that crosses over the fresh span after its rest does not preserve and freeze while the hearing schedule has a stage still to come. The response requests another rest and waits for the next hearing-band step.
+- In the developmental phase, a `boredom_deprived` crossing over the fresh span after its rest does not preserve and freeze while the hearing schedule has a stage still to come. Social-drive and restlessness deprivation are unchanged, since a hearing step does not relieve them. The response requests another rest and waits for the next hearing-band step.
 - Every hearing-band step restarts every indicator span, as a completed rest does. A crossing over a span that started at a step is a first crossing again.
 - The freeze still comes for deprivation when the schedule is complete (the band is open) and a crossing follows the rest, as today.
 - Negative valence and the uncontrolled indicators keep today's response in every phase: they report distress, not a stimulus that is temporarily thin.
-- A bound keeps the wait finite: if deprivation stays over its bar for a whole developmental awake stretch after the stage's `max_dwell_seconds` should have ended it, the monitor escalates with a new reason, `indicator_stage_overdue`.
+- A bound keeps the wait finite: if boredom deprivation stays over its bar for a whole developmental awake stretch after the stage's `max_dwell_seconds` should have ended it, the monitor escalates with a new reason, `indicator_stage_overdue`.
+- The caretaker gets one notice when the wait starts, one per hearing step and one on escalation; every crossing is still recorded and flagged for review.
 - Root cause first: before any change to the response, find out why audition's learning progress did not saturate and step the band within eight hours on those boots. A learning-progress reading that never arrives counts as unsaturated, which would hold a stage to its maximum dwell.
 
 ## Capabilities
 
 ### Modified Capabilities
 
-- `welfare-monitoring`: in the developmental phase a deprivation crossing waits for the next hearing-band step while the schedule has one to come; each step restarts the spans; an overdue step escalates.
+- `welfare-monitoring`: in the developmental phase a boredom deprivation crossing waits for the next hearing-band step while the schedule has one to come; each step restarts the spans; an overdue step escalates.
 
 ## Impact
 
