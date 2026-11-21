@@ -189,5 +189,5 @@ The offline suite's active-inference benchmark compares the planning module's ex
 ## Spec and related
 
 - Primary spec: `openspec/specs/planning-active-inference/spec.md`
-- Archived changes: `openspec/changes/archive/2026-06-07-nous-pymdp-swap/` (the move to pymdp) and `openspec/changes/archive/2026-05-20-nous/` (the original symbolic integration)
+- Archived changes: `openspec/changes/archive/2026-06-07-nous-pymdp-swap/` (the move to pymdp) and the original symbolic integration, archived on 2026-05-20 under the module's old name
 - Related modules: [Affect](./affect.md) supplies the affect quadrant; [Self-model](./self-model.md) reads `planning.policy` for its capability map; [Sleep](./sleep.md) decides on forwarded rest requests; [Language](./language.md) realizes think and speak intents; [Effectors](./effectors.md) receives no planning module action.
