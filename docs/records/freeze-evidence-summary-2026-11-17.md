@@ -1,6 +1,6 @@
 # Freeze evidence summary — 2026-11-17
 
-Source archives: `/home/erik/.claude/scratchpad/freeze-archive/` (control JSON + boot logs).
+Source archives (control JSON and boot logs) are kept locally, outside the repository.
 Archive control files parsed: **34**; boot logs present: **33**.
 Also present: `control-before-clear.json` (pre-clear snapshot), `preservation_welfare-*.jsonl`.
 
