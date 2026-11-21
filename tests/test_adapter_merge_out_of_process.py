@@ -343,12 +343,12 @@ def test_an_accepted_result_without_evidence_is_a_failed_merge(tmp_path, monkeyp
 def test_stderr_tail_has_paths_scrubbed(tmp_path):
     def child(job_dir, job):
         return SimpleNamespace(
-            returncode=1, stdout="", stderr="cannot open /home/erik/secret/model.bin"
+            returncode=1, stdout="", stderr="cannot open /home/alice/secret/model.bin"
         )
 
     with pytest.raises(MergeWorkerError) as exc:
         ChildMergeRunner(run=FakeLauncher(child)).run(**_run_kwargs(tmp_path))
-    assert "/home/erik" not in str(exc.value) and "<PATH>" in str(exc.value)
+    assert "/home/alice" not in str(exc.value) and "<PATH>" in str(exc.value)
 
 
 def test_stale_staging_siblings_older_than_the_timeout_are_swept(tmp_path):

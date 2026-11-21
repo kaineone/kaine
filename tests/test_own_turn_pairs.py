@@ -32,7 +32,7 @@ SCRIPT = REPO / "scripts" / "sleep_external_train.py"
 BASE_MODEL = Path(
     os.environ.get(
         "KAINE_TEST_ORGAN_BASE_MODEL",
-        "/var/mnt/675bf75f-6d4f-4738-bdb0-22bfb7a93a69/kaine/models/Qwen3.5-4B-abliterated",
+        "/srv/models/Qwen3.5-4B-abliterated",
     )
 )
 

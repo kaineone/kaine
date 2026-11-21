@@ -23,7 +23,7 @@
 ## 4. Training
 - [x] 4.1 ~~`train_sft.py` acceptance~~ K1-Jev v2 trained via QLoRA SFT (r=16, alpha=32, lr=2e-5, 3 epochs). 93.4% on 422-example dev set. Welfare-critical at 100%.
 - [x] 4.2 Tests with a tiny fake model under the kaine venv: argv has no shell, the loss mask covers only the answer letter, the guard refuses with a cycle present.
-- [x] 4.3 ~~Train 4B and 0.8B~~ Superseded: only 0.8B trained (distillation approach). Run at `/mnt/675bf75f-.../kaine/k1jev/runs/k1jev-v2-merged/`.
+- [x] 4.3 ~~Train 4B and 0.8B~~ Superseded: only 0.8B trained (distillation approach). Run `k1jev-v2-merged`, kept on the maintainers' bulk store.
 
 ## 5. Evaluation and bake-off
 - [x] 5.1 ~~`evaluate.py`~~ Superseded: evaluation done during distillation (93.4% accuracy, per-question breakdown in distill logs).
