@@ -28,6 +28,7 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import re
 import sys
 import time
@@ -75,7 +76,9 @@ REFERENCE_ATTRIBUTION = (
 )
 
 SAM_HF_MODEL_ID = "kaineone/Qwen3-TTS-Sam-0.6B"
-SAM_MODEL_PATH = "/run/media/erik/2TBm2Store/kaine/qwen3-tts-training/sam-model-v2/checkpoint-epoch-1"
+# A local Sam checkpoint, tried after the cached Hugging Face id. Set it per
+# host; there is no default, since a checkout must not carry one machine's paths.
+SAM_MODEL_PATH = os.environ.get("KAINE_SAM_MODEL_PATH", "")
 SAM_SPEAKER = "sam"
 SAM_CHECKPOINT = "checkpoint-epoch-1"
 SAM_SAMPLE_RATE = 24000
@@ -325,7 +328,10 @@ def load_sam_model(device="cuda", sam_model_path=SAM_MODEL_PATH):
         import qwen_tts
 
     errors = []
-    for source, kwargs in [(SAM_HF_MODEL_ID, {"local_files_only": True}), (sam_model_path, {})]:
+    sources = [(SAM_HF_MODEL_ID, {"local_files_only": True})]
+    if sam_model_path:
+        sources.append((sam_model_path, {}))
+    for source, kwargs in sources:
         try:
             model = qwen_tts.Qwen3TTSModel.from_pretrained(
                 source,
@@ -333,10 +339,13 @@ def load_sam_model(device="cuda", sam_model_path=SAM_MODEL_PATH):
                 dtype=torch.bfloat16,
                 **kwargs,
             )
-            return model, source
+            # Record the Hugging Face id, or only that a local checkpoint was
+            # used: the manifest is committed and must not hold a host path.
+            return model, (source if source == SAM_HF_MODEL_ID else "local checkpoint")
         except Exception as exc:
             errors.append(exc)
-    raise SystemExit(f"error: could not load Sam model: {errors[-1]}")
+    hint = "" if sam_model_path else " (set KAINE_SAM_MODEL_PATH to a local Sam checkpoint)"
+    raise SystemExit(f"error: could not load Sam model: {errors[-1]}{hint}")
 
 
 def apply_prosody_muffling(audio, sample_rate):
@@ -661,7 +670,6 @@ def main(argv=None) -> int:
                 "renderer": "sam",
                 "sam_model_repo": SAM_HF_MODEL_ID,
                 "sam_model_source": source,
-                "sam_model_path": SAM_MODEL_PATH,
                 "sam_speaker": SAM_SPEAKER,
                 "sam_checkpoint": SAM_CHECKPOINT,
                 "sam_sample_rate": SAM_SAMPLE_RATE,

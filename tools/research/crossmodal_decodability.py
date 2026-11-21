@@ -51,16 +51,11 @@ import numpy as np
 # Constants (mirroring the perception feed / shipped config)
 # --------------------------------------------------------------------------
 
-DEFAULT_MANIFEST = Path(
-    "/var/mnt/675bf75f-6d4f-4738-bdb0-22bfb7a93a69/kaine/media/ignition-programme/programme.toml"
-)
-DEFAULT_SCRATCH = Path("/var/mnt/675bf75f-6d4f-4738-bdb0-22bfb7a93a69/kaine/scratch/crossmodal")
-DEFAULT_MODELS_DIR = Path(
-    "/var/mnt/675bf75f-6d4f-4738-bdb0-22bfb7a93a69/kaine/os-drive-state-copy-2026-10-06/models"
-)
-DEFAULT_REPORT = Path(
-    "/var/home/erik/Projects/kaineone/kaine-research/crossmodal-decodability-2026-10-31.md"
-)
+# Host-specific locations come from the command line or the environment, never
+# from this file: the manifest is required, scratch and report default to the
+# working directory, and the models directory is KAINE_MODELS_DIR as usual.
+DEFAULT_SCRATCH = Path("scratch/crossmodal")
+DEFAULT_REPORT = Path("crossmodal-decodability.md")
 
 SAMPLE_RATE = 16000  # [perception_feed.audio].sample_rate / capture_sample_rate
 VISION_HZ = 10.0  # [vision].vision_sample_hz
@@ -1276,7 +1271,7 @@ def build_parser() -> argparse.ArgumentParser:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     p.add_argument("stage", choices=["extract", "analyse", "report", "all"])
-    p.add_argument("--manifest", default=str(DEFAULT_MANIFEST))
+    p.add_argument("--manifest", required=True, help="the stimulus programme manifest (programme.toml)")
     p.add_argument("--scratch", default=str(DEFAULT_SCRATCH))
     p.add_argument("--report-path", default=str(DEFAULT_REPORT))
     p.add_argument("--films", nargs="*", default=None, help="substring filter on film names")
@@ -1310,7 +1305,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     os.environ.setdefault("CUDA_DEVICE_ORDER", "PCI_BUS_ID")
     os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
     os.environ.setdefault("HF_HUB_OFFLINE", "1")
-    os.environ.setdefault("KAINE_MODELS_DIR", str(DEFAULT_MODELS_DIR))
     args = build_parser().parse_args(argv)
     if args.stage in ("extract", "all"):
         stage_extract(args)

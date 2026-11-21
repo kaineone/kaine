@@ -66,7 +66,7 @@ The decision server runs K1-Jev through `llama-server` (llama.cpp). The `systemo
 
 ## Reproduction
 
-1. The training run is at `/mnt/675bf75f-.../kaine/k1jev/runs/k1jev-v2-merged/`
+1. The training run is `k1jev-v2-merged`, kept on the maintainers' bulk store (not in this repository)
 2. The distillation pipeline that produced the 422 labels is in `scripts/k1jev/`
 3. The schema, question templates and renderer are in `kaine/decision/`
 4. The GGUF was exported by merging the LoRA into the base, then converting to Q8_0 via the llama.cpp tooling in the trainer image

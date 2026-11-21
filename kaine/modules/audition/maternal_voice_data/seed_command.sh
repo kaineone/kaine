@@ -1,3 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-python tools/maintainer/generate_maternal_voice.py --texts /var/home/erik/Projects/kaineone/kaine/kaine/modules/audition/maternal_voice_data/texts.toml --out /var/home/erik/Projects/kaineone/kaine/kaine/modules/audition/maternal_voice_data --renderer sam

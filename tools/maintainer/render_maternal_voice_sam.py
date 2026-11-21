@@ -7,9 +7,9 @@ This is a *plan* emitter only.  It does NOT synthesize audio, does NOT load
 torch, and does NOT touch any generator.  It documents the intended render
 chain for maternal-channel items using:
 
-* the Qwen3-TTS Sam checkpoint at
-  ``/run/media/erik/2TBm2Store/kaine/qwen3-tts-training/sam-model-v2/checkpoint-epoch-1``
-  (speaker ``sam``), read from that checkpoint's README; and
+* the Qwen3-TTS Sam checkpoint named by ``--sam-model-path`` or
+  ``KAINE_SAM_MODEL_PATH`` (speaker ``sam``), read from that checkpoint's
+  README; and
 * a prosody-muffling profile: 300 Hz spectral ceiling (lowpass), 8 kHz FLAC
   output, 16-bit PCM.
 
@@ -24,12 +24,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-SAM_MODEL_PATH = "/run/media/erik/2TBm2Store/kaine/qwen3-tts-training/sam-model-v2/checkpoint-epoch-1"
+SAM_MODEL_PATH = os.environ.get("KAINE_SAM_MODEL_PATH", "")
 SAM_SPEAKER = "sam"
 SAM_CHECKPOINT = "checkpoint-epoch-1"
 
@@ -224,7 +225,8 @@ def main(argv: list[str] | None = None) -> int:
         "--sam-model-path",
         type=str,
         default=SAM_MODEL_PATH,
-        help="path to the Sam TTS checkpoint",
+        required=not SAM_MODEL_PATH,
+        help="path to the Sam TTS checkpoint (default: $KAINE_SAM_MODEL_PATH)",
     )
     args = parser.parse_args(argv)
 
