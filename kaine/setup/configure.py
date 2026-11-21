@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import json
+import math
 import os
 import sys
 from pathlib import Path
@@ -46,18 +48,32 @@ def _set_path(root: dict[str, Any], dotted: str, value: Any) -> None:
     cursor[parts[-1]] = value
 
 
-def _dump_toml(value: Any, indent: int = 0) -> str:
-    pad = "  " * indent
+def _toml_key(key: str) -> str:
+    """A bare key when TOML allows one, else a quoted key."""
+    if key and all(c.isascii() and (c.isalnum() or c in "_-") for c in key):
+        return key
+    return json.dumps(key, ensure_ascii=False)
+
+
+def _dump_toml(value: dict[str, Any], _path: tuple[str, ...] = ()) -> str:
+    """Serialize a nested mapping to TOML that parses back to the same mapping.
+
+    Tables are written with their full dotted header (``[security.state_encryption]``),
+    so a nested table never lands at the top level.
+    """
     lines: list[str] = []
-    if isinstance(value, dict):
-        # scalar leaves first
-        for key in sorted(value):
-            if not isinstance(value[key], dict):
-                lines.append(f"{pad}{key} = {_toml_scalar(value[key])}")
-        for key in sorted(value):
-            if isinstance(value[key], dict):
-                lines.append(f"\n{pad}[{key}]")
-                lines.append(_dump_toml(value[key], indent))
+    scalars = [k for k in sorted(value) if not isinstance(value[k], dict)]
+    tables = [k for k in sorted(value) if isinstance(value[k], dict)]
+    for key in scalars:
+        lines.append(f"{_toml_key(str(key))} = {_toml_scalar(value[key])}")
+    for key in tables:
+        path = (*_path, str(key))
+        if lines:
+            lines.append("")
+        lines.append("[" + ".".join(_toml_key(p) for p in path) + "]")
+        body = _dump_toml(value[key], path)
+        if body:
+            lines.append(body)
     return "\n".join(lines)
 
 
@@ -65,12 +81,21 @@ def _toml_scalar(value: Any) -> str:
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, str):
-        return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
-    if isinstance(value, (int, float)):
+        # JSON string escapes are valid TOML basic-string escapes.
+        return json.dumps(value, ensure_ascii=False)
+    if isinstance(value, int):
         return str(value)
+    if isinstance(value, float):
+        if math.isnan(value):
+            return "nan"
+        if math.isinf(value):
+            return "inf" if value > 0 else "-inf"
+        return repr(value)
     if isinstance(value, list):
+        if any(isinstance(v, dict) for v in value):
+            raise ValueError("arrays of tables are not supported by this writer")
         return "[" + ", ".join(_toml_scalar(v) for v in value) + "]"
-    return '""'
+    raise ValueError(f"cannot write a {type(value).__name__} value to TOML")
 
 
 def _prompt(label: str, current: Any) -> Any:
