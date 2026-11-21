@@ -8,7 +8,7 @@ The planning module is built and tested, and held: it is off in the shipped `con
 
 - `[planning].backend` selects the engine. `"pymdp"` needs the `[reasoning]` optional extra (`inferactively-pymdp` and `jax[cpu]`). `"numpy"` needs only NumPy.
 - No GPU is needed; both backends run on the CPU inside the cycle's time budget.
-- The earlier symbolic reasoner is retired; its files are kept in `external/archive/nous_narsese/`.
+- The earlier symbolic reasoner is retired; its files are kept under `external/archive/`, in the directory that still has the module's old name.
 
 ## What it does
 
