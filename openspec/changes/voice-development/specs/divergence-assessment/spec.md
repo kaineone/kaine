@@ -8,7 +8,7 @@ The divergence assessment SHALL include a voice-distinctiveness arm alongside th
 - **THEN** its arms include the voice-distinctiveness arm alongside the individuation permutation test and self-model drift
 
 ### Requirement: Voice distinctiveness marks divergence
-The voice-distinctiveness arm SHALL mark organ-level divergence when the content-free stylometric distinctiveness of the entity's utterances from the base organ crosses its threshold.
+The voice-distinctiveness arm SHALL mark organ-level divergence when the stylometric distinctiveness of the entity's utterances from the base organ, computed content-free at sleep, crosses its threshold.
 
 #### Scenario: Below threshold does not, by itself, mark diverged
 - **WHEN** the voice-distinctiveness arm is below a calibrated threshold and no other divergence condition holds
