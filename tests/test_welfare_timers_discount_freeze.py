@@ -1198,8 +1198,16 @@ async def test_monitor_null_mid_batch_keeps_the_loop_and_cursor(bus):
 
 
 @pytest.mark.asyncio
-async def test_monitor_missing_error_key_counts_as_zero(bus):
-    """A report with no prediction_error key defaults to 0.0 and ends distress."""
+async def test_monitor_missing_error_key_is_no_sample(bus):
+    """A report with no prediction_error key is no sample: it does not end distress.
+
+    Every interoception report carries the key, so a report without one is a
+    producer defect; the welfare reading (read_welfare_prediction_error) makes
+    it no sample rather than a 0.0 that would end the episode, and the poll that
+    read it fails so the run loop's error path sees it.
+    """
+    from kaine.lifecycle.welfare_signal import WelfareSignalUnreadable
+
     cfg = WelfareResponseConfig(
         enabled=True,
         action="pause",
@@ -1224,12 +1232,13 @@ async def test_monitor_missing_error_key_counts_as_zero(bus):
             timestamp=datetime.now(timezone.utc),
         )
     )
-    await mon._poll_once(stop)
-    assert mon._distress.active_since is None
+    with pytest.raises(WelfareSignalUnreadable):
+        await mon._poll_once(stop)
+    assert mon._distress.active_since == 0.0
 
     u.value = 40.0
     await mon._poll_once(stop)
-    assert mon._fork_manager.calls == []
+    assert len(mon._fork_manager.calls) == 1
 
 
 @pytest.mark.asyncio
