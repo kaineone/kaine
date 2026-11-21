@@ -1653,7 +1653,10 @@ class Sleep(BaseModule):
         # Stage 0 gate: training on self-generated preferences is retired until
         # Stage 2 provides a validated preference source (D12).
         if self._voice_config.preference_source not in TRAINING_SOURCES:
-            skip_reason = "skipped: no validated preference source (voice-development Stage 2)"
+            skip_reason = (
+                "skipped: no validated preference source (configured "
+                f"{self._voice_config.preference_source!r}; voice-development Stage 2 required)"
+            )
             log.info("voice_alignment skipped: %s", skip_reason)
             voice_result = TrainingResult(
                 accepted=False,

@@ -42,7 +42,7 @@ speech-qwen3 = [
     "qwen-tts>=0.1.1",
 ]
 dashboard = [
-    "fastapi>=0.143.0,<1",
+    "fastapi>=0.162.5,<1",
     "uvicorn[standard]>=0.54.0,<1",
     "jinja2>=3.1.6,<4",
 ]
@@ -65,7 +65,7 @@ full = [
 ]
 test = [
     "pytest>=9.1.1",
-    "pytest-asyncio>=1.4.0",
+    "pytest-asyncio>=1.4.1.post1",
     # Parallel test runs (`pytest -n auto --dist loadfile`), as CI runs them.
     "pytest-xdist>=3.8,<4",
     "fakeredis>=2.40.0",
@@ -80,7 +80,7 @@ test = [
 # driver does not belong there. The tests drive the system Google Chrome
 # (Playwright channel "chrome") and skip when no browser is available.
 browser-test = [
-    "playwright>=1.64.1",
+    "playwright>=1.65.1",
 ]
 # Live microphone (LiveMicrophone in kaine/modules/audition/live.py).
 # Required only if [audition].capture_enabled = true. Lazy-imported.
@@ -95,7 +95,7 @@ audio = [
     "funasr>=1.4.16,<2",
     # In-memory prosody extraction for audition.prosody (ISC licence).
     # Required only if [audition].prosody_enabled = true. Lazy-imported.
-    "librosa>=0.10,<1",
+    "librosa>=0.11.0,<1",
     "av>=18.1.0,<19",  # PyAV — playlist-audio track decode for the perception feed (PlaylistAudioStream)
 ]
 # Temporally-native InternVideo-Next clip encoder for the vision module
@@ -145,7 +145,7 @@ reasoning = [
 # Pulls ~3-4 GB of weights and CUDA libs.
 training = [
     "transformers>=5.21.0,<6",
-    "peft>=0.21.0,<1",
+    "peft>=0.21.2,<1",
     "bitsandbytes>=0.50.2,<1",
     "accelerate>=1.15.0,<2",
 ]
@@ -239,6 +239,7 @@ indent-style = "space"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 markers = [
     "integration: hits a live authenticated Redis; skipped unless KAINE_REDIS_PASSWORD is set",
     "systems: per-subsystem I/O contract test under tests/systems/",

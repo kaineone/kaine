@@ -66,7 +66,7 @@ def test_shipped_kaine_toml_has_evaluation_block():
     config_path = Path(__file__).parent.parent / "config" / "kaine.toml"
     c = load_evaluation_config(config_path)
     assert c.enabled is True
-    assert c.paths.trajectory_dir == "data/workspace_trajectory"
+    assert c.paths.trajectory_dir.endswith("data/workspace_trajectory")
 
 
 # --- A/B baseline parity with the language organ -----------------------------

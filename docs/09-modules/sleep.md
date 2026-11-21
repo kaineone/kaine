@@ -222,7 +222,7 @@ Voice adaptation builds no preference pairs and computes no organ-level divergen
 | `tests/test_sleep_trigger.py` | Fatigue trigger |
 | `tests/test_sleep_scheduler.py` | Interval and deferral |
 | `tests/test_sleep_rest_requests.py` | `intent.rest` handling |
-| `tests/test_sleep_sleep_pause.py` | The perceptual locus module and playlist pause and restore |
+| `tests/test_sleep_pause.py` | The perceptual locus module and playlist pause and restore |
 | `tests/test_sleep_associative_replay.py` | Phase 3: `associate()` then `prune()`, the content-free `sleep.association` events, and phase 2 unchanged with the flag off |
 | `tests/test_sleep_oscillator_hook.py` | Phase-1 oscillator hook |
 | `tests/test_sleep_nar_removal.py` | Replay reaching the workspace through the normal cycle |
