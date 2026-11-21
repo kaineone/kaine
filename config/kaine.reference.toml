@@ -1895,14 +1895,6 @@ seeks_per_awake_hour = 20
 # Explains what this key controls and when to change it.
 stage = "minimal"
 
-[storage]
-# tier: basic  bounds: n/a
-# Explains what this key controls and when to change it.
-data_root = "data"
-# tier: basic  bounds: n/a
-# Explains what this key controls and when to change it.
-min_free_gb = 20
-
 [supervisor]
 # tier: standard  bounds: n/a
 # Explains what this key controls and when to change it.
@@ -2095,12 +2087,6 @@ language_external_stream = "language.external"
 # tier: standard  bounds: n/a
 # Explains what this key controls and when to change it.
 output_format = "wav"
-# tier: standard  bounds: n/a
-# Explains what this key controls and when to change it.
-qwen3_device = "cuda:1"
-# tier: standard  bounds: n/a
-# Explains what this key controls and when to change it.
-qwen3_dtype = "bfloat16"
 # tier: standard  bounds: n/a
 # Explains what this key controls and when to change it.
 request_timeout_s = 120.0

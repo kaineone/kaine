@@ -285,13 +285,13 @@ min_free_vram_gb = 2.0
 model_server_url = "http://127.0.0.1:11434/v1"
 timeout_s = 5.0
 
-[storage]
+# [storage]
 # Root for all growing data (entity state, memories, logs, evaluation and
 # research output, backups, models). Relative data paths resolve under it;
 # absolute paths keep their value. Unset: everything stays relative to the
 # working directory. KAINE_DATA_ROOT overrides it (containers set /app).
-data_root = "data"
-min_free_gb = 20
+# data_root = "/mnt/data/kaine"
+# min_free_gb = 20
 
 [preboot]
 # Disk-free rows of `python -m kaine.preboot`. KAINE never deletes memories,
@@ -1356,8 +1356,8 @@ backend = "chatterbox"
 # sherpa_num_threads = 2
 # qwen3_model_id = "kaineone/Qwen3-TTS-Sam-0.6B"
 # qwen3_tokenizer_id = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
-qwen3_device = "cuda:1"   # GPU for the Qwen3-TTS model
-qwen3_dtype = "bfloat16"  # bfloat16 | float16 | float32
+# qwen3_device = "cuda:1"   # GPU for the Qwen3-TTS model
+# qwen3_dtype = "bfloat16"  # bfloat16 | float16 | float32
 # qwen3_speaker = "sam"      # the Sam voice from kaineone/Qwen3-TTS-Sam-0.6B
 voice_mode = "predefined"
 # Voice choice. The shipped config names no voice and the project ships no
