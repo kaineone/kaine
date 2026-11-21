@@ -200,7 +200,7 @@ def test_required_suite_always_starts_for_pull_requests_and_the_merge_queue() ->
 
 
 def test_slow_lane_diffs_a_merge_queue_batch_against_its_base() -> None:
-    steps = _load_workflow().get("jobs", {}).get("pytest", {}).get("steps", [])
+    steps = _load_workflow().get("jobs", {}).get("suite", {}).get("steps", [])
     lane = next((s for s in steps if s.get("id") == "lane"), None)
     assert lane is not None, "Missing the slow-lane step (id: lane)"
     assert "github.event.merge_group.base_sha" in lane.get("run", ""), (
@@ -209,7 +209,7 @@ def test_slow_lane_diffs_a_merge_queue_batch_against_its_base() -> None:
 
 
 def test_workflow_offline_step_excludes_slow_tests() -> None:
-    steps = _load_workflow().get("jobs", {}).get("pytest", {}).get("steps", [])
+    steps = _load_workflow().get("jobs", {}).get("suite", {}).get("steps", [])
     step = next(
         (s for s in steps if s.get("name") == "Run the offline test suite"), None
     )
@@ -220,7 +220,7 @@ def test_workflow_offline_step_excludes_slow_tests() -> None:
 
 
 def test_workflow_slow_step_is_wired() -> None:
-    steps = _load_workflow().get("jobs", {}).get("pytest", {}).get("steps", [])
+    steps = _load_workflow().get("jobs", {}).get("suite", {}).get("steps", [])
     step = next((s for s in steps if s.get("name") == "Run the slow tests"), None)
     assert step is not None, "Missing 'Run the slow tests' step"
     assert "steps.lane.outputs.slow" in str(step.get("if", "")), (
