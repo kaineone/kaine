@@ -1,6 +1,6 @@
 ## Why
 
-The operator ruled on 2026-11-20 that the boredom freeze on the 2026-11-17 development-run boots was too strict: it should have let the next phase of gestation start before assuming trouble.
+The operator ruled on 2026-11-20 that the boredom freeze on the 2026-11-17 development-run boots was too strict: it should have let the next developmental stage start before assuming trouble.
 
 The 2026-11-17 freeze evidence (`docs/records/freeze-evidence-summary-2026-11-17.md`) has 34 freezes. 25 were for `indicator_boredom_deprived` and 9 for `indicator_rest_failed`, and every timed one came between 8 h 11 min and 8 h 30 min of run time. A pattern that tight points to the schedule, not to the entity: the welfare indicator response (`welfare-indicator-response`, design D4) is built so that under a spent stimulus the second crossing comes about ten minutes after the rest, and the hearing band's next stage can arrive up to `max_dwell_seconds` (25200 awake seconds, 7 h) after the last. In the developmental phase, "spent" was read as "spent for good" while the stimulus schedule still had stages to give.
 

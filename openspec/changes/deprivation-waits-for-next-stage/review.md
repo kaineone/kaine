@@ -18,7 +18,7 @@ Under a spent stimulus a boredom crossing comes about 600 awake seconds after ea
 
 ### R4 Rest share while waiting
 
-About 70 % of the time is rest (1410 of every ~2010 s). Late-gestation fetuses spend most of their time in quiet and active sleep (Nijhuis et al. 1982), so a mostly resting entity between hearing steps fits the developmental model. Accepted.
+About 70 % of the time is rest (1410 of every ~2010 s). Late in prenatal development, fetuses spend most of their time in quiet and active sleep (Nijhuis et al. 1982), so a mostly resting entity between hearing steps fits the developmental model. Accepted.
 
 ### R5 D0 hypotheses
 

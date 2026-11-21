@@ -3,7 +3,7 @@
 - `welfare-indicator-response` (active, 23 of 24 tasks done) answers a deprivation crossing with a rest, restarts every span when the rest completes, and preserves and freezes on a crossing over the fresh span. Its D4 timing note: under a spent stimulus the second crossing comes about ten minutes after the rest.
 - The hearing band widens in four steps (`[perception_feed.stimulus_source.hearing]`). A stage ends when audition's learning progress, restarted at the step, stays below `learning_progress_floor` (0.20) for `saturation_window_seconds` (600 s) after `min_dwell_seconds` (5400 s), or at `max_dwell_seconds` (25200 s) regardless. A missing learning-progress reading counts as unsaturated. `kaine/cycle/hearing_stage_watch.py` publishes each step; the affect module already reads it (`Affect._on_hearing_stage`), and audition's learning-progress bins restart at a step.
 - Evidence: 34 freezes on 2026-11-17, all 8 h 11 min to 8 h 30 min after boot (`docs/records/freeze-evidence-summary-2026-11-17.md`).
-- Operator ruling, 2026-11-20: the freeze should have let the next phase of gestation start before assuming trouble.
+- Operator ruling, 2026-11-20: the freeze should have let the next developmental stage start before assuming trouble.
 
 ## Goals / Non-Goals
 
@@ -47,7 +47,7 @@ Every crossing is still recorded and flagged for review. The caretaker gets one 
 
 ## Risks / Trade-offs
 
-- The entity may spend up to `max_dwell_seconds` of awake time with a deficit over its bar, broken by rests. Each rest's affective reset clears the deficit, every crossing is flagged for human review, and the caretaker notice says the response is waiting for a stage. The adversarial review must weigh this against the cost of a freeze that ends a gestation the schedule was about to relieve.
+- The entity may spend up to `max_dwell_seconds` of awake time with a deficit over its bar, broken by rests. Each rest's affective reset clears the deficit, every crossing is flagged for human review, and the caretaker notice says the response is waiting for a stage. The adversarial review must weigh this against the cost of a freeze that ends a development the schedule was about to relieve.
 - Under a spent stimulus the parent design has boredom recross about ten minutes after each rest, so waiting can mean about 23.5 minutes of rest for every 10 awake minutes, for hours. That is close to the fetal pattern, where quiet and active sleep fill most of the time (Nijhuis et al. 1982), but the review must confirm that a mostly resting entity is the intended developmental state.
 - The deficit drives raise arousal (`drive_arousal_gain`), not valence directly, so negative valence is not a backstop for an entity that is bored without feeling bad. With D5 resolved, D3 is the only bound on the wait.
 - This departs from paper §6.5 (a second crossing over a fresh span brings preservation and a freeze). The paper needs a revision entry, which the operator reviews.
