@@ -1,64 +1,116 @@
-#!/usr/bin/env python3
-"""Check that every first-party Python file carries an SPDX license header."""
+# SPDX-License-Identifier: LicenseRef-CAL-0.5
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
+"""Check that every first-party Python source file carries the SPDX header.
 
+Exits 0 if all files are compliant; exits 1 (printing offenders) if any are
+missing the header.
+
+Reusable helper::
+
+    from scripts.check_license_headers import missing_headers
+    offenders = missing_headers()  # list[str] of repo-relative paths
+"""
 from __future__ import annotations
 
 import pathlib
-import re
+import sys
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
-_FIRST_PARTY_DIRECTORIES = ("kaine", "scripts", "tests")
+REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 
-_Spdx_RE = re.compile(r"SPDX-License-Identifier")
+# Directories to walk (relative to repo root).
+INCLUDE_DIRS = ["kaine", "plugins", "scripts", "tests"]
 
+# Exclusion patterns — matched against each path component.
+EXCLUDE_PARTS = {
+    "external",
+    ".venv",
+    "build",
+    "dist",
+    "__pycache__",
+}
+EXCLUDE_SUFFIXES = {".egg-info"}
 
-def _first_party_files() -> list[pathlib.Path]:
-    """Return the sorted list of first-party Python files."""
-    files: set[pathlib.Path] = set()
-
-    for directory in _FIRST_PARTY_DIRECTORIES:
-        base = ROOT / directory
-        if base.is_dir():
-            for path in base.rglob("*.py"):
-                if "__pycache__" not in path.parts:
-                    files.add(path)
-
-    for path in ROOT.glob("*.py"):
-        files.add(path)
-
-    return sorted(files)
+SPDX_MARKER = "SPDX-License-Identifier"
 
 
-def _file_has_spdx_header(path: pathlib.Path) -> bool:
-    """Return ``True`` if *path* contains an SPDX header within the first few lines."""
-    try:
-        with path.open("r", encoding="utf-8") as fp:
-            for i, line in enumerate(fp):
-                if i > 30:
-                    break
-                if _Spdx_RE.search(line):
-                    return True
-    except (OSError, UnicodeError):
-        return False
-
+def _is_excluded(path: pathlib.Path) -> bool:
+    """Return True if *path* should be skipped."""
+    for part in path.parts:
+        if part in EXCLUDE_PARTS:
+            return True
+        for suffix in EXCLUDE_SUFFIXES:
+            if part.endswith(suffix):
+                return True
     return False
 
 
-def missing_headers() -> list[pathlib.Path]:
-    """Return first-party Python files that do not contain an SPDX header."""
-    return [path for path in _first_party_files() if not _file_has_spdx_header(path)]
+def _collect_files() -> list[pathlib.Path]:
+    """Return sorted list of first-party .py files to check."""
+    found: list[pathlib.Path] = []
+
+    for dir_name in INCLUDE_DIRS:
+        dir_path = REPO_ROOT / dir_name
+        if not dir_path.exists():
+            continue
+        for py_file in dir_path.rglob("*.py"):
+            rel = py_file.relative_to(REPO_ROOT)
+            if not _is_excluded(rel):
+                found.append(py_file)
+
+    # Top-level .py files.
+    for py_file in REPO_ROOT.glob("*.py"):
+        rel = py_file.relative_to(REPO_ROOT)
+        if not _is_excluded(rel):
+            found.append(py_file)
+
+    return sorted(set(found))
 
 
-def main() -> int:
+def _has_header(path: pathlib.Path) -> bool:
+    """Return True if the file carries the SPDX identifier."""
+    try:
+        with path.open(encoding="utf-8") as fh:
+            for i, line in enumerate(fh):
+                if i >= 10:
+                    break
+                if SPDX_MARKER in line:
+                    return True
+    except OSError:
+        # Unreadable file (permissions, race with deletion, ...): fail
+        # closed and fall through to `return False` below so it is
+        # reported as an offender rather than silently skipped.
+        pass
+    return False
+
+
+def missing_headers() -> list[str]:
+    """Return repo-relative paths of first-party .py files missing the header.
+
+    Returns an empty list if all files are compliant.
+    """
+    offenders: list[str] = []
+    for path in _collect_files():
+        if not _has_header(path):
+            offenders.append(str(path.relative_to(REPO_ROOT)))
+    return offenders
+
+
+def main() -> None:
     offenders = missing_headers()
     if offenders:
-        for path in offenders:
-            print(path)
-        return 1
-
-    print("All first-party files have SPDX license headers.")
-    return 0
+        print(
+            f"check_license_headers: {len(offenders)} file(s) missing the SPDX header:"
+        )
+        for f in offenders:
+            print(f"  {f}")
+        sys.exit(1)
+    else:
+        files = _collect_files()
+        print(
+            f"check_license_headers: all {len(files)} first-party .py files carry the header. OK."
+        )
+        sys.exit(0)
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

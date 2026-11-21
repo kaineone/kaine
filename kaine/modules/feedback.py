@@ -458,26 +458,9 @@ class TopDownBlend:
 
         blend = [0.0] * len(own_next)
         for i in range(len(own_next)):
-            # Guard the zero-weight case against 0 * inf = nan: a
-            # non-finite own (or top) value contributes nothing.
-            v = 0.0
-            if (w_own > 0.0 and math.isfinite(w_own)
-                    and math.isfinite(own_next[i])):
-                v += w_own * own_next[i]
-            if (w_top > 0.0 and math.isfinite(w_top)):
-                try:
-                    tn = top_next[i]
-                except Exception:
-                    tn = None
-                if tn is not None and math.isfinite(tn):
-                    v += w_top * tn
-            if content_next is not None and w_content > 0.0 and math.isfinite(w_content):
-                try:
-                    cn = content_next[i]
-                except Exception:
-                    cn = None
-                if cn is not None and math.isfinite(cn):
-                    v += w_content * cn
+            v = w_own * own_next[i] + w_top * top_next[i]
+            if content_next is not None and w_content > 0.0:
+                v += w_content * content_next[i]
             blend[i] = v
 
         blend_null = None

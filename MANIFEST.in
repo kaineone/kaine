@@ -1,4 +1,0 @@
-# SPDX-FileCopyrightText: 2024 KAINE developers
-# SPDX-License-Identifier: MIT
-
-include kaine/setup.cfg

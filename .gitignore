@@ -1,5 +1,167 @@
-*.pyc
-.pytest_cache
-*.egg-info
-.ruff_cache
-__pycache__
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+# Shared shell helpers are source, not a build artefact.
+!scripts/lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtualenvs
+.venv/
+venv/
+env/
+ENV/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# KAINE runtime state — never check in module state, memories, adapters, or logs
+state/
+state/self_model/
+state/perceptual_locus/
+# Trained/merged LoRA adapter *output* only — anchored so it never matches source
+# packages such as kaine/modules/embodiment/adapters/. (state/ already covers these.)
+state/sleep/adapters/
+state/forks/merged_adapters/
+runtime-logs/
+# Decommission backups — transferable entity bundles; runtime output, never committed
+backups/
+# Research-submission bundles — operator-built metrics bundles; runtime output
+research_out/
+
+# Evaluation sidecar logs (too large for version control). The
+# directory layout is committed via .gitkeep so observers don't have
+# to mkdir on first start; the log files themselves are excluded.
+data/**
+!data/
+!data/evaluation/
+!data/workspace_trajectory/
+# Abliteration-lens research inputs (checked-in content, not runtime output).
+!data/abliteration_lens/
+!data/abliteration_lens/**
+!data/.gitkeep
+!data/evaluation/.gitkeep
+!data/workspace_trajectory/.gitkeep
+*.jsonl
+# Welfare-load-bearing abliteration probe set MUST ship in the repo
+# (hypnos-consolidation): it is the hard gate that prevents voice-alignment
+# from re-introducing refusal conditioning. Exempt it from the *.jsonl rule.
+# (Root-anchored: the tracked copy lives at the top-level eval_probes/.)
+!eval_probes/abliteration_probes.jsonl
+# Default capability/welfare probe battery MUST ship in the repo: the
+# voice-alignment capability eval and the probe battery load it at
+# kaine/modules/sleep/eval_probes/default.jsonl (a fresh clone would otherwise
+# have no probe set). Exempt it from the *.jsonl rule so it is tracked.
+!kaine/modules/sleep/eval_probes/default.jsonl
+# Abliteration-lens research inputs are checked-in content (the broad *.jsonl
+# rule above would otherwise swallow them).
+!data/abliteration_lens/*.jsonl
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+secrets/
+config/secrets.toml
+config/secrets.*.toml
+# First-run wizard operator override — local per-install choices, never committed.
+config/kaine.operator.toml
+.env
+.env.*
+!.env.example
+compose/.env
+compose/*.env
+# kaine.secrets_file lock files and interrupted-write temp files (may hold secrets).
+config/.*.lock
+config/.*.tmp.*
+compose/.*.lock
+compose/.*.tmp.*
+
+# Upstream third-party source trees built locally (ONA, etc.).
+# Ignore the *contents* of external/ rather than the directory itself, so the
+# small vendored DreamerV3 RSSM world-model source (path b) can be re-included
+# below for provenance (see external/dreamerv3/UPSTREAM).
+external/*
+!external/dreamerv3/
+external/dreamerv3/__pycache__/
+# Vendored InternVideo-Next modeling source (path a — literal verbatim vendor);
+# re-included for provenance (see external/internvideo_next/UPSTREAM). The 182 MB
+# model.safetensors is NOT vendored here — it is fetched to state/models/ below.
+!external/internvideo_next/
+external/internvideo_next/__pycache__/
+# Never let the 182 MB weights slip in even if fetched into the vendored dir by
+# mistake (the real fetch lands them under state/models/, ignored above).
+external/internvideo_next/*.safetensors
+# Dasheng and WavJEPA (auditory encoders): vendored modeling source re-included
+# for provenance (see each UPSTREAM). Weights are fetched at setup time into the
+# models directory and never committed.
+!external/dasheng/
+external/dasheng/__pycache__/
+external/dasheng/*.safetensors
+!external/wavjepa/
+external/wavjepa/__pycache__/
+external/wavjepa/*.safetensors
+
+# HuggingFace and model caches
+.cache/
+hf-cache/
+# InternVideo-Next fp16 weights (~182 MB) fetched once at setup by
+# `kaine/setup/internvideo_next.py`. Under state/ (already ignored above); listed
+# explicitly as belt-and-suspenders so the weights never land in git.
+state/models/internvideo_next_base_p14_res224_f16/
+
+# sherpa-onnx speech models fetched by `python -m kaine.setup.speech_models`.
+state/models/sherpa-onnx/
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Compiled C (ONA, etc.)
+*.o
+*.a
+nars
+NAR
+
+# Unsloth writes its compiled-trainer cache to CWD when it runs.
+unsloth_compiled_cache/
+
+# Local scheduler lock — runtime artifact, never published
+.claude/scheduled_tasks.lock
+!external/jlens/
+external/jlens/**/__pycache__/
+
+# Isolated transformers>=5 env for the offline abliteration-lens run (not committed).
+.venv-lens/
+
+# Operator-local compose overlays — host-specific mounts (e.g. a reference-corpus
+# media bind at its absolute host path), never committed.
+compose/*.local.yml
+
+# mdBook output (built locally with `mdbook build docs`)
+/book/

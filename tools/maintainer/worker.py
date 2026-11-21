@@ -5,7 +5,7 @@
 
 usage: worker.py BRIEF OUT_DIR --allow PATH... [--apply REPO] [--think high] [--reapply]
 
-Sends BRIEF to --model (default kimi-k2.7-code:cloud, through the local Ollama
+Sends BRIEF to --model (default beam:cloud, through the local Ollama
 endpoint), saves response.txt / thinking.txt in OUT_DIR,
 parses complete-file blocks
 
@@ -25,7 +25,7 @@ import sys
 import urllib.request
 from pathlib import Path
 
-MODEL = os.environ.get("WORKER_MODEL", "kimi-k2.7-code:cloud")
+MODEL = os.environ.get("WORKER_MODEL", "beam:cloud")
 CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]|\x1b\[[0-9;?]*[A-Za-z]")
 BLOCK = re.compile(r"^@@@FILE[ \t]*:?[ \t]*(\S+)[ \t]*\n(.*?)^@@@END[ \t]*$", re.S | re.M)
 

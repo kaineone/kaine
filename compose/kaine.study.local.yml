@@ -1,6 +1,0 @@
-# Operator-local (gitignored): the module-ignition programme, read-only, at the
-# same absolute path the programme manifest records.
-services:
-  kaine-study:
-    volumes:
-      - /var/mnt/675bf75f-6d4f-4738-bdb0-22bfb7a93a69/kaine/media/ignition-programme:/var/mnt/675bf75f-6d4f-4738-bdb0-22bfb7a93a69/kaine/media/ignition-programme:ro

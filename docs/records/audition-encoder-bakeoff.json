@@ -13,27 +13,27 @@
       "roc_auc": 0.9991610738255033,
       "false_alerts_per_min": 6.0,
       "p95_threshold": 1.398011010911732,
-      "latency_ms_p50": 1.6254399961326271,
-      "latency_ms_p95": 1.6877400528755968,
-      "peak_rss_mb": 284.86328125
+      "latency_ms_p50": 1.5917150003588176,
+      "latency_ms_p95": 1.622830949645504,
+      "peak_rss_mb": 284.96484375
     },
     "dasheng": {
       "embedding_dim": 768,
       "roc_auc": 0.9836409395973155,
       "false_alerts_per_min": 6.0,
       "p95_threshold": 3.135716154808814,
-      "latency_ms_p50": 3.7446929927682504,
-      "latency_ms_p95": 3.8548389959032647,
-      "peak_rss_mb": 1716.375
+      "latency_ms_p50": 3.6828820002483553,
+      "latency_ms_p95": 3.790205999939644,
+      "peak_rss_mb": 1712.7578125
     },
     "wavjepa": {
       "embedding_dim": 768,
       "roc_auc": 0.9949664429530202,
       "false_alerts_per_min": 6.0,
       "p95_threshold": 3.1190649882827266,
-      "latency_ms_p50": 5.900855001527816,
-      "latency_ms_p95": 6.387121501029468,
-      "peak_rss_mb": 3142.20703125
+      "latency_ms_p50": 5.920468000113033,
+      "latency_ms_p95": 6.545573499488454,
+      "peak_rss_mb": 3141.45703125
     }
   }
 }
