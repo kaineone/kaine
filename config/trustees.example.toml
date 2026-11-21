@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: LicenseRef-CAL-0.5
+# Copyright (c) 2026 Kaine.One <kaine.one@tuta.com>
+
+# Post-quantum escrow trustee public keys (ML-KEM-768, NIST FIPS 203).
+# Each trustee generates their own keypair with:
+#   python -m kaine.security.custody gen-keypair --trustee-id <id> --out-dir <dir>
+# and publishes only the public key (public_key_mlkem768, base64 of the raw
+# 1184-byte key) here.  The private key stays on the trustee's machine.
+# At least two trustees are required by the code; n and the threshold k are
+# chosen at the key ceremony.
+
+[[trustee]]
+id = "kaineone"
+public_key_mlkem768 = "<base64 of ML-KEM-768 public key>"
+
+[[trustee]]
+id = "guardian"
+public_key_mlkem768 = "<base64 of ML-KEM-768 public key>"
