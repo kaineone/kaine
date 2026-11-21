@@ -255,7 +255,7 @@ def run_ollama_worker(
     out_dir = Path(out_dir)
     worker_script = Path(worker_script)
     repo = Path(repo).resolve() if repo is not None else None
-    effective_model = job.get("model") or model or defaults.get("model") or "kimi-k2.7-code:cloud"
+    effective_model = job.get("model") or model or defaults.get("model") or "beam:cloud"
     allow = job.get("allow") or []
     apply_flag = bool(job.get("apply", True))
     retries = max(int(job.get("retries", 0) or 0), int(max_retries or 0))
@@ -522,7 +522,7 @@ def process_queue(
     out_path.mkdir(parents=True, exist_ok=True)
     worker_path = Path(meta_worker) if meta_worker else Path(__file__).with_name("worker.py")
     worker_path = worker_path.resolve()
-    effective_model = meta_model or model or "kimi-k2.7-code:cloud"
+    effective_model = meta_model or model or "beam:cloud"
     effective_retries = int(meta_retries if meta_retries is not None else max_retries)
     effective_timeout = timeout if timeout is not None else None
     if effective_timeout is None and meta.get("timeout") is not None:
