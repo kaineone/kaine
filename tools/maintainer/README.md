@@ -5,7 +5,8 @@ These are the scripts the maintainers use to gate, review and merge pull request
 
 | Script | What it does |
 | --- | --- |
-| `preflight-gate.sh WORKTREE` | The local pre-flight gate: ruff, import contracts, the red-team tests, the fast suite in parallel (CPU-only), and the slow lane when the branch touches a slow path. Run it before every push; it prints `PREFLIGHT GREEN` or `PREFLIGHT RED`. `GATE_WORKERS` sets the parallelism. |
+| `preflight-gate.sh WORKTREE` | The local pre-flight gate: the PR scope guard, ruff, import contracts, the red-team tests, the fast suite in parallel (CPU-only), and the slow lane when the branch touches a slow path. Run it before every push; it prints `PREFLIGHT GREEN` or `PREFLIGHT RED`. `GATE_WORKERS` sets the parallelism. |
+| `check_pr_scope.py BASE HEAD [--max-commits N] [--max-files N] [--allow-large]` | The PR scope guard, run by the `pr-scope` workflow and the pre-flight gate. It fails a branch with more than 15 commits of its own (merge commits from `main` excluded) or more than 40 changed files since the merge base, the sign of a branch built on unmerged work. The `large-change` label (CI) or `SCOPE_ALLOW_LARGE=1` (gate) lets an intentional large change through. |
 | `safe-run.sh CMD...` | Runs a heavy command in a transient systemd user scope, capped at `SAFE_RUN_MEM` (default 16G) with no swap and at low CPU and I/O priority, so a runaway test cannot freeze the desktop. |
 | `enqueue.sh PR` | Adds a signed-off pull request to `main`'s merge queue through the GraphQL API. All review threads must be resolved first. |
 | `enqueue-when-green.sh PR...` | Enqueues each pull request in order once all its required checks pass; skips one with a failed check. |
