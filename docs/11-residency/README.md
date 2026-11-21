@@ -73,9 +73,9 @@ The queue tracks deadline misses. An interactive job submitted with a deadline r
 
 `python -m kaine.setup.footprint` produces a fit report. It compares the enabled components' calibrated footprints against the host's budget and reports one of three results per domain:
 
-- **co-resides**: every component fits within the budget at once. No swaps are needed.
-- **multiplex**: the total exceeds the budget, but each component fits individually. The pinned component stays loaded, and the rest take turns.
-- **does-not-fit**: a single component exceeds the budget on its own. The host cannot run that component at all, even alone.
+- co-resides: every component fits within the budget at once. No swaps are needed.
+- multiplex: the total exceeds the budget, but each component fits individually. The pinned component stays loaded, and the rest take turns.
+- does-not-fit: a single component exceeds the budget on its own. The host cannot run that component at all, even alone.
 
 When components must multiplex, the fit report names the pinned component and the list of multiplexed components, and describes the expected feel:
 

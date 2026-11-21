@@ -53,6 +53,7 @@
 
 # Part IV: Lifecycle, welfare and security
 
+- [Module residency](11-residency/README.md)
 - [Preservation and the safety net](11-preservation.md)
 - [Forks and merges](12-forks-and-merges.md)
 - [Security and privacy](13-security-and-privacy.md)

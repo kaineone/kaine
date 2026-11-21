@@ -122,7 +122,7 @@ The first-run wizard (`python -m kaine.setup`) surfaces the trainer as an option
 
 Two extra requirements apply when training against a Qwen3.5 base model.
 
-**transformers v5 in the trainer env.** Unsloth Studio ships with transformers 4.x by default. The `qwen3_5` model type is only recognised from transformers v5 onwards; there is no `trust_remote_code` fallback. After installing Unsloth Studio, upgrade transformers inside its env before the first training run:
+transformers v5 in the trainer env. Unsloth Studio ships with transformers 4.x by default. The `qwen3_5` model type is only recognised from transformers v5 onwards; there is no `trust_remote_code` fallback. After installing Unsloth Studio, upgrade transformers inside its env before the first training run:
 
 ```bash
 # Run this inside the Studio env, not the KAINE venv.
@@ -131,7 +131,7 @@ pip install --upgrade --force-reinstall --no-cache-dir "transformers>=5.3.0,<6" 
 
 This installs transformers v5. Use `pip install` directly rather than `unsloth studio update`, because the Studio update command re-triggers a buggy llama.cpp prebuilt step (`--simple-policy` arg error) that silently degrades to CPU-only. The force-reinstall may move torch from a cuXXX build to a PyPI default build (for example cu130 to cu128). The result still works.
 
-**Mainline llama.cpp GGUF conversion.** Ollama's internal GGUF converter produces a non-standard `qwen35.rope.dimension_sections` layout that mainline llama.cpp and Unsloth Studio cannot load (length mismatch error). Export Qwen3.5 HF weights with `convert_hf_to_gguf.py` from the mainline [ggerganov/llama.cpp](https://github.com/ggerganov/llama.cpp) repo. Do not copy GGUFs from Ollama's blob store for use outside Ollama.
+Mainline llama.cpp GGUF conversion. Ollama's internal GGUF converter produces a non-standard `qwen35.rope.dimension_sections` layout that mainline llama.cpp and Unsloth Studio cannot load (length mismatch error). Export Qwen3.5 HF weights with `convert_hf_to_gguf.py` from the mainline [ggerganov/llama.cpp](https://github.com/ggerganov/llama.cpp) repo. Do not copy GGUFs from Ollama's blob store for use outside Ollama.
 
 ## Lighter and larger hardware
 

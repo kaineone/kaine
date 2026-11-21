@@ -256,13 +256,13 @@ Per-viewing measures are computed for every completed viewing; the developmental
 
 For **branching** plans the report's `comparisons` section holds three families, each with per-measure differences and the correlation of the film-minute profiles:
 
-- **Module effect from the seed:** branch k minus branch 0, for k = 1 to K.
-- **Noise floor:** branch 0 minus the repeat.
-- **Familiarity and history:** accumulate k minus branch k, for k = 1 to K.
+- Module effect from the seed: branch k minus branch 0, for k = 1 to K.
+- Noise floor: branch 0 minus the repeat.
+- Familiarity and history: accumulate k minus branch k, for k = 1 to K.
 
 For **progressive** plans the report's `comparisons` section holds one family:
 
-- **Step-over-step:** step k minus step k-1, with the new-module ignition rate (the share of coalitions containing each module added at step k).
+- Step-over-step: step k minus step k-1, with the new-module ignition rate (the share of coalitions containing each module added at step k).
 
 A comparison whose two viewings are not both complete is reported as `pending` and is not computed. A correlation is "not computed" when the two profiles share fewer than 30 bins, and undefined when either profile is constant.
 

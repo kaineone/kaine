@@ -99,11 +99,11 @@ Configuration:
 
 If a module does not report `tick_done` within the timeout, the engine raises `LockstepBarrierTimeout` with the tick number and the list of pending modules. The exception propagates to `run_forever`'s caller; the supervisor handles cleanup.
 
-**Cost.** Lockstep serializes every tick to the slowest module. A module that takes 2 seconds for its `on_workspace` holds all other modules idle for that time, so throughput drops compared to the default asynchronous mode. The supervisor accounts for this: while the barrier is active, stale heartbeats are reported as "alive" rather than "hung", so modules waiting at the barrier are not incorrectly restarted.
+Cost. Lockstep serializes every tick to the slowest module. A module that takes 2 seconds for its `on_workspace` holds all other modules idle for that time, so throughput drops compared to the default asynchronous mode. The supervisor accounts for this: while the barrier is active, stale heartbeats are reported as "alive" rather than "hung", so modules waiting at the barrier are not incorrectly restarted.
 
-**Boot validation.** Each `BaseModule` subclass carries a `lockstep_capable` class attribute (default `True`). If lockstep is enabled at boot, `validate_lockstep_modules()` checks every registered module and refuses boot with a `ConfigurationError` when any module has `lockstep_capable = False`. The check reads lockstep from either the config key or the `EntityClock.lockstep` property, so both wiring paths are covered.
+Boot validation. Each `BaseModule` subclass carries a `lockstep_capable` class attribute (default `True`). If lockstep is enabled at boot, `validate_lockstep_modules()` checks every registered module and refuses boot with a `ConfigurationError` when any module has `lockstep_capable = False`. The check reads lockstep from either the config key or the `EntityClock.lockstep` property, so both wiring paths are covered.
 
-**When to use it.** Lockstep is a study mode. Use it when you need reproducible traces for ablation runs, regression tests, or comparative analysis. For production operation, leave it off: the default asynchronous mode lets fast modules run at full rate while slow modules catch up, and the dilation controller adapts the entity clock to sustained load.
+When to use it. Lockstep is a study mode. Use it when you need reproducible traces for ablation runs, regression tests, or comparative analysis. For production operation, leave it off: the default asynchronous mode lets fast modules run at full rate while slow modules catch up, and the dilation controller adapts the entity clock to sustained load.
 
 ## Tick sequence
 
