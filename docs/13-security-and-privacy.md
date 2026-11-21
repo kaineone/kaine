@@ -219,7 +219,7 @@ Vector fields are also removed at every nesting depth. `latent`, `peripheral`, `
 
 Latent-derived content is any value derived from the entity's internal predictive model: decoded predictions, workspace content vectors, or top-down feedback signals. The rule is: **latent-derived content is never logged, never an episode, and stripped by the privacy filter.**
 
-The constant `LATENT_CONTENT_FIELDS` in `kaine/privacy_filter.py` names the fields that carry latent content. It starts empty (the current architecture does not yet produce decoded content); option F (the content workspace) will add its field names there. The privacy filter strips `LATENT_CONTENT_FIELDS` alongside `CONTENT_FIELDS` from every surface, so adding a field to the set is all that is needed to protect it.
+A value is latent-derived when it is computed from a perceptual latent, or from another latent-derived value, and keeps per-dimension information: a content code, a decoder's prediction, a residual vector. Scalar reductions such as a norm or an error are not. Latent-derived values travel only inside a mapping under the reserved key `latent_derived`, which is in `VECTOR_FIELDS`, and `strip_latent()` in `kaine/privacy_filter.py` removes them and the perceptual latents from a record at any depth. `LATENT_CONTENT_FIELDS` stays empty for named fields outside the tag; the guards below keep checking it.
 
 Three CI guards enforce the rule structurally:
 
