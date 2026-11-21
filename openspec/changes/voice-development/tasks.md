@@ -8,7 +8,7 @@
 - [x] 0.6 Trainer hygiene (D6): bf16, previous accepted adapter as `PeftModel` and reference, conversational format with the real system prompt, both vetoes kept. Test against the trainer's dataset builder and adapter loader without a GPU, plus one real step in the trainer image under the GPU lock.
 - [x] 0.7 Retire telemetry-as-chosen: until Stage 2, the phase trains nothing and says so in the sleep summary (D3).
 - [x] 0.8 The four measures (D8). Distinctiveness joins `assess_divergence` as a new arm at threshold 0 until calibrated. The template arm keeps voting as a protective floor. Tests: an untrained entity that has spoken still assesses as diverged; unreadable evidence counts as diverged; the template arm still votes.
-- [x] 0.10 **Done in this change:** the template-divergence arm has been retired from `kaine/lifecycle/divergence.py` and the specs now record "no consolidation arm". The retirement is documented as completed during voice-development Stage 0-2.
+- [ ] 0.10 **Deferred:** retire the template-divergence arm. Reason: it is today's blanket protection for decommission and preservation, so it can be retired only by a later change with calibration evidence for the distinctiveness arm and the operator's sign-off.
 - [x] 0.9 Paper revision notes: persona, chosen-source rule and measures. Items 8--10 in `docs/records/paper-update-queue.md`.
 
 ## 1. Stage 1: speaking from memory (off by default)
@@ -25,4 +25,4 @@
 
 ## 3. Validation
 
-- [x] 3.1 `openspec validate voice-development --strict`.
+- [ ] 3.1 `openspec validate voice-development --strict`.

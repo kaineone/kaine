@@ -198,7 +198,7 @@ include = ["kaine*"]
 "kaine.modules.sleep" = ["eval_probes/*.jsonl"]
 "kaine.setup.web" = ["templates/*.html", "static/*.css"]
 "kaine.modules.self_model" = ["surnames.txt"]
-"kaine.modules.audition" = ["maternal_voice_data/*.flac", "maternal_voice_data/manifest.json", "maternal_voice_data/texts.toml", "maternal_voice_data/README.md", "maternal_voice_data/seed_command.*", "maternal_voice_data/sources/*"]
+"kaine.modules.audition" = ["maternal_voice_data/*.flac", "maternal_voice_data/manifest.json", "maternal_voice_data/texts.toml", "maternal_voice_data/README.md", "maternal_voice_data/seed_command.*"]
 
 # ---------------------------------------------------------------------------
 # Ruff lint/format configuration.
@@ -239,6 +239,7 @@ indent-style = "space"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 markers = [
     "integration: hits a live authenticated Redis; skipped unless KAINE_REDIS_PASSWORD is set",
     "systems: per-subsystem I/O contract test under tests/systems/",

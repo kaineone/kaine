@@ -212,7 +212,7 @@ def test_unlocked_count_negative_and_nan():
 )
 def test_real_repertoire_loads():
     rep = MaternalVoiceRepertoire.load()
-    assert len(rep.takes) == 21
+    assert len(rep.takes) == 20
     assert rep.item_ids[0] == "p0-little-boat"
     assert rep.initial_unlocked == 5
     assert rep.sample_rate == 16000

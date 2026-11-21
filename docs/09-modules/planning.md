@@ -8,7 +8,7 @@ The planning module is built and tested, and held: it is off in the shipped `con
 
 - `[planning].backend` selects the engine. `"pymdp"` needs the `[reasoning]` optional extra (`inferactively-pymdp` and `jax[cpu]`). `"numpy"` needs only NumPy.
 - No GPU is needed; both backends run on the CPU inside the cycle's time budget.
-- The earlier symbolic reasoner is retired; its files are kept in `external/archive/planning_narsese/`.
+- The earlier symbolic reasoner is retired; its files are kept under `external/archive/`, in the directory that still has the module's old name.
 
 ## What it does
 
@@ -189,5 +189,5 @@ The offline suite's active-inference benchmark compares the planning module's ex
 ## Spec and related
 
 - Primary spec: `openspec/specs/planning-active-inference/spec.md`
-- Archived changes: `openspec/changes/archive/2026-06-07-nous-pymdp-swap/` (the move to pymdp) and `openspec/changes/archive/2026-05-20-planning/` (the original symbolic integration)
+- Archived changes: `openspec/changes/archive/2026-06-07-nous-pymdp-swap/` (the move to pymdp) and the original symbolic integration, archived on 2026-05-20 under the module's old name
 - Related modules: [Affect](./affect.md) supplies the affect quadrant; [Self-model](./self-model.md) reads `planning.policy` for its capability map; [Sleep](./sleep.md) decides on forwarded rest requests; [Language](./language.md) realizes think and speak intents; [Effectors](./effectors.md) receives no planning module action.

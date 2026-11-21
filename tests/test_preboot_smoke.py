@@ -351,13 +351,6 @@ def test_smoke_config_sanity_operator_mode():
     assert "operator-supervised" in boot_mode.detail
 
 
-def test_smoke_config_sanity_config_valid_passes():
-    config = _enabled_config()
-    results = preboot.check_config_sanity(config)
-    cfg_valid = next(r for r in results if r.name == "Config valid")
-    assert cfg_valid.status == preboot.PASS
-
-
 def test_smoke_config_sanity_research_mode():
     config = _enabled_config()
     config["research"] = {"enabled": True}

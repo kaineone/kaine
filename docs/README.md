@@ -57,6 +57,7 @@ The chapters are plain Markdown and read fine on GitHub. To read them as a book 
 
 **Lifecycle, welfare and security**
 
+- [Module residency](11-residency/README.md)
 - [Preservation and the safety net](11-preservation.md)
 - [Forks and merges](12-forks-and-merges.md)
 - [Security and privacy](13-security-and-privacy.md)
@@ -80,6 +81,8 @@ The chapters are plain Markdown and read fine on GitHub. To read them as a book 
 
 **Reference**
 
+- [Model cards](model-cards/README.md)
+  - [K1-Jev](model-cards/k1-jev.md)
 - [Configuration reference](appendix-a-configuration/README.md)
   - [Core, cycle and host](appendix-a-configuration/core.md)
   - [Modules](appendix-a-configuration/modules.md)

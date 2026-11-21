@@ -401,7 +401,7 @@ def render_sam_take(model, text, item, index, take, out_dir: Path):
     muffled = apply_prosody_muffling(trimmed, sr)
 
     resampled = librosa.resample(
-        muffled, orig_sr=sr, target_sr=OUTPUT_SAMPLE_RATE, res_type="soxr_hq"
+        muffled, orig_sr=sr, target_sr=OUTPUT_SAMPLE_RATE
     )
 
     rms = np.sqrt(np.mean(resampled**2))
@@ -672,8 +672,6 @@ def main(argv=None) -> int:
                 "trim_top_db": TRIM_TOP_DB,
                 "target_rms_dbfs": TARGET_RMS_DBFS,
                 "peak_ceiling_dbfs": PEAK_CEILING_DBFS,
-                "generation_params": "model defaults (not exposed)",
-                "resampler": "soxr_hq",
                 "watermark": "none (Sam renderer applies no implicit watermark)",
             },
             "reference_voice": {

@@ -258,5 +258,5 @@ With `sink_enabled = true`, each clip is written to `<sink_path>/<timestamp>-<uu
 - Spec: `openspec/specs/vocal/spec.md`
 - Prosodic mirroring spec: `openspec/specs/vox-prosodic-mirroring/spec.md`
 - Archived change: `openspec/changes/archive/2026-06-15-audio-out-playback` (playback reliability and device selection)
-- Change: `openspec/changes/vox-default-voice` (the shipped default voice, and the design of a later choice by the entity)
+- Change: `openspec/changes/archive/2026-11-03-vox-default-voice` (the shipped default voice, and the design of a later choice by the entity)
 - See also: [language module](language.md) (the text), [affect module](affect.md) (the affect), [audition module](audition.md) (the partner's prosody), [sleep module](sleep.md) (uses the language module's intent log for voice-alignment training).

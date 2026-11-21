@@ -121,6 +121,8 @@ async def test_preference_source_none_skips_training_and_builds_no_pairs(
     assert trainer.calls == []
     voice = summary["voice_alignment"]
     assert "no validated preference source" in voice["reason"]
+    # The skip names the configured source, so an operator can see why.
+    assert "configured 'none'" in voice["reason"]
     assert voice["accepted"] is False
     assert voice["samples_used"] == 0
     assert summary["dpo_loss"] is None

@@ -19,12 +19,12 @@ K1-Jev is KAINE's welfare decision model. It answers 14 structured questions abo
 
 Each question presents the entity's current internal state as a structured text block and asks K1-Jev to pick one lettered option. The 14 question types span:
 
-- **Affect**: valence, arousal, dominant emotion, emotional complexity
-- **Drives**: active drive, drive conflict, drive satisfaction
-- **Perception**: engagement with current content
-- **Action**: action readiness, stimulus response
-- **Self-model**: identity coherence, self-model stability
-- **Social**: social awareness, social engagement
+- Affect: valence, arousal, dominant emotion, emotional complexity
+- Drives: active drive, drive conflict, drive satisfaction
+- Perception: engagement with current content
+- Action: action readiness, stimulus response
+- Self-model: identity coherence, self-model stability
+- Social: social awareness, social engagement
 
 Every question type has defined options, definitions and near-miss categories. The schema is frozen at v2 and its digest is pinned in the decision server sidecar.
 
