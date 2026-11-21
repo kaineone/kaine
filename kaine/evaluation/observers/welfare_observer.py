@@ -18,16 +18,13 @@ Detects and counts four welfare-relevant conditions:
     the consolidation window exceeds ``replay_rate_threshold`` events per
     ``consolidation_window_s`` seconds (defaults 10 events / 5 s).
 
-(d) Sustained interoceptive distress — the interoception module's own
-    forward-model error carried by ``interoception.report`` events on
-    ``interoception.out`` (read through
-    :func:`kaine.lifecycle.welfare_signal.read_welfare_prediction_error`, so a
-    workspace-feedback blend cannot move it) stays at or above
+(d) Sustained interoceptive distress — the ``prediction_error`` magnitude
+    carried by ``interoception.report`` events on ``interoception.out`` stays at or above
     ``interoceptive_distress_threshold`` (default 0.8) continuously for at
     least ``interoceptive_distress_duration_s`` (default 30 s).  The sustain
     timer resets whenever the magnitude drops below the threshold, so a single
     sustained episode produces a single event rather than one per tick.
-    The error is already a scalar float published by the interoception module's
+    ``prediction_error`` is already a scalar float published by the interoception module's
     forward model — no reduction is required.
 
 Each of the four gray-zone conditions surfaces as an in-memory count exposed as a property for
@@ -125,9 +122,6 @@ from kaine.lifecycle.welfare_signal import (  # noqa: F401  (re-export)
     SilenceTransition,
     SustainedThresholdTracker,
     UndefinedRunTracker,
-    WelfareSignalAccount,
-    WindowedEventCounter,
-    read_welfare_prediction_error,
 )
 
 log = logging.getLogger(__name__)
@@ -164,8 +158,6 @@ _DEFAULT_AFFECT_SUMMARY_INTERVAL_S = 300.0  # unfrozen seconds between affect_we
 # (a freeze, a stall, a restart) counts for at most this many seconds.
 _AFFECT_SAMPLE_GAP_CAP_S = 5.0
 _AFFECT_WELFARE_RECORD = "affect_welfare"
-#: The ``record`` label of the distress arm's welfare-signal defect record.
-_WELFARE_SIGNAL_RECORD = "welfare_signal"
 # Fixed drive table: the only drive names that may appear in record keys.
 _WELFARE_DRIVES = ("curiosity", "boredom", "social_drive", "restlessness")
 # The homeostatic deficits: their time at or above threshold is time without relief.
@@ -501,10 +493,6 @@ class WelfareObserver(StreamSubscriberObserver):
             duration_s=self._interoceptive_distress_duration_s,
         )
 
-        # --- Producer defects in the interoception reports the distress arm reads. ---
-        self._signal = WelfareSignalAccount()
-        self._signal_record_at: float | None = None
-
         # --- State for blind-sensor advisory (operator advisory, not gray-zone). ---
         self._started_wall: datetime | None = None
         self._blind_sensor_count: int = 0
@@ -641,16 +629,6 @@ class WelfareObserver(StreamSubscriberObserver):
             await self._check_silence()
         except Exception:
             log.warning("welfare_observer silence check failed", exc_info=True)
-
-        try:
-            now = self._unfrozen.now()
-            if self._signal.changed and (
-                self._signal_record_at is None
-                or now - self._signal_record_at >= self._interoceptive_distress_duration_s
-            ):
-                await self._write_signal_record(now)
-        except Exception:
-            log.warning("welfare_observer welfare-signal record failed", exc_info=True)
 
         try:
             now = self._unfrozen.now()
@@ -944,35 +922,6 @@ class WelfareObserver(StreamSubscriberObserver):
                 await self._sink.write({"ts": datetime.now(timezone.utc).isoformat(), **record})
             except Exception:
                 log.warning("welfare_observer supplementary record write failed", exc_info=True)
-        # First-hours stop criterion for stimulus control: evaluate each new
-        # record and write a verdict file if it fires, so the ignition-study
-        # runner can detect the breach (cwd is the step's line_dir during runs).
-        for record in records:
-            if not isinstance(record, dict):
-                continue
-            if "paused_share_last_awake_hour_max" not in record:
-                continue
-            try:
-                from kaine.research.ignition_study.first_hours_criterion import (
-                    VERDICT_RELPATH,
-                    check_first_hours,
-                    write_verdict,
-                )
-            except Exception:
-                continue
-            # Determine pass number from the record if available.
-            pass_number = int(record.get("pass_number", record.get("pass", 0)))
-            verdict = check_first_hours(record, pass_number=pass_number, readout_pause=record.get("readout_pause"))
-            if verdict is None:
-                continue
-            verdict_path = Path(VERDICT_RELPATH)
-            if verdict_path.exists():
-                continue  # already stopped; don't overwrite
-            try:
-                write_verdict(verdict, Path("."))
-                log.warning("stimulus_control_first_hours: verdict written")
-            except Exception:
-                log.warning("stimulus_control_first_hours write failed", exc_info=True)
 
     async def _emit_sustained_interoceptive_distress(self, seconds_sustained: float) -> None:
         self._sustained_interoceptive_distress_count += 1
@@ -1016,17 +965,17 @@ class WelfareObserver(StreamSubscriberObserver):
             log.debug("welfare_observer: interoception.fatigue crossing recorded at %s", entry_id)
         elif event.type == "interoception.report":
             # (d) Track interoceptive prediction-error magnitude through the
-            # shared sustained-threshold tracker. The welfare reading is the
-            # interoception module's own forward-model error, never the
-            # workspace-feedback blend (read_welfare_prediction_error). The tracker
-            # fires once per sustained episode (rising-edge), resetting its own timer.
-            reading = read_welfare_prediction_error(event.payload, processor="interoception")
-            self._signal.record(reading, self._unfrozen.now())
-            magnitude = reading.value
-            if magnitude is None:
+            # shared sustained-threshold tracker. ``prediction_error`` is a
+            # scalar float published by the interoception module's SubstrateForwardModel on every
+            # tick — no reduction needed. The tracker fires once per sustained
+            # episode (rising-edge), resetting its own timer.
+            payload = event.payload or {}
+            raw = payload.get("prediction_error", 0.0)
+            if raw is None:
                 # A reading the interoception module skipped as non-finite has no error: it is no sample,
                 # so it neither feeds nor resets the distress tracker.
                 return
+            magnitude = float(raw)
             now = self._unfrozen.now()
             wall_now = self._unfrozen.wall()
             # Feed the shared tracker (records onset / resets on drop). The fire
@@ -1192,52 +1141,12 @@ class WelfareObserver(StreamSubscriberObserver):
             if self._interoceptive_distress.check_timeout(now):
                 await self._emit_sustained_interoceptive_distress(seconds)
 
-    async def _write_signal_record(self, now: float) -> None:
-        """Write a ``welfare_signal`` record of the distress arm's producer defects.
-
-        CONTENT CONTRACT: the fixed ``record`` label and this observer's own
-        counts; nothing is copied from a source payload. Written when a new
-        defect was read, at most once per ``interoceptive_distress_duration_s``
-        of unfrozen time, and at stop. Marked written only once the sink took it.
-        """
-        counts = self._signal.snapshot(now)
-        log.error(
-            "welfare_observer: interoception welfare-signal defects: %d unreadable "
-            "reports (%d without the key, %d not a number), %d own-error fallbacks to "
-            "the blended value, of %d reports",
-            counts["unreadable_reports"],
-            counts["unreadable_missing_key"],
-            counts["unreadable_malformed"],
-            counts["own_error_fallbacks"],
-            counts["reports"],
-        )
-        await self._sink.write(
-            {
-                "ts": datetime.now(timezone.utc).isoformat(),
-                "record": _WELFARE_SIGNAL_RECORD,
-                **counts,
-            }
-        )
-        self._signal_record_at = now
-        self._signal.mark_reported()
-
-    @property
-    def signal_defects(self) -> dict[str, int | float]:
-        """The distress arm's interoception welfare-signal defect counts."""
-        return self._signal.snapshot(self._unfrozen.now())
-
     async def _cleanup(self) -> None:
         """Write a final ``affect_welfare`` record if anything changed since the last one (records are cumulative, so an unchanged record would repeat the previous one)."""
         await super()._cleanup()
         if self._affect_tally.changed:
             await self._write_affect_summary()
         await self._write_supplementary_records()
-        if self._signal.changed:
-            try:
-                await self._write_signal_record(self._unfrozen.now())
-            except Exception:
-                log.warning("welfare_observer welfare-signal record failed", exc_info=True)
-
 
 
 def build_welfare_producer(

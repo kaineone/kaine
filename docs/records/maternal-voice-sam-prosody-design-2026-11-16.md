@@ -28,7 +28,7 @@ The existing chain applies the soundscape low-pass, level, and hearing-band proc
 
 - Sample rate stays 8 kHz. Output render should resample to 8 kHz as the current pipeline does, so the hearing-band code in kaine/modules/audition/hearing_band.py and the decode checks in MaternalVoiceRepertoire.load (file_rate * 2 == sample_rate) remain valid with no code change.
 - Trim, target RMS, and peak ceiling: reuse TARGET_RMS_DBFS, PEAK_CEILING_DBFS, and TRIM_TOP_DB from generate_maternal_voice.py. Per-take level normalization is what allows the voice to be played at level_db (6 dB) above the soundscape base, and the unit contract assumes that normalization.
-- Runtime low-pass: the repertoire enters the stream at lowpass_hz (default 500 Hz) using the taps in kaine/modules/stimulus_source_signal.py. Because the content is already prosody-first, the filter does not need to do the intelligibility work, but it still provides the maternal-tissue attenuation the paper requires.
+- Runtime low-pass: the repertoire enters the stream at lowpass_hz (default 500 Hz) using the taps in kaine/modules/audition/stimulus_source_signal.py. Because the content is already prosody-first, the filter does not need to do the intelligibility work, but it still provides the maternal-tissue attenuation the paper requires.
 - Level above background: level_db 6 with jitter_db 3. The headroom behaviour documented in MaternalVoiceLayer.headroom, which adds the voice RMS to the stream headroom and soft-limits the rare peaks, stays as is.
 - Band progression: the five-stage hearing band for fetal hearing maturity, from 500 Hz alone out to 3000 Hz, is unaffected by the voice. The paper already handles the voice frequencies up to 3000 Hz.
 
