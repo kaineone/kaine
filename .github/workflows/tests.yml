@@ -6,12 +6,14 @@
 # left a gap — a dependency-range bump (Dependabot edits pyproject.toml) or a code
 # change could land with the 3000+ test suite never run in CI. This job closes it.
 #
-# Every pull request and every merge-queue batch runs it, because pytest is a
-# required check. Pushes to main are path-filtered to code, tests, pyproject, the
-# installers, container and deployment artifacts, documentation and the workflow
-# itself. Offline: fakes stand in for
-# external services; no entity boot, no network services, no secrets. CPU torch
-# keeps the install light (the forward models are CPU-only by policy).
+# Pull requests run the py3.12 job only. The merge queue, pushes to main, the
+# nightly schedule and manual workflow_dispatch runs run all three jobs. The single
+# required check is the summary `pytest` job that gates the `suite` results.
+# Pushes to main are path-filtered to code, tests, pyproject, the installers,
+# container and deployment artifacts, documentation and the workflow itself.
+# Offline: fakes stand in for external services; no entity boot, no network
+# services, no secrets. CPU torch keeps the install light (the forward models
+# are CPU-only by policy).
 name: tests
 
 on:
@@ -36,8 +38,8 @@ on:
       - "docker/**"
       - "Dockerfile"
       - "docs/**"
-  # Every pull request runs the suite, with no path filter: pytest is a required
-  # check, and a required check that never starts would block the merge queue.
+  # Pull requests run the py3.12 job only, with no path filter: pytest is a
+  # required check, and a required check that never starts would block the merge queue.
   pull_request:
     branches: ["main"]
   # The merge queue tests each batch before it reaches main.
@@ -47,21 +49,34 @@ permissions:
   contents: read
 
 jobs:
-  pytest:
+  plan:
+    name: plan test matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+    steps:
+      - id: set
+        run: |
+          case "${{ github.event_name }}" in
+            pull_request)
+              echo 'matrix={"include": [{"python-version": "3.12", "torch-bound": "max"}]}' >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo 'matrix={"include": [{"python-version": "3.11", "torch-bound": "max"}, {"python-version": "3.12", "torch-bound": "max"}, {"python-version": "3.12", "torch-bound": "min"}]}' >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
+  suite:
     name: pytest (offline suite, py${{ matrix.python-version }}${{ matrix.torch-bound == 'min' && ', torch min' || '' }})
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    needs: plan
     strategy:
       fail-fast: false
-      matrix:
-        python-version: ["3.11", "3.12"]
-        # "max": the newest in-range torch pip resolves; "min": the lower bound of
-        # the tested range in pyproject.toml. The include adds a separate job
-        # because its torch-bound value differs from every base combination.
-        torch-bound: ["max"]
-        include:
-          - python-version: "3.12"
-            torch-bound: "min"
+      # The plan job picks the jobs. "max": the newest in-range torch pip
+      # resolves; "min": the lower bound of the tested range in pyproject.toml.
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -184,3 +199,18 @@ jobs:
         # every pull request; run it in the py3.12 leg only.
         if: steps.lane.outputs.slow != 'true' && matrix.python-version == '3.12' && matrix.torch-bound == 'max'
         run: python -m pytest -q -m slow tests/test_module_names_guard.py -o faulthandler_timeout=600
+
+  pytest-gate:
+    name: pytest
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [plan, suite]
+    if: always()
+    steps:
+      - name: Check pytest results
+        run: |
+          echo "plan result: ${{ needs.plan.result }}"
+          echo "suite result: ${{ needs.suite.result }}"
+          if [ "${{ needs.plan.result }}" != "success" ] || [ "${{ needs.suite.result }}" != "success" ]; then
+            exit 1
+          fi
