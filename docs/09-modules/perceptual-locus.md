@@ -155,7 +155,7 @@ The events `perceptual_locus.changed` and `perceptual_locus.denied` carry the lo
 
 | File | What it checks |
 |---|---|
-| `tests/test_perception_locus.py` | The default locus is `physical`; `virtual` turns real capture off; returning to `physical` restores it |
+| `tests/test_perceptual_locus.py` | The default locus is `physical`; `virtual` turns real capture off; returning to `physical` restores it |
 | `tests/test_perception_state.py` | `read_desired()`, `write_desired_locus()`, atomic writes, runtime state, the developmental-phase lock |
 | `tests/systems/test_live_perception_subsystem.py` | Locus gating with live camera and microphone on the bus |
 

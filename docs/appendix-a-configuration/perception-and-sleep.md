@@ -51,7 +51,7 @@ Geometry is taken from `[vision]`.
 
 `mode = "stimulus_source"` provides the external maternal channel used during the developmental phase. It emits a dim, slowly drifting field and a low-pass soundscape paced by a maternal heartbeat, heard through a band that widens over awake time. The readout probes briefly disturb the drive to measure developmental readiness.
 
-**`maternal_distress_excursions` must stay `false`.** That feature is not built.
+`maternal_distress_excursions` must stay `false`. That feature is not built.
 
 #### `[perception_feed.stimulus_source]`
 

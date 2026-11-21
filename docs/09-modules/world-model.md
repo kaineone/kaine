@@ -85,7 +85,7 @@ All keys are under `[world_model]`. The full reference is in [`appendix-a-config
 
 ### World model protocol and backends
 
-`WorldModelBackend` in `kaine/modules/world_model/world_model.py` is a runtime-checkable protocol with four methods:
+`WorldModelBackend` in `kaine/modules/world_model/backend.py` is a runtime-checkable protocol with four methods:
 
 ```python
 def observe(obs: list[float]) -> float: ...
@@ -137,7 +137,7 @@ The sleep module opens the scenario window before phase 2, whose replay publishe
 | Path | Purpose |
 |---|---|
 | `kaine/modules/world_model/module.py` | `WorldModel(BaseModule)`: waking and sleep paths, training, persistence |
-| `kaine/modules/world_model/world_model.py` | The `WorldModelBackend` protocol, `FakeWorldModel`, `DreamerV3WorldModel`, `NumpyDreamerV3WorldModel`, `TrainOutcome` |
+| `kaine/modules/world_model/backend.py` | The `WorldModelBackend` protocol, `FakeWorldModel`, `DreamerV3WorldModel`, `NumpyDreamerV3WorldModel`, `TrainOutcome` |
 | `kaine/modules/world_model/encoder.py` | `encode_snapshot()`, `observation_dim()`, `SOURCE_ORDER`, `VERSION` |
 | `kaine/modules/world_model/rssm_numpy.py` | The NumPy core and its hand-written backpropagation |
 | `kaine/modules/world_model/checkpoint.py` | Atomic, encryption-aware reading and writing of checkpoint bytes |
@@ -193,7 +193,7 @@ Fork snapshots store module artifacts in `<snapshot root>/<id>/artifacts/<module
 
 | File | Coverage |
 |---|---|
-| `tests/test_world_model_world_model.py` | `FakeWorldModel` observe, imagine, train and the NaN guard; no actor or critic in `DreamerV3WorldModel` |
+| `tests/test_world_model_backend.py` | `FakeWorldModel` observe, imagine, train and the NaN guard; no actor or critic in `DreamerV3WorldModel` |
 | `tests/test_world_model_encoder.py` | Vector shape, source slots, affect, the inhibition flag |
 | `tests/test_world_model_module.py` | Waking tick to `world_model.world_error`; sleep cue to `world_model.scenario`; the window guard, including a cue handled after the window closed |
 | `tests/test_world_model_zero_persistence.py` | The buffer is not serialized; training writes nothing |

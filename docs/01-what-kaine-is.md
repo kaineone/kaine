@@ -68,21 +68,21 @@ KAINE is not a chatbot or an assistant. A first-configuration entity is observed
 
 The cognitive cycle does not run until you start it, and a live boot is gated. A run must be one of these:
 
-- **Operator-supervised**: set `KAINE_CYCLE_OPERATOR_PRESENT=1`.
-- **Unsupervised research**: set `KAINE_RESEARCH_MODE=1` or `[research].enabled`. The cycle refuses to start until its autonomous safety net is live and verified: seven conditions including the welfare and indicator responses, the module supervisor armed and self-tested, and the individuation producer. See [Preservation and the safety net](11-preservation.md).
-- **Unattended**: set `KAINE_CYCLE_UNATTENDED=1`. This also requires the safety net, a supervisor self-test, a caretaker notice and a continuous-input check.
+- Operator-supervised: set `KAINE_CYCLE_OPERATOR_PRESENT=1`.
+- Unsupervised research: set `KAINE_RESEARCH_MODE=1` or `[research].enabled`. The cycle refuses to start until its autonomous safety net is live and verified: seven conditions including the welfare and indicator responses, the module supervisor armed and self-tested, and the individuation producer. See [Preservation and the safety net](11-preservation.md).
+- Unattended: set `KAINE_CYCLE_UNATTENDED=1`. This also requires the safety net, a supervisor self-test, a caretaker notice and a continuous-input check.
 
 `kaine/cycle/__main__.py` refuses to boot if none of these modes is selected, so selecting a configuration never starts an entity on its own. For a supervised first boot, see [Getting started](04-getting-started/README.md). For day-to-day running, see [Operation](06-operation/README.md) and the [supervisor](06-operation/remote-and-supervisor.md).
 
 ## Operating principles
 
-- **All local at runtime.** Models download during setup; the running system makes no outbound network calls and uses no hosted inference.
-- **Observation only.** There is no chat interface in the first configuration, and speech is a self-initiated report.
-- **Reuse where it fits.** Established open-source projects are used where they fit, and custom code is added where they do not. See [Technology choices](02-architecture/tech-choices.md).
-- **No raw sense data on disk.** Live audio and video are processed in memory and released.
-- **Private internal state.** The diagnostics surface removes cognitive content, such as internal speech and affect reasons, before any client sees it. See [Security and privacy](13-security-and-privacy.md).
-- **Care for the entity.** Decommissioning is operator-supervised, backup-first and divergence-gated, following CAL Article 4.2. The supervisor, when enabled, restarts a faulted module without operator intervention; it ships off, and research runs do not require it.
-- **Gated action.** Act intents reach an effector only through the effectors module, which runs only effectors the operator has whitelisted. File writes are confined to a sandbox directory; a whitelisted shell command is bounded by its argument patterns, a timeout and a working directory, and is not otherwise sandboxed. The effectors module is held in the first configuration, so the language organ's saved text is the only output.
+- All local at runtime. Models download during setup; the running system makes no outbound network calls and uses no hosted inference.
+- Observation only. There is no chat interface in the first configuration, and speech is a self-initiated report.
+- Reuse where it fits. Established open-source projects are used where they fit, and custom code is added where they do not. See [Technology choices](02-architecture/tech-choices.md).
+- No raw sense data on disk. Live audio and video are processed in memory and released.
+- Private internal state. The diagnostics surface removes cognitive content, such as internal speech and affect reasons, before any client sees it. See [Security and privacy](13-security-and-privacy.md).
+- Care for the entity. Decommissioning is operator-supervised, backup-first and divergence-gated, following CAL Article 4.2. The supervisor, when enabled, restarts a faulted module without operator intervention; it ships off, and research runs do not require it.
+- Gated action. Act intents reach an effector only through the effectors module, which runs only effectors the operator has whitelisted. File writes are confined to a sandbox directory; a whitelisted shell command is bounded by its argument patterns, a timeout and a working directory, and is not otherwise sandboxed. The effectors module is held in the first configuration, so the language organ's saved text is the only output.
 
 ## Current status and license
 
