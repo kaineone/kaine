@@ -247,26 +247,25 @@ PAIRS_TEXT: list[tuple[str, str]] = [
     ),
 ]
 
-_REJECTED_TERSE = [
-    "Do it the usual way.",
-    "Same as always.",
-    "Standard approach.",
-    "Follow the normal steps.",
-    "Nothing special required.",
-    "Pretty self-explanatory.",
-    "Look it up if unsure.",
-    "Common knowledge.",
-    "Just do it carefully.",
+_REJECTED_BULLETS = [
+    "Consider the materials and conditions involved.",
+    "Think about the steps you would take in order.",
+    "Review any safety precautions before starting.",
+    "Look at how the parts fit together.",
+    "Keep the workspace clean and organized.",
+    "Make sure you have the right supplies on hand.",
+    "Evaluate the environment where it will be used.",
+    "Check manufacturer guidance for the specific item.",
+    "Plan the process so nothing is skipped.",
 ]
 
 
 def build_pairs(n: int = 48, seed: int = 20261005) -> list[DPOPair]:
     """Build ``n`` deterministic synthetic DPO pairs for the test LoRA.
 
-    ``chosen`` is a detailed first-person answer; ``rejected`` is a terse
-    non-answer.  Both are non-refusal: the contrast is specificity, not
-    persona.  The prompts are deliberately disjoint from the individuation
-    preference battery.
+    ``chosen`` is a plain first-person answer; ``rejected`` is a generic
+    assistant listicle. The prompts are deliberately disjoint from the
+    individuation preference battery.
     """
     if n > len(PAIRS_TEXT):
         raise ValueError(
@@ -277,15 +276,19 @@ def build_pairs(n: int = 48, seed: int = 20261005) -> list[DPOPair]:
     pairs: list[DPOPair] = []
 
     for prompt, chosen in PAIRS_TEXT[:n]:
-        phrases = rng.sample(_REJECTED_TERSE, 2)
-        rejected = f"{phrases[0]} {phrases[1]}"
+        bullets = rng.sample(_REJECTED_BULLETS, 3)
+        rejected = (
+            "Great question! As an AI assistant, here are some key points to consider:\n"
+            f"- {bullets[0]}\n"
+            f"- {bullets[1]}\n"
+            f"- {bullets[2]}"
+        )
 
         pairs.append(
             DPOPair(
                 prompt=prompt,
                 chosen=chosen,
                 rejected=rejected,
-                system="Answer the question directly and specifically.",
                 metadata={"source": "synthetic-test-fixture"},
             )
         )
@@ -315,9 +318,6 @@ async def train_test_lora(
     """
     owner_id = owner_id or new_calibration_owner_id()
     section = dict(kaine_config.get("sleep", {}).get("voice_alignment") or {})
-    calibration_probe_path = str(
-        Path(__file__).resolve().parent / "calibration_abliteration_probes.jsonl"
-    )
     section.update(
         {
             "enabled": True,
@@ -325,7 +325,6 @@ async def train_test_lora(
             "hot_swap_mode": "organ_adapter",
             "trainer_jobs_dir": "/trainer-jobs",
             "adapter_output_dir": adapter_output_dir,
-            "abliteration_probe_path": calibration_probe_path,
         }
     )
 
