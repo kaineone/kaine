@@ -212,3 +212,16 @@ def test_diagnostics_filter_removes_latent_derived_in_dev_mode(dev_mode):
     assert strip_vectors({"latent_derived": {"code": CODE[:2]}, "k": 1}) == {"k": 1}
 
 
+
+
+def test_without_latent_derived_walks_object_arrays():
+    np = pytest.importorskip("numpy")
+    from kaine.privacy_filter import without_latent_derived
+
+    arr = np.empty(1, dtype=object)
+    arr[0] = {"latent_derived": {"code": [0.1, 0.2]}, "n": 1}
+    out = without_latent_derived({"x": arr})
+    assert out == {"x": [{"n": 1}]}
+    numeric = np.asarray([0.1, 0.2])
+    payload = {"x": numeric}
+    assert without_latent_derived(payload) is payload

@@ -31,9 +31,10 @@ rules (persist, encrypt, copy into forks, never logged).
 Latent-derived values travel only inside a mapping under ``LATENT_DERIVED_KEY``
 (``"latent_derived"``), at any depth. Perceptual latents keep their own names.
 ``LATENT_FIELDS`` holds both, and ``strip_latent`` removes them from a record at
-any depth regardless of length. Every record writer applies it: the JSONL sink,
-the encrypted JSONL writer, the organ's renderers and the module-state captures.
-Latent-derived content may live in working state and in learned weights; it is
+any depth regardless of length. It is the strip for record writers: the JSONL
+sink, the encrypted JSONL writer, the organ's renderers and the module-state
+captures each adopt it in turn (openspec ``latent-content-privacy``, tasks 1.2 to
+2.3, track which do today). Latent-derived content may live in working state and in learned weights; it is
 never logged, never stored as an episode and never written to a record.
 
 A worked example of the closure: once interoception's blend includes a
@@ -112,8 +113,9 @@ VECTOR_FIELDS: frozenset[str] = frozenset(
 # ``VECTOR_FIELDS``, exported under its own name so callers say what they mean.
 LATENT_FIELDS: frozenset[str] = VECTOR_FIELDS
 
-# The version of the latent rule. A component that produces latent-derived
-# values refuses to start when this is missing or lower than the version it was
+# The version of the latent rule. The latent-producer boot check (openspec
+# latent-content-privacy, task 2.5) is to refuse a component that produces
+# latent-derived values when this is missing or lower than the version it was
 # reviewed against.
 LATENT_RULE_VERSION: int = 1
 
@@ -279,8 +281,8 @@ def strip_latent(value: Any) -> Any:
     else (no length backstop, no content keys) and converts every numpy array it
     meets to Python numbers with ``tolist()`` before walking it, so an array
     under a latent key is removed with its key and an array under any other key
-    is written as exact numbers rather than by numpy's elided ``str()``. Every
-    record writer applies it before encoding.
+    is written as exact numbers rather than by numpy's elided ``str()``. A record
+    writer applies it before encoding.
     """
     return _strip_latent(value, _numpy_array_type())
 
@@ -310,22 +312,30 @@ def without_latent_derived(value: Any) -> Any:
     (tuples stay tuples). The perceptual latents are left in place; this is the
     narrower strip for a payload that still travels on the bus.
     """
-    return _without_key(value, LATENT_DERIVED_KEY)
+    return _without_key(value, LATENT_DERIVED_KEY, _numpy_array_type())
 
 
-def _without_key(value: Any, key: str) -> Any:
+def _without_key(value: Any, key: str, ndarray: type | None = None) -> Any:
+    if ndarray is not None and isinstance(value, ndarray):
+        # Only an object array can hold a mapping; it is rebuilt as a list
+        # only when one of its mappings holds the key.
+        if value.dtype != object:
+            return value
+        items = value.tolist()
+        stripped = _without_key(items, key, ndarray)
+        return value if stripped is items else stripped
     if isinstance(value, Mapping):
         changed = key in value
         out: dict[Any, Any] = {}
         for k, v in value.items():
             if k == key:
                 continue
-            nv = _without_key(v, key)
+            nv = _without_key(v, key, ndarray)
             changed = changed or nv is not v
             out[k] = nv
         return out if changed else value
     if isinstance(value, (list, tuple)):
-        items = [_without_key(item, key) for item in value]
+        items = [_without_key(item, key, ndarray) for item in value]
         if all(a is b for a, b in zip(items, value)):
             return value
         return items if isinstance(value, list) else tuple(items)
