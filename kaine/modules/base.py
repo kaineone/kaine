@@ -56,6 +56,13 @@ class BaseModule(ABC):
         # None until attached via attach_oscillator(); modules without one
         # report the neutral phase, so the coherence factor degrades to 1.0.
         self._oscillator: Optional[OscillatorProtocol] = None
+        # Shared services (entity clock, path resolution, atomic JSON writer,
+        # JSONL sink factory, privacy filter). None until attached by boot
+        # via attach_context(); reading .context before attachment raises.
+        # Stored under a name distinct from the BroadcastContext that
+        # interoception/audition/vision already keep in self._context, so
+        # attaching the module context never clobbers that broadcast state.
+        self._module_context = None
         # Centralized liveness heartbeat for the supervisor. Bumped after
         # each successful on_workspace and at the end of publish; the cycle's
         # 10 Hz broadcast refreshes it for every live module regardless of
@@ -211,6 +218,24 @@ class BaseModule(ABC):
         calling this) leaves the module reporting the neutral phase.
         """
         self._oscillator = oscillator
+
+    def attach_context(self, context: Any) -> None:
+        """Attach this module's ``ModuleContext`` (shared cycle services).
+
+        Called by boot wiring after every module is registered and before the
+        ``_wire_*`` calls. Mirrors ``attach_oscillator``.
+        """
+        self._module_context = context
+
+    @property
+    def context(self) -> Any:
+        ctx = getattr(self, "_module_context", None)
+        if ctx is None:
+            raise RuntimeError(
+                f"module {self.name!r}: no ModuleContext attached; "
+                "boot attaches one before initialize()"
+            )
+        return ctx
 
     @property
     def oscillator(self) -> Optional[OscillatorProtocol]:

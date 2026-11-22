@@ -47,6 +47,7 @@ from kaine.boot.wiring import (
 from kaine.bus.client import AsyncBus
 from kaine.entity_clock import EntityClock
 from kaine.modules.base import BaseModule
+from kaine.modules.context_services import ModuleContext
 from kaine.modules.effectors.stimulus.config import StimulusControlError
 from kaine.modules.registry import ModuleRegistry
 
@@ -366,6 +367,12 @@ def build_registry(
         bool((kaine_config.get("cycle") or {}).get("lockstep", False))
         or bool(getattr(entity_clock, "lockstep", False)),
     )
+    # Attach one ModuleContext (shared cycle services, including the cycle's own
+    # clock) to every registered module before the wiring calls. One build per module.
+    for _module in registry.all_modules():
+        _attach = getattr(_module, "attach_context", None)
+        if callable(_attach):
+            _attach(ModuleContext.build(entity_clock))
     _wire_self_hearing_gate(registry)
     _wire_language_self_model(registry)
     _wire_language_organ_adapter(registry, kaine_config)
