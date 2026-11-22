@@ -18,6 +18,7 @@ if str(REPO_ROOT) not in sys.path:
 
 import numpy as np  # noqa: E402
 
+import kaine.modules.interoception.module as interoception_module  # noqa: E402
 from kaine.bus.schema import Event  # noqa: E402
 from kaine.cycle.types import WorkspaceSnapshot  # noqa: E402
 from kaine.lifecycle.welfare_signal import read_welfare_prediction_error  # noqa: E402
@@ -27,7 +28,6 @@ from kaine.modules.audition.module import Audition  # noqa: E402
 from kaine.modules.context import CONTEXT_DIM  # noqa: E402
 from kaine.modules.feedback import TopDownBlend  # noqa: E402
 from kaine.modules.interoception.forward import SubstrateForwardModel  # noqa: E402
-from kaine.modules.interoception.module import Interoception  # noqa: E402
 from kaine.modules.vision.forward import LatentForwardModel  # noqa: E402
 from kaine.workspace.feedback import (  # noqa: E402
     FEEDBACK_KEY,
@@ -141,17 +141,16 @@ async def _module_trace_interoception():
     out = []
     try:
         clock = _SimpleClock()
-        intero = Interoception(bus, reader=_Reader(), detector=_NeverAlert(), entity_clock=clock, workspace_feedback=settings)
+        intero = interoception_module.Interoception(bus, reader=_Reader(), detector=_NeverAlert(), entity_clock=clock, workspace_feedback=settings)
         model = SubstrateForwardModel(feature_dim=8, units=16, seed=5, context_dim=CONTEXT_DIM)
         intero._forward_model = model
         inputs = _inputs(44, 8, _intero_feat)
-        import kaine.modules.interoception.module as imod
-        original = imod.metrics_to_feature_vector
-        imod.metrics_to_feature_vector = lambda metrics, **kw: list(current[0])
+        original = interoception_module.metrics_to_feature_vector
+        interoception_module.metrics_to_feature_vector = lambda metrics, **kw: list(current[0])
         try:
             await _drive_interoception(intero, clock, bus, inputs, current, out)
         finally:
-            imod.metrics_to_feature_vector = original
+            interoception_module.metrics_to_feature_vector = original
     finally:
         await bus.close()
     return out
