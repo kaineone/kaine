@@ -11,7 +11,7 @@ Groups land in this order: 0, then 5.1, then 1, 2, 3, 4, then the rest of 5, the
 
 ## 5.1 first. Golden digests (D7, D11)
 
-- [ ] 5.1 Golden digests for vision, audition and interoception, recorded before any other group touches them: published errors, `own_error`, intensity, salience, the welfare reading, the feedback blend output and `state_dict` over fixed seeds, including skipped, NaN and first-reading steps; recorded on CI's CPU environment, plus the same-machine trace comparison script
+- [x] 5.1 Golden digests for vision, audition and interoception, recorded before any other group touches them: published errors, `own_error`, intensity, salience, the welfare reading, the feedback blend output and `state_dict` over fixed seeds, including skipped, NaN and first-reading steps; checked on CI within a float tolerance, plus the exact same-machine comparison `tools/maintainer/golden-compare.sh`
 
 ## 1. Conventions ratchet (D4)
 
