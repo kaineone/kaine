@@ -10,8 +10,8 @@ every other task was done on the branch and is reopened until its port merges.
 ## 1. The rule and the record writers (PR 1)
 
 - [x] 1.1 `kaine/privacy_filter.py`: `LATENT_DERIVED_KEY` in `VECTOR_FIELDS`, `LATENT_FIELDS`, `strip_latent()` walking mappings, lists, tuples and numpy arrays (arrays converted with `tolist()` first), `LATENT_RULE_VERSION = 1`; module docstring states the provenance rule and the worked example of design decision 1
-- [ ] 1.2 `kaine/persistence/jsonl_sink.py`: `_encode_line` applies `strip_latent()` before `json.dumps`, so `write`, `write_sync` and `enqueue` are all covered
-- [ ] 1.3 `kaine/persistence/encrypted_jsonl.py`: `encode_record` and `rewrite_encrypted` apply `strip_latent()`
+- [x] 1.2 `kaine/persistence/jsonl_sink.py`: `_encode_line` applies `strip_latent()` before `json.dumps`, so `write`, `write_sync` and `enqueue` are all covered
+- [x] 1.3 `kaine/persistence/encrypted_jsonl.py`: `encode_record` and `rewrite_encrypted` apply `strip_latent()`
 - [ ] 1.4 `kaine/faithful/renderer.py`, `templates.py`, `felt.py`: `strip_latent()` on the payload inside `FaithfulRenderer.render_event`, `redact_heard_speech` and the felt equivalents, before any template or fallback; a numeric template for `("audition", "audition.perception")` reading its declared scalar fields only
 - [ ] 1.5 `kaine/cycle/engine.py` `_snapshot_to_payload`: drop each selected member's `latent_derived` mapping
 - [ ] 1.6 `kaine/evaluation/observers/raw_bus_archive_consumer.py` docstring: verbatim except for the latent fields
