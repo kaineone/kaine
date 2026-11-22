@@ -14,6 +14,7 @@ from kaine.bus import Event
 from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.cycle.types import WorkspaceSnapshot
+from kaine.modules.base import _current_tick
 from kaine.modules.language import (
     EXTERNAL_STREAM,
     INTERNAL_STREAM,
@@ -1107,3 +1108,21 @@ async def test_an_answer_arriving_after_the_stop_began_is_not_published(bus: Asy
     assert await bus.client.xrange("language.out") == []
     assert not (tmp_path / "intent.jsonl").exists() or (tmp_path / "intent.jsonl").read_text() == ""
     _no_trace_no_error(caplog)
+
+
+@pytest.mark.asyncio
+async def test_aggregate_speech_event_is_stamped(bus: AsyncBus, tmp_path: Path):
+    language = _make_language(bus, tmp_path, responses=["spoken"])
+    token = _current_tick.set(7)
+    try:
+        await language.speak("hello")
+    finally:
+        _current_tick.reset(token)
+    entries = await bus.read("language.out", last_id="0")
+    assert entries
+    _entry_id, event = entries[0]
+    assert event.seq is not None
+    assert event.tick == 7
+    assert event.payload.get("text") == "spoken"
+    assert event.payload.get("mode") == "external"
+    assert event.type == "external_speech"

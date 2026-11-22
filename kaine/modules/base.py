@@ -157,6 +157,7 @@ class BaseModule(ABC):
         *,
         salience: float = 0.5,
         causal_parent: Optional[str] = None,
+        drive_oscillator: bool = True,
     ) -> str:
         tick = _current_tick.get()
         seq = self._seq
@@ -174,8 +175,12 @@ class BaseModule(ABC):
         # Drive this module's oscillator (if any) from its own activity. v1
         # uses the published salience as a co-activity proxy for the paper's
         # content-relatedness (see design.md). No-op when no oscillator.
+        # Pass drive_oscillator=False for events that are not the module's
+        # primary activity signal (e.g. the language module's aggregate speech
+        # event, where the mode-specific write is already observed) so the
+        # oscillator is not driven twice.
         oscillator = getattr(self, "_oscillator", None)
-        if oscillator is not None:
+        if drive_oscillator and oscillator is not None:
             try:
                 oscillator.step(float(salience))
             except Exception:

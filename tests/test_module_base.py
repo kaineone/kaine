@@ -10,6 +10,7 @@ from kaine.bus.client import AsyncBus
 from kaine.bus.config import BusConfig
 from kaine.cycle.types import WorkspaceSnapshot
 from kaine.modules.base import BaseModule
+from kaine.oscillator import FakeOscillator
 
 
 class _NamedEcho(BaseModule):
@@ -168,3 +169,27 @@ async def test_publish_validates_event_fields(real_bus: AsyncBus):
     from kaine.bus import EventValidationError
     with pytest.raises(EventValidationError):
         await mod.publish("t", {"x": 1}, salience=1.5)
+
+
+@pytest.mark.asyncio
+async def test_publish_can_skip_the_oscillator(real_bus: AsyncBus):
+    mod = _NamedEcho(real_bus)
+    stepped: list[float] = []
+
+    class _TrackOsc(FakeOscillator):
+        def step(self, drive: float) -> None:
+            stepped.append(drive)
+            super().step(drive)
+
+    mod.attach_oscillator(_TrackOsc())
+
+    await mod.publish("t.event", {"v": 1}, salience=0.4)
+    assert stepped == [0.4]
+
+    stepped.clear()
+    await mod.publish("t.event", {"v": 2}, salience=0.6, drive_oscillator=False)
+    assert stepped == []
+
+    entries = await real_bus.read("echo-test.out", last_id="0")
+    assert len(entries) == 2
+    assert entries[1][1].seq is not None

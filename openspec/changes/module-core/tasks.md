@@ -1,6 +1,6 @@
 # Tasks: module-core
 
-Groups land in this order: 0, then 5.1, then 1, 2, 3, 4, then the rest of 5, then 6 and 7. Within a group, items are separate atomic PRs from a fresh `main`, merged in the order listed, because later items build on earlier ones (4.1 uses 2.2's `event_types.py`; 5.6 uses 2.1's `names.py`). Code PRs are built through the Fabro factory from a plan in `.fabro/PLAN-TEMPLATE.md` form. The lead reviews each one against this design before it merges. PRs marked (second review) also get an independent review.
+Groups land in this order: 0, then 5.1, then 1, 2, 3, 4, then the rest of 5, then 6 and 7. Within a group, items are separate atomic PRs from a fresh `main`, merged in the order listed, because later items build on earlier ones (4.1 uses 2.2's `event_types.py`; 5.6 uses 2.1's `module_names.py`). Code PRs are built through the Fabro factory from a plan in `.fabro/PLAN-TEMPLATE.md` form. The lead reviews each one against this design before it merges. PRs marked (second review) also get an independent review.
 
 ## 0. Contract and decisions
 
@@ -22,13 +22,13 @@ Groups land in this order: 0, then 5.1, then 1, 2, 3, 4, then the rest of 5, the
 
 ## 2. One source for names (D3)
 
-- [ ] 2.1 `kaine/modules/names.py`: one constant per `BaseModule.name`, with a test that every registered module's `name` is in it and matches `kaine/legacy_names.py`
+- [x] 2.1 `kaine/module_names.py`: one constant per `BaseModule.name`, with a test that every registered module's `name` is in it and matches `kaine/legacy_names.py`
 - [x] 2.2 `kaine/bus/event_types.py`: constants for every event type compared in workspace and cycle code; replace those literals with imports; lower the ratchet
 - [ ] 2.3 Replace module-name literals in `kaine/workspace/` and `kaine/cycle/engine.py` (the duplicated `"affect"` constants in `stimulus_policy.py`, `drive_policy.py`, `planning_proposals.py`, `regulation_bias.py`, and `OWN_EXTERNAL_SPEECH_SOURCE`) with imports from `names.py`; lower the ratchet
 
 ## 3. Single publish path and shared services (D5, D6)
 
-- [ ] 3.1 `BaseModule.publish(..., drive_oscillator=True)`; the language module's aggregate speech event goes through it; raw-publish baseline to zero (Fabro run `01M81ESS58YVVGES8Q065F4KYR`)
+- [x] 3.1 `BaseModule.publish(..., drive_oscillator=True)`; the language module's aggregate speech event goes through it; raw-publish baseline to zero (Fabro run `01M81ESS58YVVGES8Q065F4KYR`)
 - [ ] 3.2 `ModuleContext` and `BaseModule.attach_context`; the registry attaches one per module before `initialize()`; tests that every booted module has the cycle's clock and that reading an unattached context raises
 - [ ] 3.3 `BaseModule.spawn` and `subscribe`, with tests for stop, exception logging, tick tracking, and cursor save and restore
 - [ ] 3.4 `health_extra()` and `external_dependencies`; the supervisor's health view shows each dependency

@@ -12,8 +12,8 @@
 - **THEN** the test fails until the baseline is lowered to the new count
 
 ### Requirement: Module names and event types have one source
-Module names SHALL be defined once in `kaine/modules/names.py` and cross-module event types once in `kaine/bus/event_types.py`. Workspace and cycle code SHALL import them rather than writing the strings.
+Module names SHALL be defined once in `kaine/module_names.py` and cross-module event types once in `kaine/bus/event_types.py`. Workspace and cycle code SHALL import them rather than writing the strings.
 
 #### Scenario: Every registered module's name is defined
 - **WHEN** the module registry is built with every module enabled
-- **THEN** each module's `name` is a constant in `kaine/modules/names.py` and matches `kaine/legacy_names.py`
+- **THEN** each module's `name` is a constant in `kaine/module_names.py` and matches `kaine/legacy_names.py`
