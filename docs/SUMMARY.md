@@ -6,6 +6,7 @@
 
 - [What KAINE is](01-what-kaine-is.md)
 - [Architecture](02-architecture/README.md)
+  - [The module contract](02-architecture/module-contract.md)
   - [Code boundaries](02-architecture/boundaries.md)
   - [Technology choices](02-architecture/tech-choices.md)
 

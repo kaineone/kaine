@@ -282,3 +282,31 @@ async def test_singleton_returns_same_instance(monkeypatch, tmp_path):
     a = await client_mod.get_bus(client=fake_client)
     b = await client_mod.get_bus(client=fake_client)
     assert a is b
+
+
+@pytest.mark.asyncio
+async def test_tick_and_seq_survive_the_bus(fake_async_bus: AsyncBus):
+    # The envelope's lockstep stamps were dropped by _encode_event, so every
+    # event read back had tick and seq None and lockstep ordering fell back.
+    ev = _event().model_copy(update={"tick": 12, "seq": 3})
+    await fake_async_bus.publish(ev)
+    entries = await fake_async_bus.read("interoception.out", last_id="0", count=10)
+    _, got = entries[0]
+    assert (got.tick, got.seq) == (12, 3)
+
+
+@pytest.mark.asyncio
+async def test_unstamped_event_reads_back_unstamped(fake_async_bus: AsyncBus):
+    await fake_async_bus.publish(_event())
+    _, got = (await fake_async_bus.read("interoception.out", last_id="0", count=10))[0]
+    assert got.tick is None and got.seq is None
+
+
+def test_old_entry_without_stamps_decodes():
+    ev = _decode_event(_raw())
+    assert ev.tick is None and ev.seq is None
+
+
+def test_malformed_stamp_decodes_as_absent():
+    ev = _decode_event({**_raw(), "tick": "x", "seq": ""})
+    assert ev.tick is None and ev.seq is None

@@ -32,9 +32,12 @@ class Line:
 
 
 def encode_record(record: dict) -> str:
+    from kaine.privacy_filter import strip_latent
     from kaine.security.crypto import get_state_encryptor
 
-    return get_state_encryptor().encrypt_text(json.dumps(record, sort_keys=True))
+    return get_state_encryptor().encrypt_text(
+        json.dumps(strip_latent(record), sort_keys=True)
+    )
 
 
 def _is_envelope(line: str) -> bool:
@@ -176,6 +179,23 @@ def rewrite_encrypted(path: Path | str) -> bool:
             if _is_envelope(line):
                 new_lines.append(line)
             else:
+                from kaine.privacy_filter import holds_latent_field, strip_latent
+
+                # Only a line that holds a latent field at any depth (an
+                # object or an array) is re-serialized; every other plaintext
+                # line is encrypted with its text as is. A line too deeply
+                # nested to parse is encrypted as is, as before this check.
+                try:
+                    parsed = json.loads(line)
+                except (json.JSONDecodeError, ValueError, RecursionError):
+                    parsed = None
+                try:
+                    if parsed is not None and holds_latent_field(parsed):
+                        line = json.dumps(strip_latent(parsed), sort_keys=True)
+                except RecursionError:
+                    # Too deep to walk: leave the line's text as it is, the
+                    # same as a line that does not parse.
+                    parsed = None
                 new_lines.append(encryptor.encrypt_text(line))
                 changed = True
 

@@ -198,8 +198,10 @@ class AsyncJsonlSink:
         """Serialize one record to a JSONL line, AES-256-GCM-encrypting it when
         state encryption is enabled (each line is its own envelope so append
         and daily rotation keep working unchanged)."""
+        from kaine.privacy_filter import strip_latent
         from kaine.security.crypto import get_state_encryptor
 
+        entry = strip_latent(entry)
         line = json.dumps(entry, default=str)
         return get_state_encryptor().encrypt_text(line)
 
