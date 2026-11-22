@@ -1,0 +1,51 @@
+_version = 1
+
+[workflow]
+graph = "workflow.fabro"
+
+[run.model]
+provider = "ollama"
+name = "beam"
+
+[run.inputs]
+# The health check: ruff, import-linter, the red-team tests and the fast suite on the CPU.
+# Same checks as tools/maintainer/preflight-gate.sh minus the parts that need the host.
+verify = "bash tools/maintainer/factory-verify.sh"
+# Dependencies come from the shared environment bound read-only into the sandbox
+# (/run/media/erik/2TBm2Store/kaine/.venv); nothing to install per run.
+setup = "true"
+# Commit or branch the work is compared against in review.
+base = "main"
+# A run fails if its workspace grows past this many GB (catches build output written into the workspace).
+max_workspace_gb = "5"
+
+[run.checkpoint]
+# Reviewer scratch files never land on the run branch.
+exclude_globs = [".factory/**"]
+# Files no stage may change. A stage that changes one fails with class protected_path_violation
+# and the file is restored.
+# Off limits to every stage: the factory and CI config, the maintainer tools (the
+# verify script lives there), dependency and lint/import contracts, shipped config,
+# the accepted specs and the licence. Past agent runs damaged exactly these
+# (an emptied import-contract guard, changed shipped defaults).
+protected_globs = [
+  ".fabro/**",
+  ".github/**",
+  "tools/maintainer/**",
+  "pyproject.toml",
+  "config/**",
+  "openspec/specs/**",
+  "LICENSE*",
+  "tests/test_import_contract_coverage.py",
+  "tests/test_import_boundary_contracts.py",
+]
+
+# Environment for every step. Caches stay outside the workspace; model downloads are off.
+[run.environment.env]
+FABRO_FACTORY = "1"
+KAINE_VENV = "/run/media/erik/2TBm2Store/kaine/.venv"
+PYTHONDONTWRITEBYTECODE = "1"
+CUDA_VISIBLE_DEVICES = ""
+XDG_CACHE_HOME = "/var/home/erik/.fabro/cache/kaine"
+HF_HUB_OFFLINE = "1"
+TRANSFORMERS_OFFLINE = "1"
