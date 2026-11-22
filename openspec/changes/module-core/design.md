@@ -56,7 +56,7 @@ The envelope gains `payload_version: Optional[int] = None`. None means version 1
 
 ### D3. Names are recorded as they are; new names follow a grammar
 
-`kaine/modules/names.py` holds one constant per module name, taken from `BaseModule.name` of each module and cross-checked against `kaine/legacy_names.py` `MODULES`. The event-type constants live beside the registry. Existing irregular names stay exactly as they are, because they are persisted in research logs, preserved bundles and the paper. New event types follow `<module>.<noun>`, with the noun taken from a fixed set:
+`kaine/module_names.py` holds one constant per module name. It is a boundary-neutral home beside `kaine/legacy_names.py`, because the workspace may not import anything under `kaine.modules` (and importing that package loads every module). Each constant is taken from `BaseModule.name` of each module and cross-checked against `kaine/legacy_names.py` `MODULES`. The event-type constants live beside the registry. Existing irregular names stay exactly as they are, because they are persisted in research logs, preserved bundles and the paper. New event types follow `<module>.<noun>`, with the noun taken from a fixed set:
 
 - `report`: the periodic output;
 - `state`: a level that holds until changed;

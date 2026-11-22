@@ -29,7 +29,7 @@ This page is what a module must provide to fit the rest of KAINE, and how. Read 
 - Event types that another module reads are registered in `kaine/bus/event_types.py` with a payload model and an owner.
 - New types are named `<module>.<noun>`, with `report` (periodic output), `state` (a level that holds), `alert` (a threshold crossing) or `intent` (a request to act). Existing types keep their names. `audition.perception` is the processor report that does not follow the pattern.
 - Consumers parse a registered payload with its model, not field by field.
-- Workspace, cycle and module code imports event types and module names from `kaine/bus/event_types.py` and `kaine/modules/names.py`.
+- Workspace, cycle and module code imports event types and module names from `kaine/bus/event_types.py` and `kaine/module_names.py`.
 
 ## Salience and intensity
 
@@ -85,7 +85,7 @@ This page is what a module must provide to fit the rest of KAINE, and how. Read 
 
 ## Checklist for a new module
 
-- [ ] `BaseModule` subclass with a `name` defined in `kaine/modules/names.py`
+- [ ] `BaseModule` subclass with a `name` defined in `kaine/module_names.py`
 - [ ] background work through `spawn`, stream reads through `subscribe`
 - [ ] every event through `publish`; cross-module types registered with a payload model
 - [ ] salience from `SalienceConfig`; intensity from `graded_intensity` or `error_to_intensity`
