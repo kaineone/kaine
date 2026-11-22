@@ -193,7 +193,9 @@ def rewrite_encrypted(path: Path | str) -> bool:
                     if parsed is not None and holds_latent_field(parsed):
                         line = json.dumps(strip_latent(parsed), sort_keys=True)
                 except RecursionError:
-                    pass
+                    # Too deep to walk: leave the line's text as it is, the
+                    # same as a line that does not parse.
+                    parsed = None
                 new_lines.append(encryptor.encrypt_text(line))
                 changed = True
 
