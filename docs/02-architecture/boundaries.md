@@ -44,7 +44,7 @@ The `PrivacyFilter` in `kaine/privacy_filter.py` strips entity-interior content 
 | Set | Purpose |
 |-----|---------|
 | `CONTENT_FIELDS` | Text-valued entity-interior fields (speech, beliefs, goals, norms). |
-| `LATENT_CONTENT_FIELDS` | Latent-derived cognitive content (decoded predictions, workspace content vectors, top-down feedback). Currently empty; option F will populate it. |
+| `LATENT_CONTENT_FIELDS` | Named latent fields outside the tag. Empty: latent-derived values (decoded predictions, content codes, top-down feedback) travel under the `latent_derived` key, which is in `VECTOR_FIELDS`. |
 | `VECTOR_FIELDS` | Perceptual and latent embedding vectors (vision CLIP, sequence CfC hidden state). |
 
 The filter applies `CONTENT_FIELDS | LATENT_CONTENT_FIELDS` recursively at every nesting depth, so a content field embedded inside a `workspace.broadcast` selected-entry payload is stripped the same way as one at the top level. See [Security and privacy](../13-security-and-privacy.md) for the full policy.
