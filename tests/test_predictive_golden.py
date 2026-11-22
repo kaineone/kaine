@@ -49,7 +49,9 @@ def _assert_matches(name):
         if torch.__version__ != expected.get("torch"):
             pytest.skip(f"torch version mismatch: running {torch.__version__} vs fixture {expected.get('torch')}")
     actual = build_trace(name)
-    diff = _first_diff(actual, expected)
+    # The header records the library versions for information; only the
+    # recorded steps are the golden behaviour.
+    diff = _first_diff(actual["steps"], expected["steps"], "steps")
     assert diff is None, f"first differing {diff[0]}: actual={diff[1]!r} expected={diff[2]!r}"
 
 
