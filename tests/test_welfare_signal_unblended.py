@@ -1063,6 +1063,13 @@ NOT_WELFARE: frozenset[tuple[str, str]] = frozenset(
 
 _KEY = "prediction_error"
 _OTHER_PROCESSOR = re.compile(r"^(interoception|audition|sequence|social_cognition|affect|language)\b")
+# The same processors found anywhere inside a name (INTEROCEPTION_REPORT,
+# interoception_types, ...), case-insensitively. The exemption is also pinned
+# to one named function (NOT_WELFARE); a constant rebound to a meaningless
+# name inside that function is the one spelling this scan cannot see.
+_OTHER_PROCESSOR_TOKEN = re.compile(
+    r"(interoception|audition|sequence|social_cognition|affect|language)", re.IGNORECASE
+)
 
 
 def _folded_str(node: ast.AST) -> str | None:
@@ -1188,10 +1195,20 @@ def _direct_reads(source: str, filename: str) -> list[str]:
         for n in ast.walk(func):
             strings.extend(event_type_strings(n))
         keys = sum(1 for v in strings if v == _KEY)
+        # Any identifier, attribute or string in the function that mentions
+        # another processor also disqualifies it, whatever the spelling
+        # (relative or star imports, a package path, a getattr name).
+        tokens = list(strings)
+        for n in ast.walk(func):
+            if isinstance(n, ast.Name):
+                tokens.append(n.id)
+            elif isinstance(n, ast.Attribute):
+                tokens.append(n.attr)
         return (
             "vision.report" in strings
             and keys == 1
             and not any(_OTHER_PROCESSOR.match(v) for v in strings)
+            and not any(_OTHER_PROCESSOR_TOKEN.search(t) for t in tokens)
         )
 
     offenders: list[str] = []
@@ -1313,6 +1330,27 @@ _VISION_READER = (
             "from kaine.bus.event_types import INTEROCEPTION_REPORT as IR, VISION_REPORT\n"
             + _VISION_READER.replace("'vision.report'", "VISION_REPORT")
             + "        if event.type == IR:\n"
+            + "            pass\n",
+        ),
+        (
+            "kaine/cycle/development.py",
+            "from ..bus.event_types import INTEROCEPTION_REPORT\n"
+            + _VISION_READER
+            + "        if event.type == INTEROCEPTION_REPORT:\n"
+            + "            pass\n",
+        ),
+        (
+            "kaine/cycle/development.py",
+            "import kaine.bus\n"
+            + _VISION_READER
+            + "        if event.type == kaine.bus.event_types.INTEROCEPTION_REPORT:\n"
+            + "            pass\n",
+        ),
+        (
+            "kaine/cycle/development.py",
+            "from kaine.bus import event_types\n"
+            + _VISION_READER
+            + "        if event.type == getattr(event_types, 'INTEROCEPTION_REPORT'):\n"
             + "            pass\n",
         ),
         (
