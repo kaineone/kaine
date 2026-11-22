@@ -30,7 +30,7 @@ core = [
 ]
 memory = [
     "sentence-transformers>=6.3.0,<7",
-    "qdrant-client>=1.19.1,<2",
+    "qdrant-client>=1.20.0,<2",
 ]
 memory-edge = [
     "sqlite-vec>=0.1.9,<1",
