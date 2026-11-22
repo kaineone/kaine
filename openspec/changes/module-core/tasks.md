@@ -29,7 +29,7 @@ Groups land in this order: 0, then 5.1, then 1, 2, 3, 4, then the rest of 5, the
 ## 3. Single publish path and shared services (D5, D6)
 
 - [x] 3.1 `BaseModule.publish(..., drive_oscillator=True)`; the language module's aggregate speech event goes through it; raw-publish baseline to zero (Fabro run `01M81ESS58YVVGES8Q065F4KYR`)
-- [ ] 3.2 `ModuleContext` and `BaseModule.attach_context`; the registry attaches one per module before `initialize()`; tests that every booted module has the cycle's clock and that reading an unattached context raises
+- [x] 3.2 `ModuleContext` and `BaseModule.attach_context`; the registry attaches one per module before `initialize()`; tests that every booted module has the cycle's clock and that reading an unattached context raises
 - [ ] 3.3 `BaseModule.spawn` and `subscribe`, with tests for stop, exception logging, tick tracking, and cursor save and restore
 - [ ] 3.4 `health_extra()` and `external_dependencies`; the supervisor's health view shows each dependency
 - [ ] 3.4a Declare dependencies and report them: audition (speech-to-text), vocal (text-to-speech), language (chat client), episodic memory (Qdrant), world model (backend), sleep (trainer)

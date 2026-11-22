@@ -469,6 +469,10 @@ class Supervisor:
         # the rhythm stays continuous, and a plugin's make_oscillator is never
         # re-requested mid-restart (oscillator-continuity-on-restart).
         oscillator = getattr(module, "oscillator", None)
+        # It inherits the predecessor's ModuleContext too: the same cycle clock and
+        # services boot attached (module-core D5), so a rebuilt module never reads an
+        # unattached context.
+        module_context = getattr(module, "_module_context", None)
         try:
             await module.shutdown()
             # A module that carries state across an in-process restart (the sleep module's
@@ -482,6 +486,8 @@ class Supervisor:
             new = self._rebuild_module(name)
             if oscillator is not None and hasattr(new, "attach_oscillator"):
                 new.attach_oscillator(oscillator)
+            if module_context is not None and hasattr(new, "attach_context"):
+                new.attach_context(module_context)
             await new.initialize()
             if carried is not None:
                 try:
