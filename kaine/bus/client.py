@@ -31,7 +31,7 @@ _BUS_LOCK = asyncio.Lock()
 
 
 def _encode_event(event: Event) -> dict[str, str]:
-    return {
+    encoded = {
         "source": event.source,
         "type": event.type,
         "salience": repr(event.salience),
@@ -39,6 +39,11 @@ def _encode_event(event: Event) -> dict[str, str]:
         "causal_parent": event.causal_parent or "",
         "payload": json.dumps(event.payload, separators=(",", ":")),
     }
+    if event.tick is not None:
+        encoded["tick"] = str(event.tick)
+    if event.seq is not None:
+        encoded["seq"] = str(event.seq)
+    return encoded
 
 
 def _decode_event(fields: dict[str, Any]) -> Event:
@@ -57,6 +62,16 @@ def _decode_event(fields: dict[str, Any]) -> Event:
         # Decode to the floor rather than raising; publish-time validation
         # still rejects such events at the write boundary.
         salience = 0.0
+    raw_tick = _get("tick")
+    raw_seq = _get("seq")
+    try:
+        tick = int(raw_tick) if raw_tick not in ("", None) else None
+    except (TypeError, ValueError):
+        tick = None
+    try:
+        seq = int(raw_seq) if raw_seq not in ("", None) else None
+    except (TypeError, ValueError):
+        seq = None
     return Event(
         source=_get("source"),
         type=_get("type"),
@@ -64,6 +79,8 @@ def _decode_event(fields: dict[str, Any]) -> Event:
         timestamp=datetime.fromisoformat(_get("timestamp")),
         causal_parent=causal or None,
         payload=json.loads(_get("payload") or "{}"),
+        tick=tick,
+        seq=seq,
     )
 
 
