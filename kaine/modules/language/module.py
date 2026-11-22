@@ -11,7 +11,6 @@ import logging
 import math
 import time
 import uuid
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, ClassVar, Optional
 
@@ -1151,19 +1150,14 @@ class Language(BaseModule):
         # Also publish to the aggregate language.out stream so consumers that
         # expect the canonical <module>.out routing (dashboard diagnostics, raw
         # archive, generic observers) see every utterance in one place.
-        # Bypass `self.publish` to avoid driving the oscillator; The language module's
-        # mode-specific xadd above is the activity signal the oscillatory layer
-        # already observes.
-        from kaine.bus.schema import validate_event
-
-        await self._bus.publish(
-            validate_event(
-                source=self.name,
-                type=f"{mode}_speech",
-                payload=payload,
-                salience=self._baseline_salience,
-                timestamp=datetime.now(timezone.utc),
-            )
+        # Use self.publish with drive_oscillator=False so the event still carries
+        # tick/seq and refreshes the heartbeat. The oscillator is not driven
+        # because the mode-specific write above is already the activity signal.
+        await self.publish(
+            f"{mode}_speech",
+            payload,
+            salience=self._baseline_salience,
+            drive_oscillator=False,
         )
         if self._context_dialogue and mode == "external" and text:
             self._dialogue_buffer.append(
