@@ -70,7 +70,9 @@ jobs:
   suite:
     name: pytest (offline suite, py${{ matrix.python-version }}${{ matrix.torch-bound == 'min' && ', torch min' || '' }})
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    # The offline suite (~16 min) plus the slow tests (up to ~21 min on a
+    # slow runner) passed 40 minutes in the merge queue; 60 leaves headroom.
+    timeout-minutes: 60
     needs: plan
     strategy:
       fail-fast: false
