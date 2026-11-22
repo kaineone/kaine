@@ -10,6 +10,8 @@ already in place.
 """
 from __future__ import annotations
 
+import json
+
 from kaine.privacy_filter import CONTENT_FIELDS, LATENT_CONTENT_FIELDS, VECTOR_FIELDS, PrivacyFilter
 
 
@@ -225,3 +227,130 @@ def test_without_latent_derived_walks_object_arrays():
     numeric = np.asarray([0.1, 0.2])
     payload = {"x": numeric}
     assert without_latent_derived(payload) is payload
+
+
+# ---------------------------------------------------------------------------
+# Record writers strip latent (change latent-content-privacy, tasks 1.2 / 1.3).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_sink_strips_latent_on_write_write_sync_and_enqueue(tmp_path):
+    from kaine.persistence.jsonl_sink import AsyncJsonlSink
+
+    record = {
+        "ordinary": 5,
+        "latent": [0.1, 0.2],
+        "peripheral": [0.3, 0.4],
+        "nested": {"latent_derived": {"code": [0.5, 0.6]}},
+    }
+    sink = AsyncJsonlSink(tmp_path, name="probe", flush_interval_s=10.0)
+    await sink.start()
+    try:
+        await sink.write(record)
+        sink.write_sync(record)
+        sink.enqueue(record)
+        await sink.stop()
+    except Exception:
+        await sink.stop()
+        raise
+    files = list(tmp_path.glob("probe-*.jsonl"))
+    assert len(files) == 1
+    for line in files[0].read_text().splitlines():
+        assert line.strip()
+        obj = json.loads(line)
+        assert obj["ordinary"] == 5
+        assert obj["nested"] == {}
+        assert not holds_latent_field(obj)
+
+
+def test_sink_writes_unreviewed_array_as_exact_list(tmp_path):
+    import numpy as np
+
+    from kaine.persistence.jsonl_sink import AsyncJsonlSink
+
+    sink = AsyncJsonlSink(tmp_path, name="probe", flush_interval_s=10.0)
+    sink.write_sync({"scores": np.array([0.123456789, 2.0])})
+    files = list(tmp_path.glob("probe-*.jsonl"))
+    assert len(files) == 1
+    line = files[0].read_text().strip()
+    assert line == json.dumps({"scores": [0.123456789, 2.0]}, default=str)
+    assert json.loads(line) == {"scores": [0.123456789, 2.0]}
+
+
+@pytest.fixture
+def _restore_state_encryptor():
+    """Put back a disabled state encryptor after a test that installs one."""
+    from kaine.security.crypto import CryptoConfig, StateEncryptor, set_state_encryptor
+
+    yield
+    set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))
+
+
+def test_encrypted_jsonl_strips_latent(monkeypatch, tmp_path, _restore_state_encryptor):
+    import base64
+    import os
+
+    from kaine.persistence.encrypted_jsonl import (
+        _is_envelope,
+        encode_record,
+        iter_records,
+        rewrite_encrypted,
+    )
+    from kaine.security.crypto import CryptoConfig, StateEncryptor, set_state_encryptor
+
+    # Encryption disabled: plain JSON out.
+    set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))
+    record = {"ordinary": 5, "latent": [0.1, 0.2], "nested": {"latent_derived": {"code": [0.3]}}}
+    line = encode_record(record)
+    assert json.loads(line) == {"ordinary": 5, "nested": {}}
+
+    # Encryption enabled path for rewrite.
+    key = base64.b64encode(os.urandom(32)).decode("ascii")
+    monkeypatch.setenv("KAINE_STATE_KEY", key)
+    set_state_encryptor(StateEncryptor(CryptoConfig(enabled=True)))
+
+    path = tmp_path / "test.jsonl"
+    path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+    assert rewrite_encrypted(path) is True
+    raw_lines = path.read_text(encoding="utf-8").strip().split("\n")
+    assert len(raw_lines) == 1
+    assert _is_envelope(raw_lines[0])
+    decoded = list(iter_records(path))
+    assert len(decoded) == 1
+    assert decoded[0].record == {"ordinary": 5, "nested": {}}
+
+
+def test_writers_keep_records_without_latents_unchanged(tmp_path, _restore_state_encryptor):
+    from kaine.persistence.encrypted_jsonl import encode_record
+    from kaine.persistence.jsonl_sink import AsyncJsonlSink
+    from kaine.security.crypto import CryptoConfig, StateEncryptor, set_state_encryptor
+
+    set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))
+    record = {"a": 1, "b": [2, 3], "c": "x"}
+    sink = AsyncJsonlSink(tmp_path, name="probe", flush_interval_s=10.0)
+    assert sink._encode_line(record) == json.dumps(record, default=str)
+    assert encode_record(record) == json.dumps(record, sort_keys=True)
+
+
+def test_rewrite_keeps_latent_free_lines_verbatim(monkeypatch, tmp_path, _restore_state_encryptor):
+    import base64
+    import os
+
+    from kaine.persistence.encrypted_jsonl import iter_records, rewrite_encrypted
+    from kaine.security.crypto import (
+        CryptoConfig,
+        StateEncryptor,
+        get_state_encryptor,
+        set_state_encryptor,
+    )
+
+    monkeypatch.setenv("KAINE_STATE_KEY", base64.b64encode(os.urandom(32)).decode("ascii"))
+    set_state_encryptor(StateEncryptor(CryptoConfig(enabled=True)))
+    original = '{"z": 1, "a": [1, 2]}'
+    path = tmp_path / "plain.jsonl"
+    path.write_text(original + "\n", encoding="utf-8")
+    assert rewrite_encrypted(path) is True
+    envelope = path.read_text(encoding="utf-8").strip()
+    assert get_state_encryptor().decrypt_text(envelope) == original
+    assert [r.record for r in iter_records(path)] == [{"z": 1, "a": [1, 2]}]

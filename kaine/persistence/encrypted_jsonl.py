@@ -32,9 +32,12 @@ class Line:
 
 
 def encode_record(record: dict) -> str:
+    from kaine.privacy_filter import strip_latent
     from kaine.security.crypto import get_state_encryptor
 
-    return get_state_encryptor().encrypt_text(json.dumps(record, sort_keys=True))
+    return get_state_encryptor().encrypt_text(
+        json.dumps(strip_latent(record), sort_keys=True)
+    )
 
 
 def _is_envelope(line: str) -> bool:
@@ -176,6 +179,16 @@ def rewrite_encrypted(path: Path | str) -> bool:
             if _is_envelope(line):
                 new_lines.append(line)
             else:
+                from kaine.privacy_filter import holds_latent_field, strip_latent
+
+                # Only a record that holds a latent field is re-serialized;
+                # every other plaintext line is encrypted with its text as is.
+                try:
+                    parsed = json.loads(line)
+                except (json.JSONDecodeError, ValueError):
+                    parsed = None
+                if isinstance(parsed, dict) and holds_latent_field(parsed):
+                    line = json.dumps(strip_latent(parsed), sort_keys=True)
                 new_lines.append(encryptor.encrypt_text(line))
                 changed = True
 
