@@ -1358,23 +1358,31 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
                 break
             await self._respond(reason)
         await self._report_signal_defects()
-        if unreadable:
-            # The distress arm cannot see these reports. Fail the poll after
-            # acting on every readable sample, so the run loop logs it on every
-            # such poll and a liveness check over failed polls escalates a run.
-            raise WelfareSignalUnreadable(
-                f"welfare monitor: {unreadable} interoception report(s) this poll had no "
-                "readable prediction error; the distress arm is blind to them "
-                f"(unreadable run {self._signal.unreadable_run} reports over "
-                f"{self._signal.unreadable_run_s(self._unfrozen.now()):.1f} s)"
-            )
 
-        # The indicator arm shares the latch: it runs only while unlatched.
+        # The indicator arm shares the latch: it runs only while unlatched. It
+        # runs before an unreadable poll fails, so a producer defect in the
+        # interoception reports never blinds the indicator arm as well.
         if self._indicators_on and not self._acted:
             try:
                 await self._indicator_poll(u_now)
             except WelfareBusTimeout as exc:
                 deferred = deferred or exc
+        if unreadable:
+            # The distress arm cannot see these reports. Fail the poll after
+            # acting on every readable sample and running the indicator arm, so
+            # the run loop logs it on every such poll and a liveness check over
+            # failed polls escalates a run.
+            unreadable_exc = WelfareSignalUnreadable(
+                f"welfare monitor: {unreadable} interoception report(s) this poll had no "
+                "readable prediction error; the distress arm is blind to them "
+                f"(unreadable run {self._signal.unreadable_run} reports over "
+                f"{self._signal.unreadable_run_s(self._unfrozen.now()):.1f} s)"
+            )
+            if deferred is not None:
+                # A bus failure outranks it; log this one so it is not lost.
+                log.error("%s", unreadable_exc)
+                raise deferred from unreadable_exc
+            raise unreadable_exc
         if deferred is not None:
             raise deferred
 

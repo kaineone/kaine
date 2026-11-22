@@ -4,7 +4,7 @@
 - [x] 1.2 `kaine/evaluation/observers/welfare_observer.py`: the sustained-distress tracker and the gray-zone count read the function
 - [x] 1.3 `kaine/cycle/preservation_monitor.py`: the welfare response reads the function
 - [x] 1.4 `kaine/cycle/development.py`: the interoceptive recovery series reads the function; the vision stimulus-source error is left as is, with a comment naming why
-- [ ] 1.5 The welfare indicator response (`build/welfare-gates`): whichever merges second reads the function. The indicator response itself reads `affect.state` (drives and valence), not `prediction_error`; at rebase, the two relocated distress reads on that branch (`preservation_monitor.py` `_poll_once`, `welfare_observer.py` `_handle_interoception`) take this branch's version
+- [x] 1.5 The welfare indicator response (`build/welfare-gates`, now on main): whichever merges second reads the function; this change merges second, and the indicator arm runs before an unreadable poll fails. The indicator response itself reads `affect.state` (drives and valence), not `prediction_error`; at rebase, the two relocated distress reads on that branch (`preservation_monitor.py` `_poll_once`, `welfare_observer.py` `_handle_interoception`) take this branch's version
 - [x] 1.6 A boot-visible marker the content code checks (for example a constant `WELFARE_SIGNAL_UNBLENDED = 1` beside the function)
 - [x] 1.7 Tests in `tests/test_welfare_signal_unblended.py`: `test_feedback_cannot_change_welfare_reading` (every arm, report for report), `test_blended_report_carries_own_error` (skips, the first defined reading after a skip, no head history, suspension), `test_null_error_is_no_sample`, `test_missing_own_error_falls_back_and_logs_once`, `test_welfare_readers_use_the_function` (source scan of the welfare files), `test_shipped_config_reading_unchanged`
 
@@ -15,6 +15,6 @@
 
 ## 3. Review
 
-- [ ] 3.1 Worker first-pass review
-- [ ] 3.2 Lead developer's adversarial review
+- [x] 3.1 Worker first-pass review (beam: no findings)
+- [x] 3.2 Lead developer's adversarial review (2026-11-21: an unreadable poll no longer skips the indicator arm; an unrelated first-hours verdict hunk from the contaminated squash removed)
 - [ ] 3.3 Independent second review (welfare)

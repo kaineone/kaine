@@ -837,6 +837,29 @@ async def test_welfare_response_fails_its_poll_after_acting_on_an_unreadable_rep
 
 
 @pytest.mark.asyncio
+async def test_unreadable_poll_still_runs_the_indicator_arm() -> None:
+    # A producer defect in the interoception reports blinds the distress arm
+    # only: the indicator arm (boredom, deprivation) runs before the poll fails.
+    bus = _bus()
+    try:
+        u = _Mono(0.0)
+        mon = _monitor(bus, u)
+        calls: list[float] = []
+
+        async def _record_indicator_poll(now: float) -> None:
+            calls.append(now)
+
+        mon._indicators_on = True
+        mon._indicator_poll = _record_indicator_poll
+        await _publish(bus, {"warmup_active": False})
+        with pytest.raises(WelfareSignalUnreadable):
+            await mon._poll_once(asyncio.Event())
+        assert len(calls) == 1
+    finally:
+        await bus.close()
+
+
+@pytest.mark.asyncio
 async def test_welfare_response_unreadable_run_fails_every_poll_until_readable() -> None:
     bus = _bus()
     try:
