@@ -1,0 +1,35 @@
+digraph Feature {
+    graph [goal="Implement the accepted plan", default_max_retries=1]
+    rankdir=LR
+
+    start [shape=Mdiamond, label="Start"]
+    exit  [shape=Msquare, label="Exit"]
+
+    preflight [label="Preflight", shape=parallelogram, timeout="30m", max_retries=0, on_failure="exit",
+               script="set -o pipefail; FREE=$(df --output=avail -BG . | tail -1 | tr -dc 0-9); [ $FREE -ge 20 ] || { echo only ${FREE}G free on the working drive, need 20G; exit 1; }; for v in $(env | grep -E '^(FABRO|GIT)_' | cut -d= -f1); do unset $v; done; bash -c {{ inputs.setup }} 2>&1 | tail -60 && bash -c {{ inputs.verify }} 2>&1 | tail -150"]
+
+    implement [label="Implement", prompt="@prompts/implement.md", model="beam", provider="ollama", reasoning_effort="high", timeout="5400s"]
+
+    verify [label="Verify", shape=parallelogram, timeout="45m", max_retries=0, max_visits=8,
+            script="set -o pipefail; WS=$(du -s -BG . | cut -f1 | tr -dc 0-9); MAX={{ inputs.max_workspace_gb }}; [ $WS -le $MAX ] || { echo workspace is ${WS}G, over the ${MAX}G limit: build output is being written inside the workspace; du -sh ./* | sort -rh | head -5; exit 1; }; for v in $(env | grep -E '^(FABRO|GIT)_' | cut -d= -f1); do unset $v; done; bash -c {{ inputs.verify }} 2>&1 | tail -200"]
+
+    fixup [label="Fixup", prompt="@prompts/fixup.md", model="beam", provider="ollama", reasoning_effort="high", timeout="3600s", max_visits=5]
+
+    review [label="Review", prompt="@prompts/review.md", model="kimi-k3", provider="ollama", reasoning_effort="high", timeout="1800s", max_visits=3]
+
+    verdict [label="Verdict", shape=parallelogram, max_retries=0, max_visits=3,
+             script="cat .factory/review.md 2>&1; grep -q '^VERDICT: PASS' .factory/review.md"]
+
+    address [label="Address Review", prompt="@prompts/address-review.md", model="beam", provider="ollama", reasoning_effort="high", timeout="3600s", max_visits=2]
+
+    start -> preflight
+    preflight -> implement
+    implement -> verify
+    verify -> review [condition="outcome=succeeded"]
+    verify -> fixup
+    fixup -> verify
+    review -> verdict
+    verdict -> exit [condition="outcome=succeeded"]
+    verdict -> address
+    address -> verify
+}
