@@ -21,16 +21,16 @@ No commit is patch-equivalent to main. The commits form four OpenSpec changes.
 ### Findings that change the port
 
 1. **Option F landed after the branch.** #658 publishes `content: {z_k, predictions, losses}` from the feedback head (`kaine/workspace/feedback.py`). `content` is in `CONTENT_FIELDS`, so a name-based strip catches it, but under G2's provenance rule `z_k` and the decoded predictions are latent-derived values and must travel under `latent_derived`. G2's port must tag them; the branch could not.
-2. **Main's interim rule must be replaced, not merged.** G2 defines `LATENT_FIELDS` and a reserved `latent_derived` key; main defines `LATENT_CONTENT_FIELDS`. The port removes the interim constant and moves its test guards to the provenance rule.
+2. **Main's interim rule is superseded, not merged.** G2 defines `LATENT_FIELDS` and a reserved `latent_derived` key; main defines `LATENT_CONTENT_FIELDS`. The provenance rule replaces naming fields one by one. The interim constant stays, empty, because the dashboard privacy layer imports it and the structural guards in `test_dashboard_privacy.py` and `test_latent_content_privacy.py` still check it.
 3. **Perceptual latents reach the persisted bus today.** Main's bus client does not strip latents on publish. G2 (producers strip before the main bus) and G3 (the volatile instance) close this.
-4. **Encryption fails closed.** G2 makes a latent producer refuse to start without state encryption and `[preservation].require_encryption`. Option F is a latent producer, so enabling it will require encryption. Per-entity custody is still off on main (see the parked paper-queue review); state encryption is the operator-level key.
+4. **Encryption fails closed.** G2 makes a latent producer refuse to start without state encryption and `[preservation].require_encryption`. Option F is a latent producer, so enabling it will require encryption. Per-entity custody is still off on main; state encryption is the operator-level key.
 5. **G4 still matches main.** The forcing rule is present, and shipped `[action_selection]` does not name a policy, so the default policy answers heard speech. G4 makes `self_initiated_report` the shipped layer and refuses other names except `drive_biased`.
 
 ### Split plan (atomic PRs, each ported to current main, each with tests)
 
 Order follows the dependencies. Each PR stays inside the pr-scope guard (15 commits, 40 files). Privacy PRs get a second review.
 
-- **G2-1** latent rule, tag and `strip_latent` in `kaine/privacy_filter.py`; the interim `LATENT_CONTENT_FIELDS` retired; tests.
+- **G2-1** latent rule, tag and `strip_latent` in `kaine/privacy_filter.py`; the interim `LATENT_CONTENT_FIELDS` kept empty for its importers and guards; tests.
 - **G2-2** every JSONL record loses latent fields before encoding (persistence strip); tests.
 - **G2-3** renderers never format a latent field; the broadcast drops members' `latent_derived`; option F's `z_k` and predictions move under `latent_derived`; tests.
 - **G2-4** content-free buffer summaries (vision, audition); module-state capture strips latents; tests.
