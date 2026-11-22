@@ -181,14 +181,19 @@ def rewrite_encrypted(path: Path | str) -> bool:
             else:
                 from kaine.privacy_filter import holds_latent_field, strip_latent
 
-                # Only a record that holds a latent field is re-serialized;
-                # every other plaintext line is encrypted with its text as is.
+                # Only a line that holds a latent field at any depth (an
+                # object or an array) is re-serialized; every other plaintext
+                # line is encrypted with its text as is. A line too deeply
+                # nested to parse is encrypted as is, as before this check.
                 try:
                     parsed = json.loads(line)
-                except (json.JSONDecodeError, ValueError):
+                except (json.JSONDecodeError, ValueError, RecursionError):
                     parsed = None
-                if isinstance(parsed, dict) and holds_latent_field(parsed):
-                    line = json.dumps(strip_latent(parsed), sort_keys=True)
+                try:
+                    if parsed is not None and holds_latent_field(parsed):
+                        line = json.dumps(strip_latent(parsed), sort_keys=True)
+                except RecursionError:
+                    pass
                 new_lines.append(encryptor.encrypt_text(line))
                 changed = True
 

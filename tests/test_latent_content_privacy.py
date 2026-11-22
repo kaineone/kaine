@@ -354,3 +354,66 @@ def test_rewrite_keeps_latent_free_lines_verbatim(monkeypatch, tmp_path, _restor
     envelope = path.read_text(encoding="utf-8").strip()
     assert get_state_encryptor().decrypt_text(envelope) == original
     assert [r.record for r in iter_records(path)] == [{"z": 1, "a": [1, 2]}]
+
+
+def _enable_encryption(monkeypatch):
+    import base64
+    import os
+
+    from kaine.security.crypto import CryptoConfig, StateEncryptor, set_state_encryptor
+
+    monkeypatch.setenv("KAINE_STATE_KEY", base64.b64encode(os.urandom(32)).decode("ascii"))
+    set_state_encryptor(StateEncryptor(CryptoConfig(enabled=True)))
+
+
+def test_rewrite_strips_latent_inside_a_top_level_array(monkeypatch, tmp_path, _restore_state_encryptor):
+    from kaine.persistence.encrypted_jsonl import rewrite_encrypted
+    from kaine.security.crypto import get_state_encryptor
+
+    _enable_encryption(monkeypatch)
+    path = tmp_path / "array.jsonl"
+    path.write_text('[{"text": "hi", "latent": [0.1, 0.2]}]\n', encoding="utf-8")
+    assert rewrite_encrypted(path) is True
+    decoded = json.loads(get_state_encryptor().decrypt_text(path.read_text(encoding="utf-8").strip()))
+    assert decoded == [{"text": "hi"}]
+
+
+def test_rewrite_survives_a_line_too_deep_to_parse(monkeypatch, tmp_path, _restore_state_encryptor):
+    from kaine.persistence.encrypted_jsonl import rewrite_encrypted
+    from kaine.security.crypto import get_state_encryptor
+
+    _enable_encryption(monkeypatch)
+    deep = "[" * 100000 + "]" * 100000
+    path = tmp_path / "deep.jsonl"
+    path.write_text(deep + "\n" + '{"a": 1}\n', encoding="utf-8")
+    assert rewrite_encrypted(path) is True
+    lines = path.read_text(encoding="utf-8").strip().split("\n")
+    assert len(lines) == 2
+    assert get_state_encryptor().decrypt_text(lines[1]) == '{"a": 1}'
+
+
+def test_writers_strip_latent_nested_in_lists_and_leave_the_caller_record(tmp_path, _restore_state_encryptor):
+    from kaine.persistence.encrypted_jsonl import encode_record
+    from kaine.persistence.jsonl_sink import AsyncJsonlSink
+    from kaine.security.crypto import CryptoConfig, StateEncryptor, set_state_encryptor
+
+    set_state_encryptor(StateEncryptor(CryptoConfig(enabled=False)))
+    record = {"items": [{"foveal": [1.0], "k": 1}, {"latent_derived": {"code": [2.0]}}]}
+    sink = AsyncJsonlSink(tmp_path, name="probe", flush_interval_s=10.0)
+    for line in (sink._encode_line(record), encode_record(record)):
+        assert json.loads(line) == {"items": [{"k": 1}, {}]}
+    assert record["items"][0]["foveal"] == [1.0]
+    assert "latent_derived" in record["items"][1]
+
+
+def test_sink_strips_latent_when_encryption_is_on(monkeypatch, tmp_path, _restore_state_encryptor):
+    from kaine.persistence.jsonl_sink import AsyncJsonlSink
+    from kaine.security.crypto import get_state_encryptor
+
+    _enable_encryption(monkeypatch)
+    sink = AsyncJsonlSink(tmp_path, name="probe", flush_interval_s=10.0)
+    sink.write_sync({"ordinary": 1, "latent": [0.5]})
+    (path,) = tmp_path.glob("probe-*.jsonl")
+    decoded = json.loads(get_state_encryptor().decrypt_text(path.read_text(encoding="utf-8").strip()))
+    assert decoded["ordinary"] == 1 and "latent" not in decoded
+
