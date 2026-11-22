@@ -15,7 +15,9 @@ alongside the supervisor and the freeze-watch loop:
   deletes; rate-limited.
 
 * :class:`WelfareProtectiveMonitor` — watches the interoception module's interoceptive-distress
-  signal (``interoception.report`` ``prediction_error`` on ``interoception.out``) and, on a
+  signal (its own forward-model error from ``interoception.report`` on
+  ``interoception.out``, read through ``read_welfare_prediction_error`` and never the
+  workspace-feedback blend) and, on a
   sustained-distress threshold crossing (or repeated distress episodes within a
   window), takes a humane protective action: preserve the entity FIRST, then
   pause (default), end, or notify per configuration.
@@ -74,7 +76,13 @@ from kaine.lifecycle.welfare_indicators import (
     IndicatorParams,
     indicator_reason,
 )
-from kaine.lifecycle.welfare_signal import SustainedThresholdTracker, WindowedEventCounter
+from kaine.lifecycle.welfare_signal import (
+    SustainedThresholdTracker,
+    WelfareSignalAccount,
+    WelfareSignalUnreadable,
+    WindowedEventCounter,
+    read_welfare_prediction_error,
+)
 from kaine.modules.registry import ModuleRegistry
 from kaine.state_io import write_json_atomic
 from kaine.storage import resolve
@@ -674,6 +682,9 @@ class _BaseSafetyMonitor(abc.ABC):
             return False
         return self._clock() - since >= float(bound_s)
 
+    async def _on_stop(self) -> None:
+        """Hook run once when the poll loop ends, before the incident log stops."""
+
     async def run(self, stop_event: asyncio.Event) -> None:
         try:
             await self._incident_log.start()
@@ -701,6 +712,10 @@ class _BaseSafetyMonitor(abc.ABC):
                 except asyncio.TimeoutError:
                     continue
         finally:
+            try:
+                await self._on_stop()
+            except Exception:
+                log.warning("%s stop hook failed", self.source, exc_info=True)
             try:
                 await self._incident_log.stop()
             except Exception:
@@ -937,8 +952,10 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
 
     Two crossing arms, both feeding the same preserve-then-act response:
 
-    * **Sustained interoceptive distress.** Reads ``interoception.report``
-      ``prediction_error`` off ``interoception.out`` directly and applies the SAME
+    * **Sustained interoceptive distress.** Reads ``interoception.report`` off
+      ``interoception.out`` directly, takes the interoception module's own
+      forward-model error through ``welfare_prediction_error`` (never the
+      workspace-feedback blend), and applies the SAME
       sustained-distress rule as the sidecar welfare observer via the shared
       :class:`SustainedThresholdTracker` — so the cycle-layer action arm never
       imports ``kaine.evaluation`` yet never diverges from it.
@@ -1050,6 +1067,11 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             threshold=config.distress_threshold,
             duration_s=config.distress_duration_s,
         )
+        # Producer defects in the interoception reports this monitor reads:
+        # unreadable reports (no key, not a number) and own-error fallbacks.
+        self._signal = WelfareSignalAccount()
+        # Wall time of the last welfare_signal_defects record (rate limit).
+        self._signal_record_at: float | None = None
         # Repeated distress episodes within a window (the "and/or" arm).
         self._repeat = WindowedEventCounter(
             window_s=config.repeat_window_s, threshold=config.repeat_threshold
@@ -1279,18 +1301,22 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         else:
             self._distress_read_ok(_INTEROCEPTION_STREAM)
         reasons: list[str] = []
+        unreadable = 0
         for entry_id, event in entries:
             self._cursor = entry_id
             if event.type != "interoception.report":
                 continue
             payload = event.payload or {}
             self._interoception_warmup_active = bool(payload.get("warmup_active", False))
-            raw = payload.get("prediction_error", 0.0)
-            if raw is None:
+            reading = read_welfare_prediction_error(payload, processor="interoception")
+            self._signal.record(reading, self._unfrozen.now())
+            if reading.unreadable:
+                unreadable += 1
+            magnitude = reading.value
+            if magnitude is None:
                 # A reading the interoception module skipped as non-finite has no error: it is no sample,
                 # so it neither feeds nor resets the distress episode.
                 continue
-            magnitude = float(raw)
             u_now = self._unfrozen.now()
             now = self._clock()
             if self._distress.active_since is None:
@@ -1331,14 +1357,91 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             if self._acted:
                 break
             await self._respond(reason)
-        # The indicator arm shares the latch: it runs only while unlatched.
+        await self._report_signal_defects()
+
+        # The indicator arm shares the latch: it runs only while unlatched. It
+        # runs before an unreadable poll fails, so a producer defect in the
+        # interoception reports never blinds the indicator arm as well.
         if self._indicators_on and not self._acted:
             try:
                 await self._indicator_poll(u_now)
             except WelfareBusTimeout as exc:
                 deferred = deferred or exc
+        if unreadable:
+            # The distress arm cannot see these reports. Fail the poll after
+            # acting on every readable sample and running the indicator arm, so
+            # the run loop logs it on every such poll and a liveness check over
+            # failed polls escalates a run.
+            unreadable_exc = WelfareSignalUnreadable(
+                f"welfare monitor: {unreadable} interoception report(s) this poll had no "
+                "readable prediction error; the distress arm is blind to them "
+                f"(unreadable run {self._signal.unreadable_run} reports over "
+                f"{self._signal.unreadable_run_s(self._unfrozen.now()):.1f} s)"
+            )
+            if deferred is not None:
+                # A bus failure outranks it; log this one so it is not lost.
+                log.error("%s", unreadable_exc)
+                raise deferred from unreadable_exc
+            raise unreadable_exc
         if deferred is not None:
             raise deferred
+
+    async def _report_signal_defects(self, *, final: bool = False) -> None:
+        """Write the defect counts to the incident log when a new defect was read.
+
+        The record is content-free and cumulative (counts only). It is written
+        on the first defect, then at most once per ``distress_duration_s`` of
+        wall time while defects keep arriving, and once more at stop
+        (``final``): a persistent defect read at a fast poll cadence would
+        otherwise write a record every poll. The bound matches the welfare
+        observer's ``welfare_signal`` record and the time the distress arm
+        needs to fire, so no record is held back longer than one distress
+        episode. It is marked reported only once written, so a failed write is
+        retried on the next poll.
+        """
+        if not self._signal.changed:
+            return
+        wall = self._clock()
+        if (
+            not final
+            and self._signal_record_at is not None
+            and wall - self._signal_record_at < self._config.distress_duration_s
+        ):
+            return
+        counts = self._signal.snapshot(self._unfrozen.now())
+        log.error(
+            "welfare monitor: interoception welfare-signal defects: %d unreadable "
+            "reports (%d without the key, %d not a number), %d own-error fallbacks to "
+            "the blended value, of %d reports",
+            counts["unreadable_reports"],
+            counts["unreadable_missing_key"],
+            counts["unreadable_malformed"],
+            counts["own_error_fallbacks"],
+            counts["reports"],
+        )
+        try:
+            await self._incident_log.write(
+                {
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                    "kind": "welfare_signal_defects",
+                    "processor": "interoception",
+                    **counts,
+                    "run_id": self._run_id(),
+                }
+            )
+            self._signal.mark_reported()
+            self._signal_record_at = wall
+        except Exception:
+            log.warning("welfare monitor: incident log write failed", exc_info=True)
+
+    async def _on_stop(self) -> None:
+        await self._report_signal_defects(final=True)
+
+    @property
+    def signal_defects(self) -> dict[str, int | float]:
+        """The interoception welfare-signal defect counts (content-free)."""
+        return self._signal.snapshot(self._unfrozen.now())
+
 
     def _adopt_standing_welfare_freeze(self) -> None:
         """A welfare freeze left by an earlier process (a restart keeps it)

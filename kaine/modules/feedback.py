@@ -458,7 +458,15 @@ class TopDownBlend:
 
         blend = [0.0] * len(own_next)
         for i in range(len(own_next)):
-            v = w_own * own_next[i] + w_top * top_next[i]
+            # A zero-weight term contributes nothing, so it is skipped: an
+            # overflowing own model gets w_own == 0 and 0 * inf would be NaN.
+            # Any term with weight keeps its value, non-finite included, so
+            # an overflow is never hidden from the blend.
+            v = 0.0
+            if w_own != 0.0:
+                v += w_own * own_next[i]
+            if w_top != 0.0:
+                v += w_top * top_next[i]
             if content_next is not None and w_content > 0.0:
                 v += w_content * content_next[i]
             blend[i] = v
