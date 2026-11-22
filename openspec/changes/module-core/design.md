@@ -2,7 +2,7 @@
 
 ## Context
 
-The audit behind this change is summarised in the proposal. Counts there are from `git grep` on `main` at `eac350195` and were spot-checked by hand. Related changes:
+The audit behind this change is summarised in the proposal. Counts there are from `git grep` on `main` at `eac350195` and were checked by hand. Related changes:
 
 - `unified-instance-configuration` (parked, 17 of 17 tasks done) generates `config/kaine.reference.toml` from `config/kaine.toml`. D8 keeps that direction.
 - `2026-10-18-salience-score-keys` (archived) made candidate ids stream-qualified. D9 does not touch scoring.
