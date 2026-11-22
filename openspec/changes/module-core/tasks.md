@@ -16,8 +16,8 @@ Groups land in this order: 0, then 5.1, then 1, 2, 3, 4, then the rest of 5, the
 ## 1. Conventions ratchet (D4)
 
 - [x] 1.1 `tests/test_conventions.py`: clock, raw-publish and file-write counts per file under `kaine/modules/`, through import aliases (#871)
-- [ ] 1.2 Add the `raw_task` kind (`asyncio.create_task`, `loop.create_task`) to the module scan
-- [ ] 1.3 Add `type_literal` and `module_literal` kinds: string literals compared with `.type` or `.source` (`==`, `!=`, `in`, `startswith`) in `kaine/workspace/`, `kaine/cycle/` and `kaine/modules/`
+- [x] 1.2 Add the `raw_task` kind (`asyncio.create_task`, `loop.create_task`) to the module scan
+- [x] 1.3 Add `type_literal` and `source_literal` kinds: string literals compared with `.type` or `.source` (`==`, `!=`, `in`, `startswith`) in `kaine/workspace/`, `kaine/cycle/` and `kaine/modules/`
 - [ ] 1.4 Add the `latent_opt_out` kind once 3.5 lands
 
 ## 2. One source for names (D3)
