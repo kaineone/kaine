@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Callable, Iterable, Optional
 
 from kaine.bus.client import AsyncBus, tail_id
+from kaine.bus.event_types import CYCLE_SET_RATES, INTEROCEPTION_REGULATION
 from kaine.bus.schema import Event, entry_id_sort_key, stream_entry_key
 from kaine.bus.streams import module_stream
 from kaine.cycle.protocols import (
@@ -969,7 +970,7 @@ class CognitiveCycle:
         if not entries:
             return
         for entry_id, event in entries:
-            if event.type == "cycle.set_rates":
+            if event.type == CYCLE_SET_RATES:
                 await self.apply_rate_control_event(event.payload)
 
     async def consume_interoception_regulation(self, interoception_stream: str = "interoception.out") -> None:
@@ -1023,7 +1024,7 @@ class CognitiveCycle:
         if not entries:
             return
         for entry_id, event in entries:
-            if event.type != "interoception.regulation":
+            if event.type != INTEROCEPTION_REGULATION:
                 continue
             action = event.payload.get("action")
             reason = event.payload.get("reason", "")

@@ -53,6 +53,14 @@ from typing import Any, Callable
 
 from kaine import legacy_aliases
 from kaine.boot.errors import ConfigurationError
+from kaine.bus.event_types import (
+    AFFECT_STATE,
+    INTEROCEPTION_REPORT,
+    SLEEP_REST_REQUEST,
+    SLEEP_SLEEP_COMPLETED,
+    SLEEP_SLEEP_STARTED,
+    WELFARE_GRAY_ZONE,
+)
 from kaine.bus.schema import validate_event
 from kaine.bus.streams import AFFECT_STREAM, SLEEP_STREAM
 from kaine.config import require_known_keys
@@ -1195,7 +1203,7 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
             self._distress_read_ok(stream)
             for entry_id, event in entries:
                 setattr(self, cursor_attr, entry_id)
-                if stream == _INTEROCEPTION_STREAM and event.type == "interoception.report":
+                if stream == _INTEROCEPTION_STREAM and event.type == INTEROCEPTION_REPORT:
                     # Track the mind's own warm-up signal from every
                     # interoception.report observed during warm-up.
                     self._interoception_warmup_active = bool(
@@ -1304,7 +1312,7 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         unreadable = 0
         for entry_id, event in entries:
             self._cursor = entry_id
-            if event.type != "interoception.report":
+            if event.type != INTEROCEPTION_REPORT:
                 continue
             payload = event.payload or {}
             self._interoception_warmup_active = bool(payload.get("warmup_active", False))
@@ -1573,7 +1581,7 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
         reasons: list[str] = []
         for entry_id, event in entries:
             self._welfare_cursor = entry_id
-            if event.type != "welfare.gray_zone":
+            if event.type != WELFARE_GRAY_ZONE:
                 continue
             now = self._clock()
             payload = event.payload or {}
@@ -2090,16 +2098,16 @@ class WelfareProtectiveMonitor(_BaseSafetyMonitor):
                     t = prev[1] + frac * (a_now - prev[1])
                 payload = event.payload if isinstance(getattr(event, "payload", None), dict) else {}
                 if stream == _AFFECT_STREAM:
-                    if event.type == "affect.state":
+                    if event.type == AFFECT_STATE:
                         self._ind_eval.observe_state(t, payload)
                     continue
-                if event.type == "sleep.sleep.started":
+                if event.type == SLEEP_SLEEP_STARTED:
                     self._ind_eval.exclude_start("sleep", t)
                     signals.append(("started", payload))
-                elif event.type == "sleep.sleep.completed":
+                elif event.type == SLEEP_SLEEP_COMPLETED:
                     self._ind_eval.exclude_end("sleep", t)
                     signals.append(("completed", payload))
-                elif event.type == "sleep.rest_request":
+                elif event.type == SLEEP_REST_REQUEST:
                     signals.append(("answer", payload))
         self._ind_eval.advance(a_now)
         self._ind_prev = (w_now, a_now)

@@ -23,7 +23,7 @@ Groups land in this order: 0, then 5.1, then 1, 2, 3, 4, then the rest of 5, the
 ## 2. One source for names (D3)
 
 - [ ] 2.1 `kaine/modules/names.py`: one constant per `BaseModule.name`, with a test that every registered module's `name` is in it and matches `kaine/legacy_names.py`
-- [ ] 2.2 `kaine/bus/event_types.py`: constants for every event type compared in workspace and cycle code; replace those literals with imports; lower the ratchet
+- [x] 2.2 `kaine/bus/event_types.py`: constants for every event type compared in workspace and cycle code; replace those literals with imports; lower the ratchet
 - [ ] 2.3 Replace module-name literals in `kaine/workspace/` and `kaine/cycle/engine.py` (the duplicated `"affect"` constants in `stimulus_policy.py`, `drive_policy.py`, `planning_proposals.py`, `regulation_bias.py`, and `OWN_EXTERNAL_SPEECH_SOURCE`) with imports from `names.py`; lower the ratchet
 
 ## 3. Single publish path and shared services (D5, D6)

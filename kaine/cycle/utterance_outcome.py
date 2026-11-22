@@ -22,6 +22,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Optional
 
+from kaine.bus.event_types import (
+    AFFECT_STATE,
+    AUDITION_TRANSCRIPTION,
+    EXTERNAL_SPEECH,
+    SOCIAL_COGNITION_SOCIAL_ERROR,
+)
 from kaine.bus.schema import OPERATOR_SOURCES, Event, module_stream
 
 log = logging.getLogger("kaine.cycle.utterance_outcome")
@@ -218,7 +224,7 @@ class UtteranceOutcomeObserver:
 
     async def _handle_event(self, stream: str, event: Event) -> None:
         ts = event.timestamp.timestamp()
-        if stream == LANGUAGE_EXTERNAL and event.type == "external_speech":
+        if stream == LANGUAGE_EXTERNAL and event.type == EXTERNAL_SPEECH:
             record_id = event.payload.get("record_id")
             if (
                 isinstance(record_id, str)
@@ -231,11 +237,11 @@ class UtteranceOutcomeObserver:
                     type(record_id).__name__,
                     len(record_id) if isinstance(record_id, str) else -1,
                 )
-        elif stream == AUDITION_OUT and event.type == "audition.transcription":
+        elif stream == AUDITION_OUT and event.type == AUDITION_TRANSCRIPTION:
             await self._maybe_reply(event, ts)
-        elif stream == SOCIAL_COGNITION_OUT and event.type == "social_cognition.social_error":
+        elif stream == SOCIAL_COGNITION_OUT and event.type == SOCIAL_COGNITION_SOCIAL_ERROR:
             await self._maybe_social_cognition(event, ts)
-        elif stream == AFFECT_OUT and event.type == "affect.state":
+        elif stream == AFFECT_OUT and event.type == AFFECT_STATE:
             await self._maybe_affect(event, ts)
 
     async def _open_record_if_new(self, record_id: str, ts: float) -> None:

@@ -15,6 +15,7 @@ from __future__ import annotations
 import math
 from typing import Any, Callable, Iterable, Optional
 
+from kaine.bus.event_types import AFFECT_REGULATION, AFFECT_STATE
 from kaine.bus.schema import Event
 
 
@@ -46,7 +47,7 @@ class RegulationBias:
         for _entry_id, event in events:
             if event.source != "affect":
                 continue
-            if event.type == "affect.state":
+            if event.type == AFFECT_STATE:
                 payload = event.payload if isinstance(event.payload, dict) else {}
                 if payload.get("reset") is True:
                     self._source = None
@@ -54,7 +55,7 @@ class RegulationBias:
                     self._decay_s = 1.0
                     self._t1 = 0.0
                 continue
-            if event.type != "affect.regulation":
+            if event.type != AFFECT_REGULATION:
                 continue
             payload = event.payload if isinstance(event.payload, dict) else {}
             tier = payload.get("tier")

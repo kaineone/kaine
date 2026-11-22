@@ -1138,6 +1138,15 @@ def _direct_reads(source: str, filename: str) -> list[str]:
             for n in ast.walk(func)
             if isinstance(n, ast.Constant) and isinstance(n.value, str)
         ]
+        # An event-type constant counts as the string it holds, so a
+        # constant gets exactly the treatment its literal would.
+        from kaine.bus import event_types as _event_types
+
+        for n in ast.walk(func):
+            if isinstance(n, ast.Name):
+                value = getattr(_event_types, n.id, None)
+                if isinstance(value, str):
+                    strings.append(value)
         keys = sum(1 for v in strings if v == _KEY)
         return (
             "vision.report" in strings
@@ -1243,6 +1252,13 @@ _VISION_READER = (
         ("kaine/cycle/development.py", _VISION_READER + "        m = event.payload.get('prediction_error')\n"),
         ("kaine/cycle/development.py", _VISION_READER.replace("'vision.out'", "'interoception.out'")),
         ("kaine/cycle/development.py", _VISION_READER.replace("event.payload.get", "payload.get")),
+        # The same exemption cannot be borrowed through event-type constants.
+        (
+            "kaine/cycle/development.py",
+            _VISION_READER.replace("'vision.report'", "VISION_REPORT")
+            + "        if event.type == INTEROCEPTION_REPORT:\n"
+            + "            pass\n",
+        ),
     ],
 )
 def test_source_scan_names_a_direct_read(rel, snippet) -> None:
@@ -1261,6 +1277,9 @@ def test_source_scan_allows_null_checks_docstrings_and_the_vision_read() -> None
     )
     assert _direct_reads(snippet, rel) == []
     assert _direct_reads(_VISION_READER, "kaine/cycle/development.py") == []
+    # The vision read is still exempt when it names the type by its constant.
+    with_constant = _VISION_READER.replace("'vision.report'", "VISION_REPORT")
+    assert _direct_reads(with_constant, "kaine/cycle/development.py") == []
 
 
 def test_reader_call_check_ignores_comments_and_strings() -> None:

@@ -47,6 +47,7 @@ from typing import Any, Callable
 import numpy as np
 import scipy.signal
 
+from kaine.bus.event_types import INTEROCEPTION_REPORT, VISION_REPORT
 from kaine.bus.schema import Event
 from kaine.bus.streams import DEVELOPMENT_SOURCE
 from kaine.lifecycle.welfare_signal import WelfareSignalAccount, read_welfare_prediction_error
@@ -1382,7 +1383,7 @@ class DevelopmentOwner:
             )
             for entry_id, event in entries:
                 self._interoception_cursor = entry_id
-                if event.type != "interoception.report":
+                if event.type != INTEROCEPTION_REPORT:
                     continue
                 # The recovery series feeds the maturation gate's readiness, a
                 # welfare decision: it reads the interoception module's own
@@ -1417,7 +1418,7 @@ class DevelopmentOwner:
         errors: list[float] = []
         for entry_id, event in entries:
             self._vision_cursor = entry_id
-            if event.type != "vision.report":
+            if event.type != VISION_REPORT:
                 continue
             # Not a welfare signal: how well the entity predicts its stimulus,
             # which with workspace feedback on is the blend's error. It reads the
