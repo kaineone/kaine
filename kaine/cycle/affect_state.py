@@ -27,6 +27,7 @@ from __future__ import annotations
 import math
 from typing import Any, Iterable
 
+from kaine.bus.event_types import AFFECT_STATE
 from kaine.bus.schema import Event
 from kaine.modules.affect.state import DimensionalState
 
@@ -52,7 +53,7 @@ class AffectStateProvider:
         tick with no ``affect.state`` leaves the snapshot unchanged (last-known).
         """
         for _, event in events:
-            if event.type != "affect.state":
+            if event.type != AFFECT_STATE:
                 continue
             state = event.payload.get("state")
             if isinstance(state, dict):

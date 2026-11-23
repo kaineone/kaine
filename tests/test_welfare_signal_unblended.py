@@ -1063,6 +1063,13 @@ NOT_WELFARE: frozenset[tuple[str, str]] = frozenset(
 
 _KEY = "prediction_error"
 _OTHER_PROCESSOR = re.compile(r"^(interoception|audition|sequence|social_cognition|affect|language)\b")
+# The same processors found anywhere inside a name (INTEROCEPTION_REPORT,
+# interoception_types, ...), case-insensitively. The exemption is also pinned
+# to one named function (NOT_WELFARE); a constant rebound to a meaningless
+# name inside that function is the one spelling this scan cannot see.
+_OTHER_PROCESSOR_TOKEN = re.compile(
+    r"(interoception|audition|sequence|social_cognition|affect|language)", re.IGNORECASE
+)
 
 
 def _folded_str(node: ast.AST) -> str | None:
@@ -1102,6 +1109,51 @@ def _direct_reads(source: str, filename: str) -> list[str]:
         for child in ast.iter_child_nodes(node):
             parents[child] = node
 
+    # Local names bound to kaine.bus.event_types constants, and local names
+    # bound to the module itself, from this file's own imports.
+    from kaine.bus import event_types as _event_types
+
+    _ET_MODULE = "kaine.bus.event_types"
+    constant_names: dict[str, str] = {}
+    module_names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == _ET_MODULE:
+            for alias in node.names:
+                constant_names[alias.asname or alias.name] = alias.name
+        elif isinstance(node, ast.ImportFrom) and node.module == "kaine.bus":
+            for alias in node.names:
+                if alias.name == "event_types":
+                    module_names.add(alias.asname or alias.name)
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == _ET_MODULE:
+                    module_names.add(alias.asname or alias.name)
+
+    def _values(attr: str) -> list[str]:
+        value = getattr(_event_types, attr, None)
+        if isinstance(value, str):
+            return [value]
+        if isinstance(value, (tuple, list, frozenset, set)):
+            return [v for v in value if isinstance(v, str)]
+        return []
+
+    def _dotted(node: ast.AST) -> str | None:
+        if isinstance(node, ast.Name):
+            return node.id
+        if isinstance(node, ast.Attribute):
+            base = _dotted(node.value)
+            return f"{base}.{node.attr}" if base else None
+        return None
+
+    def event_type_strings(node: ast.AST) -> list[str]:
+        if isinstance(node, ast.Name) and node.id in constant_names:
+            return _values(constant_names[node.id])
+        if isinstance(node, ast.Attribute):
+            base = _dotted(node.value)
+            if base in module_names:
+                return _values(node.attr)
+        return []
+
     def enclosing_function(node: ast.AST) -> ast.AST | None:
         while node in parents:
             node = parents[node]
@@ -1138,11 +1190,25 @@ def _direct_reads(source: str, filename: str) -> list[str]:
             for n in ast.walk(func)
             if isinstance(n, ast.Constant) and isinstance(n.value, str)
         ]
+        # An event-type constant counts as the string(s) it holds, however
+        # it is reached: by name, by an import alias, or through the module.
+        for n in ast.walk(func):
+            strings.extend(event_type_strings(n))
         keys = sum(1 for v in strings if v == _KEY)
+        # Any identifier, attribute or string in the function that mentions
+        # another processor also disqualifies it, whatever the spelling
+        # (relative or star imports, a package path, a getattr name).
+        tokens = list(strings)
+        for n in ast.walk(func):
+            if isinstance(n, ast.Name):
+                tokens.append(n.id)
+            elif isinstance(n, ast.Attribute):
+                tokens.append(n.attr)
         return (
             "vision.report" in strings
             and keys == 1
             and not any(_OTHER_PROCESSOR.match(v) for v in strings)
+            and not any(_OTHER_PROCESSOR_TOKEN.search(t) for t in tokens)
         )
 
     offenders: list[str] = []
@@ -1243,6 +1309,57 @@ _VISION_READER = (
         ("kaine/cycle/development.py", _VISION_READER + "        m = event.payload.get('prediction_error')\n"),
         ("kaine/cycle/development.py", _VISION_READER.replace("'vision.out'", "'interoception.out'")),
         ("kaine/cycle/development.py", _VISION_READER.replace("event.payload.get", "payload.get")),
+        # The same exemption cannot be borrowed through event-type constants,
+        # however they are reached.
+        (
+            "kaine/cycle/development.py",
+            "from kaine.bus.event_types import INTEROCEPTION_REPORT, VISION_REPORT\n"
+            + _VISION_READER.replace("'vision.report'", "VISION_REPORT")
+            + "        if event.type == INTEROCEPTION_REPORT:\n"
+            + "            pass\n",
+        ),
+        (
+            "kaine/cycle/development.py",
+            "from kaine.bus import event_types\n"
+            + _VISION_READER.replace("'vision.report'", "event_types.VISION_REPORT")
+            + "        if event.type == event_types.INTEROCEPTION_REPORT:\n"
+            + "            pass\n",
+        ),
+        (
+            "kaine/cycle/development.py",
+            "from kaine.bus.event_types import INTEROCEPTION_REPORT as IR, VISION_REPORT\n"
+            + _VISION_READER.replace("'vision.report'", "VISION_REPORT")
+            + "        if event.type == IR:\n"
+            + "            pass\n",
+        ),
+        (
+            "kaine/cycle/development.py",
+            "from ..bus.event_types import INTEROCEPTION_REPORT\n"
+            + _VISION_READER
+            + "        if event.type == INTEROCEPTION_REPORT:\n"
+            + "            pass\n",
+        ),
+        (
+            "kaine/cycle/development.py",
+            "import kaine.bus\n"
+            + _VISION_READER
+            + "        if event.type == kaine.bus.event_types.INTEROCEPTION_REPORT:\n"
+            + "            pass\n",
+        ),
+        (
+            "kaine/cycle/development.py",
+            "from kaine.bus import event_types\n"
+            + _VISION_READER
+            + "        if event.type == getattr(event_types, 'INTEROCEPTION_REPORT'):\n"
+            + "            pass\n",
+        ),
+        (
+            "kaine/cycle/development.py",
+            "import kaine.bus.event_types as et\n"
+            + _VISION_READER.replace("'vision.report'", "et.VISION_REPORT")
+            + "        if event.type == et.INTEROCEPTION_REPORT:\n"
+            + "            pass\n",
+        ),
     ],
 )
 def test_source_scan_names_a_direct_read(rel, snippet) -> None:
@@ -1261,6 +1378,14 @@ def test_source_scan_allows_null_checks_docstrings_and_the_vision_read() -> None
     )
     assert _direct_reads(snippet, rel) == []
     assert _direct_reads(_VISION_READER, "kaine/cycle/development.py") == []
+    # The vision read is still exempt when it names the type by its constant.
+    for header, name in (
+        ("from kaine.bus.event_types import VISION_REPORT\n", "VISION_REPORT"),
+        ("from kaine.bus import event_types\n", "event_types.VISION_REPORT"),
+        ("import kaine.bus.event_types as et\n", "et.VISION_REPORT"),
+    ):
+        with_constant = header + _VISION_READER.replace("'vision.report'", name)
+        assert _direct_reads(with_constant, "kaine/cycle/development.py") == [], name
 
 
 def test_reader_call_check_ignores_comments_and_strings() -> None:

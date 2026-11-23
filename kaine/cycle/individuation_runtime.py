@@ -27,6 +27,7 @@ from typing import Any
 
 import httpx
 
+from kaine.bus.event_types import SLEEP_SLEEP_COMPLETED, SLEEP_SLEEP_STARTED
 from kaine.bus.schema import Event
 from kaine.cycle.individuation_probe import adapter_expected_from, build_probe_sampler
 from kaine.cycle.individuation_producer import IndividuationCore, ProducerSettings
@@ -467,9 +468,9 @@ class IndividuationRuntime:
                 continue
 
             for _id, event in entries:
-                if event.type == "sleep.sleep.started":
+                if event.type == SLEEP_SLEEP_STARTED:
                     self.scheduler.notify_sleep_started()
-                elif event.type == "sleep.sleep.completed":
+                elif event.type == SLEEP_SLEEP_COMPLETED:
                     self.scheduler.notify_sleep_completed()
 
             if last is not None:

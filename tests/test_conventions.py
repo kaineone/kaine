@@ -201,13 +201,7 @@ def scan_tree(root: Path) -> dict[tuple[str, str], int]:
 
 BASELINE: dict[tuple[str, str], int] = {
     ("kaine/cycle/__main__.py", "source_literal"): 1,
-    ("kaine/cycle/affect_state.py", "type_literal"): 1,
-    ("kaine/cycle/development.py", "type_literal"): 2,
-    ("kaine/cycle/engine.py", "type_literal"): 2,
-    ("kaine/cycle/individuation_runtime.py", "type_literal"): 2,
-    ("kaine/cycle/preservation_monitor.py", "type_literal"): 7,
     ("kaine/cycle/supervisor.py", "source_literal"): 1,
-    ("kaine/cycle/utterance_outcome.py", "type_literal"): 4,
     ("kaine/modules/affect/module.py", "raw_task"): 2,
     ("kaine/modules/affect/module.py", "type_literal"): 11,
     ("kaine/modules/audition/audio_queue.py", "clock"): 2,
@@ -291,7 +285,6 @@ BASELINE: dict[tuple[str, str], int] = {
     ("kaine/modules/world_model/module.py", "raw_task"): 1,
     ("kaine/modules/world_model/module.py", "type_literal"): 3,
     ("kaine/workspace/regulation_bias.py", "source_literal"): 1,
-    ("kaine/workspace/regulation_bias.py", "type_literal"): 2,
 }
 
 
